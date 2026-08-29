@@ -39,7 +39,7 @@ app = FastAPI()
 api = APIRouter(prefix="/api")
 
 CATEGORY_IMAGES = {
-    "غذائية": "https://images.unsplash.com/photo-1543168256-418811576931?w=400&q=80",
+    "غذائية": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80",
     "عصائر": "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&q=80",
     "منظفات": "https://images.unsplash.com/photo-1585421514738-01798e348b17?w=400&q=80",
     "مواد منزليه": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=400&q=80",

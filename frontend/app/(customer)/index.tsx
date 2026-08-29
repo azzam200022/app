@@ -73,7 +73,7 @@ export default function Home() {
     <View>
       {/* Hero */}
       <Pressable style={styles.hero} onPress={() => router.push("/offers")}>
-        <Image source={{ uri: "https://images.unsplash.com/photo-1632992468737-54880593aada?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
         <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
         <View style={styles.heroContent}>
           <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
@@ -126,7 +126,7 @@ export default function Home() {
         <View style={styles.topRow}>
           <View>
             <T color={colors.muted} size={type.sm}>مرحباً {user?.name?.split(" ")[0] || ""} 👋</T>
-            <T weight="displayBold" size={type.xl} color={colors.brandPrimary}>سوق ماركت</T>
+            <Image source={require("../../assets/images/logo-binsaleem.png")} style={styles.brandLogo} contentFit="contain" />
           </View>
           <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
             <Feather name="heart" size={20} color={colors.onSurface} />
@@ -162,6 +162,7 @@ const styles = StyleSheet.create({
   topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   topRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  brandLogo: { width: 140, height: 40, marginTop: 2 },
   searchBar: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 48 },
   hero: { height: 190, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden" },
   heroContent: { flex: 1, padding: spacing.lg, justifyContent: "flex-end" },

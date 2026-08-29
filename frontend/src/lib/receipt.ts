@@ -44,7 +44,7 @@ export function buildReceiptHTML(order: any): string {
   </style></head>
   <body>
     <div class="head">
-      <h1 class="brand">سوق ماركت</h1>
+      <h1 class="brand">بن سليم سوبرماركت</h1>
       <p class="sub">إيصال طلب — الدفع عند الاستلام</p>
     </div>
     <div class="meta"><span>رقم الطلب: <b>#${order.id.replace("ORD", "")}</b></span><span class="status">${STATUS_LABEL[order.status] || order.status}</span></div>
@@ -62,7 +62,7 @@ export function buildReceiptHTML(order: any): string {
     </table>
     <div class="total"><span>الإجمالي الكلي</span><span class="t">${money(order.total)}</span></div>
     <div class="cod">💵 المبلغ المطلوب تحصيله: ${money(order.total)}</div>
-    <div class="foot">شكراً لتسوقك من سوق ماركت 🌿<br/>${order.id}</div>
+    <div class="foot">شكراً لتسوقك من بن سليم سوبرماركت 🌿<br/>${order.id}</div>
   </body></html>`;
 }
 

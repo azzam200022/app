@@ -104,14 +104,13 @@ export default function Login() {
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
-        <Image source={{ uri: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80" }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <LinearGradient colors={["rgba(26,31,27,0.35)", "rgba(26,31,27,0.96)"]} style={StyleSheet.absoluteFill} />
+        <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=80" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <LinearGradient colors={["rgba(26,31,27,0.55)", "rgba(26,31,27,0.97)"]} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
-          <View style={styles.logo}>
-            <Feather name="shopping-bag" size={26} color={colors.gold} />
+          <View style={styles.logoCard}>
+            <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
           </View>
-          <T weight="displayBold" size={type["3xl"]} color="#fff" style={{ marginTop: spacing.md }}>سوق ماركت</T>
-          <T color="rgba(255,255,255,0.8)" size={type.lg}>تسوّق الفخامة يصلك إلى باب بيتك</T>
+          <T color="rgba(255,255,255,0.85)" size={type.lg} style={{ marginTop: spacing.lg }}>تسوّق الفخامة يصلك إلى باب بيتك</T>
         </View>
       </View>
 
@@ -174,9 +173,10 @@ export function Field({ icon, secure, testID, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  hero: { height: 300 },
-  heroContent: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: "center" },
-  logo: { width: 56, height: 56, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(197,160,89,0.5)" },
+  hero: { height: 320 },
+  heroContent: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: "center", alignItems: "center" },
+  logoCard: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 24, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderWidth: 1, borderColor: "rgba(197,160,89,0.5)" },
+  logoImg: { width: 200, height: 120 },
   sheet: { flex: 1, marginTop: -24, backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, marginBottom: spacing.md },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%" },

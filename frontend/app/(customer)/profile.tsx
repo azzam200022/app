@@ -48,7 +48,7 @@ export default function Profile() {
         </View>
 
         <Button title="تسجيل الخروج" variant="outline" icon="log-out" onPress={async () => { await logout(); router.replace("/login"); }} testID="logout-btn" style={{ marginTop: spacing.xl }} />
-        <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.lg }}>سوق ماركت • الإصدار 1.0</T>
+        <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.lg }}>بن سليم سوبرماركت • الإصدار 1.0</T>
       </ScrollView>
     </View>
   );
