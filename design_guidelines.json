@@ -1,0 +1,145 @@
+{
+  "app_name": "Premium Supermarket RTL",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "An ultra-premium, magazine-like Arabic grocery experience relying on elegant typography, lavish negative space, and deep botanical accents.",
+  "color": {
+    "surface": "#FBFBF9",
+    "onSurface": "#1A1F1B",
+    "surfaceSecondary": "#F2F1EC",
+    "onSurfaceSecondary": "#2C332D",
+    "surfaceTertiary": "#E8E7E0",
+    "onSurfaceTertiary": "#4A524C",
+    "surfaceInverse": "#1A1F1B",
+    "onSurfaceInverse": "#FBFBF9",
+    "brand": "#1F4529",
+    "brandPrimary": "#1F4529",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#3A5A40",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#E8EDE7",
+    "onBrandTertiary": "#1F4529",
+    "success": "#285C4D",
+    "onSuccess": "#FFFFFF",
+    "warning": "#C5A059",
+    "onWarning": "#1A1A1A",
+    "error": "#8B3A3A",
+    "onError": "#FFFFFF",
+    "info": "#4A524C",
+    "onInfo": "#FFFFFF",
+    "border": "#E0DFD8",
+    "borderStrong": "#C2C0B6",
+    "divider": "#E8E7E0"
+  },
+  "typography": {
+    "displayFontFamily": "Tajawal",
+    "textFontFamily": "Cairo",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "RTL Native: ALWAYS use marginStart/marginEnd and paddingStart/paddingEnd. Never use Left/Right. Magazine-like generous vertical breathing room.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use frosted glass on the bottom tab bar and sticky headers to maintain the premium feel",
+      "Apply glass overlay on hero offer banners overlaid with text",
+      "Use glass for floating action panels, especially in the Manager barcode scanner view"
+    ],
+    "dont's": [
+      "Never apply glass to regular product cards or list items",
+      "Avoid heavy blurs that make Arabic text unreadable"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Customer Home",
+      "purpose": "A luxurious storefront featuring large offer banners, category scrollers, and high-quality product grids.",
+      "states": {
+        "loading": "Centered dark emerald spinner on paper-white background.",
+        "empty": "N/A - Home is never empty.",
+        "error": "Elegant text 'حدث خطأ في تحميل المتجر' with a brandPrimary retry button."
+      },
+      "layout": "RTL layout. Top: Sticky glass header with search. Below: Full-width Hero image (dark bg vegetables) with gradient scrim and gold offers text. Next: Horizontal scroll 'Categories' using surfaceSecondary chips. Below: 2-column grid of products with high-quality images and minimal borders."
+    },
+    {
+      "name": "Manager Dashboard & Scanner",
+      "purpose": "Command center for managers to add products via camera barcode scan and manage store inventory.",
+      "states": {
+        "loading": "Skeleton UI for stats.",
+        "empty": "No products added yet.",
+        "error": "Error accessing camera or database."
+      },
+      "layout": "RTL layout. Top half: Camera view for scanning. Bottom half: Floating glass panel with manual barcode entry fallback and auto-filled product fields (name, price). Includes a large dashed area to upload product image from gallery/studio."
+    },
+    {
+      "name": "Delivery Agent Dashboard",
+      "purpose": "Clean, utilitarian list of assigned orders with a vertical RTL timeline for status updates.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "Illustration of a premium delivery box with 'لا توجد طلبات حالياً' (No orders currently).",
+        "error": "Retry connection error."
+      },
+      "layout": "RTL layout. Card-based list of orders. Each card expands into an RTL vertical stepper (timeline) to update status: 'تم الاستلام' (Received) -> 'في الطريق' (On the way) -> 'تم التوصيل' (Delivered). Actions use brandPrimary."
+    }
+  ],
+  "images": {
+    "hero_banner": {
+      "url": "https://images.unsplash.com/photo-1632992468737-54880593aada?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxwcmVtaXVtJTIwZnJlc2glMjBvcmdhbmljJTIwdmVnZXRhYmxlcyUyMGRhcmslMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4ODAzMDYzNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Premium fresh organic vegetables on dark background"
+    },
+    "category_bakery": {
+      "url": "https://images.unsplash.com/photo-1534620808146-d33bb39128b2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxhcnRpc2FuJTIwYmFrZXJ5JTIwYnJlYWQlMjBmbGF0bGF5fGVufDB8fHx8MTc4ODAzMDYzNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Artisan bakery bread flatlay"
+    },
+    "delivery_empty_state": {
+      "url": "https://images.unsplash.com/photo-1637087788835-4f051e32bfa1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w8NjY2NzN8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBvcmdhbmljJTIwZ3JvY2VyeSUyMGRlbGl2ZXJ5JTIwYm94fGVufDB8fHx8MTc4ODAzMDYzNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Luxury organic grocery delivery box"
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: The app is purely Arabic (RTL). Do NOT use Left/Right physical properties in styling. Use marginStart, marginEnd, paddingStart, paddingEnd.",
+    "CRITICAL: Set I18nManager.forceRTL(true) early in the app lifecycle.",
+    "Typography: Use 'Tajawal' for headers and 'Cairo' for body text. These are premium Arabic fonts.",
+    "Iconography: Mirror directional icons (like Back chevrons) using scaleX(-1) if the icon library doesn't handle RTL natively.",
+    "Palette: Strictly adhere to the premium botanical palette (Deep forest green, warm ivory, antique gold). ABSOLUTELY NO blues, purples, or neon gradients.",
+    "Component Style: Cards should have sm (6pt) border radius and 0 shadow, relying on spacing and background color contrast (surfaceSecondary) for hierarchy.",
+    "Role Management: Build separate stack navigators for Customer (Bottom Tabs), Manager, and Delivery Agent based on the auth state.",
+    "Image Overlays: Any text overlaid on the hero_banner MUST use a vertical gradient scrim (transparent to 80% surfaceInverse) to ensure text legibility.",
+    "Camera Integration: Use expo-camera for the Manager's barcode scanner. Ensure it handles permissions gracefully.",
+    "Haptics: Add subtle haptic feedback on adding to cart, updating delivery status, and successful barcode scans."
+  ]
+}
