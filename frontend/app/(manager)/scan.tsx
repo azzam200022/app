@@ -8,7 +8,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
-import { api, uploadImage, resolveImage, formatPrice } from "@/src/lib/api";
+import { api, uploadImage, resolveImage } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
 export default function Scan() {
@@ -47,16 +47,18 @@ export default function Scan() {
         setName(res.name);
         setCategory(res.category);
         setSuggestedImg(res.suggested_image);
+        setPrice(res.price ? String(res.price) : "");
+        setOldPrice(res.old_price ? String(res.old_price) : "");
         if (res.already_added) show("هذا المنتج مضاف مسبقاً، يمكنك إضافته مجدداً", "info");
-        else show("تم العثور على المنتج ✓");
+        else show(res.price ? `تم العثور على المنتج ✓ السعر ${res.price} د.ع` : "تم العثور على المنتج ✓");
       } else {
         setName("");
         setCategory("أخرى");
         setSuggestedImg(null);
+        setPrice(""); setOldPrice("");
         show("لم يوجد في الكتالوج، أدخل البيانات يدوياً", "info");
       }
       setImageUri(null);
-      setPrice(""); setOldPrice("");
       setMode("form");
     } catch (e: any) { show(e.message, "error"); }
     finally { setLooking(false); scannedRef.current = false; }
@@ -147,7 +149,7 @@ export default function Scan() {
 
           <View style={styles.noteBox}>
             <Feather name="info" size={16} color={colors.gold} />
-            <T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>ملف الأسعار لم يتضمن الأسعار، لذا أدخل السعر يدوياً هنا.</T>
+            <T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>يُعبّأ السعر تلقائياً من جدول أسعار البيع، ويمكنك تعديله قبل الحفظ.</T>
           </View>
 
           <Button title="حفظ ونشر المنتج" icon="check" onPress={save} loading={saving} testID="f-save" style={{ marginTop: spacing.lg }} />

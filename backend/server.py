@@ -30,6 +30,7 @@ EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 APP_NAME = "souq-market"
+CATALOG_VERSION = 2
 MANAGER_EMAILS = {"zzam8160@gmail.com"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -280,12 +281,20 @@ async def catalog_lookup(barcode: str, user=Depends(require_manager)):
     existing = await db.products.find_one({"barcode": barcode, "deleted_at": None}, {"_id": 0})
     if not item:
         return {"found": False, "already_added": existing is not None}
+    price = item.get("price") or 0
+    special = item.get("special") or None
+    old_price = None
+    if special and special > 0 and price and special < price:
+        old_price = price
+        price = special
     return {
         "found": True,
         "already_added": existing is not None,
         "name": item["name"],
         "category": item["category"],
         "barcode": barcode,
+        "price": price,
+        "old_price": old_price,
         "suggested_image": CATEGORY_IMAGES.get(item["category"], DEFAULT_IMG),
     }
 
@@ -725,18 +734,30 @@ async def seed():
     await db.catalog.create_index("barcode")
     await db.products.create_index("barcode")
 
+    # Reset catalog if version changed (v2 adds real selling prices)
+    meta = await db.meta.find_one({"key": "catalog_version"})
+    if not meta or meta.get("value") != CATALOG_VERSION:
+        await db.catalog.delete_many({})
+
     if await db.catalog.count_documents({}) == 0:
         path = ROOT_DIR / "data" / "catalog.json"
         if path.exists():
             items = json.loads(path.read_text(encoding="utf-8"))
             batch = []
             for it in items:
-                batch.append({"barcode": it["barcode"], "name": it["name"], "category": it.get("category", "أخرى")})
+                batch.append({
+                    "barcode": it["barcode"],
+                    "name": it["name"],
+                    "category": it.get("category", "أخرى"),
+                    "price": it.get("price", 0),
+                    "special": it.get("special"),
+                })
                 if len(batch) >= 2000:
                     await db.catalog.insert_many(batch)
                     batch = []
             if batch:
                 await db.catalog.insert_many(batch)
+            await db.meta.update_one({"key": "catalog_version"}, {"$set": {"value": CATALOG_VERSION}}, upsert=True)
             logger.info(f"Seeded catalog: {await db.catalog.count_documents({})}")
 
     async def ensure_user(email, name, pw, role):
