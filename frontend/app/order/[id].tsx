@@ -9,6 +9,7 @@ import { T, Button } from "@/src/components/ui";
 import { api, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
 import { printOrder } from "@/src/lib/receipt";
 import { staticMapUrl, openDirections } from "@/src/lib/maps";
+import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
 export default function OrderDetail() {
@@ -16,6 +17,7 @@ export default function OrderDetail() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { show } = useToast();
+  const { user } = useAuth();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,9 +40,13 @@ export default function OrderDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace("/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
         <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
-        <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
-          <Feather name="printer" size={20} color={colors.brandPrimary} />
-        </Pressable>
+        {user?.role === "manager" ? (
+          <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
+            <Feather name="printer" size={20} color={colors.brandPrimary} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}>
