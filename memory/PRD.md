@@ -37,3 +37,11 @@
 ## Notes / limitations
 - مسح الباركود بالكاميرا والطباعة الصامتة تعملان في النسخة المبنية (Build) وليس داخل Expo Go؛ الإدخال اليدوي متاح كبديل.
 - تباعد قاعدة بيانات المعاينة عن الإنتاج بعد أول نشر.
+
+## Latest features (batch 2)
+- Push notifications (Emergent/SuprSend): notify manager on new order + customer on status change. register-push + send_push implemented. Needs google-services.json + build.
+- Live delivery tracking: agent broadcasts location every 20s for active orders (agent_location); customer sees live 2-pin map refreshing every 15s.
+- Catalog name search: GET /api/catalog/search + UI in Add screen (30 priced results, tap to add).
+- Bin Saleem logo on printed invoice (manager-only printing). Currency IQD (د.ع).
+- Smooth logo entrance animation + gentle launch sound (expo-audio).
+- Catalog updated from month-8 price file: 11,011 products with retail selling prices (IQD).

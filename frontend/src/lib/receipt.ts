@@ -1,12 +1,32 @@
 import * as Print from "expo-print";
 import { Platform } from "react-native";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
 import { STATUS_LABEL } from "@/src/lib/api";
+
+let _logoSrc: string | null = null;
+async function getLogoSrc(): Promise<string> {
+  if (_logoSrc) return _logoSrc;
+  try {
+    const asset = Asset.fromModule(require("../../assets/images/logo-binsaleem.png"));
+    await asset.downloadAsync();
+    if (Platform.OS === "web") {
+      _logoSrc = asset.uri;
+    } else {
+      const b64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, { encoding: "base64" });
+      _logoSrc = `data:image/png;base64,${b64}`;
+    }
+  } catch {
+    _logoSrc = "";
+  }
+  return _logoSrc;
+}
 
 function money(n: number) {
   return Math.round(n || 0).toLocaleString("en-US") + " د.ع";
 }
 
-export function buildReceiptHTML(order: any): string {
+export function buildReceiptHTML(order: any, logoSrc = ""): string {
   const date = new Date(order.created_at).toLocaleString("ar-EG");
   const rows = order.items
     .map(
@@ -44,6 +64,7 @@ export function buildReceiptHTML(order: any): string {
   </style></head>
   <body>
     <div class="head">
+      ${logoSrc ? `<img src="${logoSrc}" style="width:150px;height:auto;margin:0 auto 6px;display:block;" />` : ""}
       <h1 class="brand">بن سليم سوبرماركت</h1>
       <p class="sub">إيصال طلب — الدفع عند الاستلام</p>
     </div>
@@ -67,7 +88,8 @@ export function buildReceiptHTML(order: any): string {
 }
 
 export async function printOrder(order: any, printerUrl?: string | null) {
-  const html = buildReceiptHTML(order);
+  const logoSrc = await getLogoSrc();
+  const html = buildReceiptHTML(order, logoSrc);
   if (Platform.OS === "ios" && printerUrl) {
     await Print.printAsync({ html, printerUrl });
   } else {

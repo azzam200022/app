@@ -8,7 +8,7 @@ import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
 import { api, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
 import { printOrder } from "@/src/lib/receipt";
-import { staticMapUrl, openDirections } from "@/src/lib/maps";
+import { staticMapUrl, staticMapUrlTwo, openDirections } from "@/src/lib/maps";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -25,6 +25,13 @@ export default function OrderDetail() {
     try { setOrder(await api.order(id!)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
+
+  // live refresh while out for delivery (tracks agent location)
+  useEffect(() => {
+    if (!order || order.status !== "out_for_delivery") return;
+    const iv = setInterval(async () => { try { setOrder(await api.order(id!)); } catch {} }, 15000);
+    return () => clearInterval(iv);
+  }, [order?.status, id]);
 
   const cancel = async () => {
     try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); load(); } catch (e: any) { show(e.message, "error"); }
@@ -120,6 +127,14 @@ export default function OrderDetail() {
           </Pressable>
         ) : null}
 
+        {order.status === "out_for_delivery" && order.agent_location && order.location ? (
+          <View style={styles.mapCard}>
+            <View style={styles.liveBadge}><View style={styles.liveDot} /><T size={type.sm} weight="bold" color="#fff">تتبّع مباشر</T></View>
+            <Image source={{ uri: staticMapUrlTwo(order.location.lat, order.location.lng, order.agent_location.lat, order.agent_location.lng, 600, 240) }} style={styles.mapImg} contentFit="cover" />
+            <View style={styles.mapFoot}><Feather name="truck" size={15} color={colors.brandPrimary} /><T weight="bold" size={type.sm} color={colors.brandPrimary}>مندوبك {order.agent_name || ""} في الطريق إليك الآن</T></View>
+          </View>
+        ) : null}
+
         {(order.status === "pending" || order.status === "confirmed") && (
           <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
@@ -154,4 +169,6 @@ const styles = StyleSheet.create({
   mapCard: { marginTop: spacing.lg, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
   mapImg: { width: "100%", height: 150, backgroundColor: colors.surfaceSecondary },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md },
+  liveBadge: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.error, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff" },
 });

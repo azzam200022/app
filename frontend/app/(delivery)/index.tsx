@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal } from "react-native";
 import { Image } from "expo-image";
+import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { api, formatPrice, resolveImage } from "@/src/lib/api";
 import { staticMapUrl, openDirections } from "@/src/lib/maps";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
+import { useEffect } from "react";
 
 export default function DeliveryHome() {
   const insets = useSafeAreaInsets();
@@ -37,6 +39,27 @@ export default function DeliveryHome() {
   const done = orders.filter((o) => o.status === "delivered").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const collectedToday = done.filter((o) => isToday(o.created_at)).reduce((s, o) => s + (o.total || 0), 0);
   const list = tab === "active" ? active : done;
+
+  // Broadcast live location for active deliveries
+  const activeIds = active.map((o) => o.id).join(",");
+  useEffect(() => {
+    if (!activeIds) return;
+    let cancelled = false;
+    const send = async () => {
+      try {
+        let perm = await Location.getForegroundPermissionsAsync();
+        if (!perm.granted) { perm = await Location.requestForegroundPermissionsAsync(); if (!perm.granted) return; }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        for (const id of activeIds.split(",")) {
+          if (cancelled) break;
+          try { await api.deliverySetLocation(id, pos.coords.latitude, pos.coords.longitude); } catch {}
+        }
+      } catch {}
+    };
+    send();
+    const iv = setInterval(send, 20000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [activeIds]);
 
   const doLogout = async () => { setConfirmLogout(false); await logout(); router.replace("/login"); };
 

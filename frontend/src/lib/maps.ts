@@ -5,6 +5,12 @@ export function staticMapUrl(lat: number, lng: number, w = 600, h = 260, zoom = 
   return `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&z=${zoom}&size=${w},${h}&l=map&pt=${lng},${lat},pm2rdm`;
 }
 
+// Two pins: destination (red) + delivery agent (green), auto-fit.
+export function staticMapUrlTwo(dLat: number, dLng: number, aLat: number, aLng: number, w = 600, h = 260): string {
+  const pts = `${dLng},${dLat},pm2rdm~${aLng},${aLat},pm2gnm`;
+  return `https://static-maps.yandex.ru/1.x/?size=${w},${h}&l=map&pt=${pts}`;
+}
+
 // Open turn-by-turn navigation to the destination in the device's maps app.
 export function openDirections(lat?: number | null, lng?: number | null, fallbackQuery?: string) {
   if (lat != null && lng != null) {

@@ -24,7 +24,12 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.groceryhub.hfzqyg",
-      "permissions": ["CAMERA", "READ_MEDIA_IMAGES", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -41,6 +46,7 @@
           "locationWhenInUsePermission": "تحديد موقع التوصيل بدقة على الخريطة"
         }
       ],
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -49,7 +55,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#FBFBF9"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import json
 import logging
@@ -274,6 +275,67 @@ async def logout(authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
+PUSH_BASE_URL = "https://integrations.emergentagent.com"
+PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
+_push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": PUSH_KEY}, timeout=10.0)
+
+
+async def send_push(recipients, data, idempotency_key=None):
+    recipients = [r for r in (recipients or []) if r]
+    if not recipients:
+        return
+    payload = {"recipients": recipients[:100], "data": data}
+    if idempotency_key:
+        payload["$idempotency_key"] = idempotency_key
+    resp = await _push_client.post("/api/v1/push/trigger", json=payload)
+    resp.raise_for_status()
+
+
+class RegisterPushBody(BaseModel):
+    user_id: str
+    platform: str
+    device_token: str
+
+
+@api.post("/register-push", status_code=201)
+async def register_push(body: RegisterPushBody):
+    resp = await _push_client.post("/api/v1/push/users/register", json=body.model_dump())
+    if resp.status_code == 401:
+        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
+    if resp.status_code >= 500:
+        raise HTTPException(502, "Push provider unavailable")
+    resp.raise_for_status()
+    return {"status": "registered"}
+
+
+async def manager_ids():
+    docs = await db.users.find({"role": "manager"}, {"_id": 0, "user_id": 1}).to_list(50)
+    return [d["user_id"] for d in docs]
+
+
+@api.get("/catalog/search")
+async def catalog_search(q: str = Query(""), user=Depends(require_manager)):
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    docs = await db.catalog.find({"name": {"$regex": re.escape(q), "$options": "i"}}, {"_id": 0}).limit(30).to_list(30)
+    out = []
+    for it in docs:
+        price = it.get("price") or 0
+        special = it.get("special") or None
+        old_price = None
+        if special and special > 0 and price and special < price:
+            old_price = price
+            price = special
+        already = await db.products.find_one({"barcode": it["barcode"], "deleted_at": None}, {"_id": 0})
+        out.append({
+            "barcode": it["barcode"], "name": it["name"], "category": it["category"],
+            "price": price, "old_price": old_price, "already_added": already is not None,
+            "suggested_image": CATEGORY_IMAGES.get(it["category"], DEFAULT_IMG),
+        })
+    return out
+
+
 # ---------------- Catalog ----------------
 @api.get("/catalog/lookup/{barcode}")
 async def catalog_lookup(barcode: str, user=Depends(require_manager)):
@@ -519,6 +581,10 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     await db.orders.insert_one(doc)
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
+    try:
+        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {body.name} بقيمة {int(cart['total'])} د.ع", "action_url": f"/order/{oid}"})
+    except Exception as e:
+        logger.warning(f"push failed: {e}")
     return doc
 
 
@@ -575,11 +641,22 @@ async def admin_orders(status: Optional[str] = None, user=Depends(require_manage
     return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
 
 
+async def notify_customer_status(oid, status):
+    o = await db.orders.find_one({"id": oid}, {"_id": 0, "user_id": 1})
+    if not o:
+        return
+    try:
+        await send_push([o["user_id"]], {"title": "تحديث طلبك 📦", "message": f"حالة طلبك الآن: {STATUS_LABEL.get(status, status)}", "action_url": f"/order/{oid}"})
+    except Exception as e:
+        logger.warning(f"push failed: {e}")
+
+
 @api.post("/admin/orders/{oid}/status")
 async def admin_update_status(oid: str, body: StatusUpdateIn, user=Depends(require_manager)):
     if body.status not in STATUS_LABEL:
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
     await db.orders.update_one({"id": oid}, {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()}}})
+    await notify_customer_status(oid, body.status)
     return {"ok": True}
 
 
@@ -589,6 +666,7 @@ async def admin_assign(oid: str, body: AssignIn, user=Depends(require_manager)):
     if not agent:
         raise HTTPException(status_code=404, detail="المندوب غير موجود")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_id": agent["user_id"], "agent_name": agent["name"], "status": "out_for_delivery"}, "$push": {"timeline": {"status": "out_for_delivery", "at": now_utc().isoformat()}}})
+    await notify_customer_status(oid, "out_for_delivery")
     return {"ok": True}
 
 
@@ -627,10 +705,22 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
     if body.status not in ("out_for_delivery", "delivered"):
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
     await db.orders.update_one({"id": oid}, {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()}}})
+    await notify_customer_status(oid, body.status)
     return {"ok": True}
 
 
-# ---------------- Object Storage ----------------
+class LocationIn(BaseModel):
+    lat: float
+    lng: float
+
+
+@api.post("/delivery/orders/{oid}/location")
+async def delivery_location(oid: str, body: LocationIn, user=Depends(require_delivery)):
+    d = await db.orders.find_one({"id": oid}, {"_id": 0, "agent_id": 1})
+    if not d or (d.get("agent_id") != user["user_id"] and user["role"] != "manager"):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
+    return {"ok": True}
 storage_key = None
 
 

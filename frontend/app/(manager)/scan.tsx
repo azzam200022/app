@@ -30,6 +30,20 @@ export default function Scan() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [suggestedImg, setSuggestedImg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const runSearch = async () => {
+    if (searchQ.trim().length < 2) return show("اكتب حرفين على الأقل للبحث", "info");
+    setSearching(true);
+    try { setResults(await api.catalogSearch(searchQ.trim())); } catch (e: any) { show(e.message, "error"); } finally { setSearching(false); }
+  };
+  const pickResult = (r: any) => {
+    setBarcode(r.barcode); setName(r.name); setCategory(r.category); setSuggestedImg(r.suggested_image);
+    setPrice(r.price ? String(r.price) : ""); setOldPrice(r.old_price ? String(r.old_price) : ""); setImageUri(null);
+    setMode("form");
+  };
 
   useEffect(() => {
     (async () => { try { const c = await api.categories(); setCats(c.map((x: any) => x.name)); } catch {} })();
@@ -203,6 +217,22 @@ export default function Scan() {
           <Button title="بحث" icon="search" onPress={() => doLookup(manual)} loading={looking} testID="manual-lookup" style={{ paddingHorizontal: spacing.xl }} />
         </View>
 
+        <View style={styles.divider}><View style={styles.line} /><T color={colors.muted} size={type.sm}>أو ابحث في الكتالوج بالاسم</T><View style={styles.line} /></View>
+        <View style={styles.manualRow}>
+          <TextInput testID="catalog-search" style={[styles.input, { flex: 1, marginBottom: 0 }]} value={searchQ} onChangeText={setSearchQ} placeholder="اسم المنتج (مثال: شامبو)" placeholderTextColor={colors.muted} textAlign="right" onSubmitEditing={runSearch} />
+          <Button title="بحث" icon="search" onPress={runSearch} loading={searching} testID="catalog-search-btn" style={{ paddingHorizontal: spacing.xl }} />
+        </View>
+        {results.map((r) => (
+          <Pressable key={r.barcode} testID={`result-${r.barcode}`} onPress={() => pickResult(r)} style={styles.resultRow}>
+            <View style={{ flex: 1 }}>
+              <T weight="semi" numberOfLines={1}>{r.name}</T>
+              <T color={colors.muted} size={type.sm}>{r.category}{r.already_added ? " • مضاف مسبقاً" : ""}</T>
+            </View>
+            <T weight="displayBold" color={colors.brandPrimary}>{r.price ? r.price.toLocaleString("en-US") + " د.ع" : "—"}</T>
+            <Feather name="plus-circle" size={22} color={colors.brandPrimary} />
+          </Pressable>
+        ))}
+
         <Pressable testID="manual-new" onPress={() => { setBarcode(""); setName(""); setCategory("أخرى"); setSuggestedImg(null); setImageUri(null); setPrice(""); setOldPrice(""); setMode("form"); }} style={styles.manualNew}>
           <Feather name="edit-3" size={16} color={colors.brandPrimary} />
           <T color={colors.brandPrimary} weight="semi">إضافة منتج بدون باركود</T>
@@ -229,6 +259,7 @@ const styles = StyleSheet.create({
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   manualRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },
   manualNew: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.xl },
+  resultRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   input: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, marginBottom: spacing.sm },
   bcChip: { flexDirection: "row-reverse", alignSelf: "flex-start", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, marginBottom: spacing.md },
   imagePicker: { height: 180, borderRadius: radius.md, borderWidth: 2, borderColor: colors.border, borderStyle: "dashed", backgroundColor: colors.surfaceSecondary, overflow: "hidden" },

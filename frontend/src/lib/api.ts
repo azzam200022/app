@@ -65,6 +65,7 @@ export const api = {
   updateProduct: (id: string, body: any) => req(`/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteProduct: (id: string) => req(`/products/${id}`, { method: "DELETE" }),
   lookup: (barcode: string) => req(`/catalog/lookup/${barcode}`),
+  catalogSearch: (q: string) => req(`/catalog/search?q=${encodeURIComponent(q)}`),
   // favorites
   favorites: () => req("/favorites"),
   toggleFav: (id: string) => req(`/favorites/${id}`, { method: "POST" }),
@@ -89,6 +90,7 @@ export const api = {
   // delivery
   deliveryOrders: () => req("/delivery/orders"),
   deliverySetStatus: (id: string, status: string) => req(`/delivery/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  deliverySetLocation: (id: string, lat: number, lng: number) => req(`/delivery/orders/${id}/location`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
 };
 
 export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string }> {
