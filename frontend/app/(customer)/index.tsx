@@ -13,14 +13,12 @@ import { CategoryChips } from "@/src/components/CategoryChips";
 import { api } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
-import { useAuth } from "@/src/context/AuthContext";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { add } = useCart();
   const { show } = useToast();
-  const { user } = useAuth();
   const [cats, setCats] = useState<any[]>([]);
   const [selected, setSelected] = useState("الكل");
   const [products, setProducts] = useState<any[]>([]);
@@ -122,20 +120,18 @@ export default function Home() {
   return (
     <View style={styles.root}>
       {/* Sticky header */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.xs }]}>
         <View style={styles.topRow}>
-          <View>
-            <T color={colors.muted} size={type.sm}>مرحباً {user?.name?.split(" ")[0] || ""} 👋</T>
-            <Image source={require("../../assets/images/logo-binsaleem.png")} style={styles.brandLogo} contentFit="contain" />
+          <Image source={require("../../assets/images/logo-binsaleem.png")} style={styles.brandLogo} contentFit="contain" />
+          <View style={styles.topActions}>
+            <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
+              <Feather name="search" size={19} color={colors.onSurface} />
+            </Pressable>
+            <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
+              <Feather name="heart" size={19} color={colors.onSurface} />
+            </Pressable>
           </View>
-          <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
-            <Feather name="heart" size={20} color={colors.onSurface} />
-          </Pressable>
         </View>
-        <Pressable testID="search-bar" onPress={() => router.push("/search")} style={styles.searchBar}>
-          <Feather name="search" size={18} color={colors.muted} />
-          <T color={colors.muted} style={{ flex: 1 }}>ابحث عن منتج...</T>
-        </Pressable>
       </View>
 
       {loading && !refreshing ? (
@@ -159,12 +155,12 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  topRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  brandLogo: { width: 140, height: 40, marginTop: 2 },
-  searchBar: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 48 },
-  hero: { height: 190, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden" },
+  topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  topRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  brandLogo: { width: 118, height: 34 },
+  hero: { height: 168, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden" },
   heroContent: { flex: 1, padding: spacing.lg, justifyContent: "flex-end" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.sm },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },

@@ -1,0 +1,30 @@
+{
+  "summary": "Verified the compact-header layout fix for the customer home in Bin Saleem (بن سليم). Mobile viewport 390x844, EXPO_BACKEND_URL preview. Customer login (zboon@souq.iq / Customer@123) lands on home tab. Top bar is a SINGLE compact row (~65px tall): Bin Saleem logo on the right + search icon (testID=search-btn) + heart/favorites icon (testID=fav-nav) on the left. Confirmed 0 <input> elements on home => the old full-width search bar row is gone. First screenful now shows hero + category chips + 'عروض مميزة' row + start of 'كل المنتجات' 2-column grid (previously mostly header). Tapping search-btn navigates to /search where search-input is visible and focused; typing 'ماء' triggered debounced search and back arrow returns home. Tapping fav-nav navigates to /favorites showing 'المفضلة' title + empty state. Bottom tab bar navigation works between الرئيسية/السلة/طلباتي/حسابي (thinner web height 56, font 10). Add-to-cart from ProductCard (testID=add-cart-<id>) works — toast 'تمت الإضافة إلى السلة' shown, cart tab badge updated (1 → 2), cart screen shows 2×ببسي كولا with total 500 د.ع. Category chip 'عصائر' filters grid (chips scroll horizontally, no wrapping). Scrolling to bottom keeps last product row fully visible above the tab bar (no content clipped). No red-screen, no functional regressions. Same cosmetic web-only warnings as iteration_1 persist (shadow*/pointerEvents/useNativeDriver).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Animated (JS driver, web)", "issue": "Console warning persists: 'Animated: useNativeDriver is not supported... Falling back to JS-based animation.' Same as iteration_1; not a blocker on web."},
+      {"component": "web styles (shadow* / pointerEvents)", "issue": "Deprecated web style prop warnings still present; cosmetic only."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_1.json", "/app/backend/tests/backend_test.py"],
+  "action_items": [
+    "No action required for the header/tab-bar layout fix — verified working as intended.",
+    "Optional cleanup (already noted in iteration_1): guard useNativeDriver:true with Platform.OS !== 'web' and migrate shadow*/props.pointerEvents to modern equivalents."
+  ],
+  "critical_code_review_comments": [
+    "app/(customer)/index.tsx: styles.searchBar is defined but unused after removing the full-width search bar row — safe to delete.",
+    "Header uses `paddingTop: insets.top + spacing.xs` plus paddingBottom spacing.sm + 40px icons; total ~65-70px on 390-wide viewport, well within a compact single-row target.",
+    "_layout.tsx: bottom tab height 56 on web only, mobile keeps native height — good; labels fontSize 10 with bodySemi family stays legible.",
+    "search.tsx and favorites.tsx: both correctly consume insets.top and use testIDs for back button (search-back / fav-back) — good for regression tests."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested this iteration (frontend-only request)", "frontend": "100% (7/7 flows: login→home, compact header assertions, search nav, favorites nav, tabs, add-to-cart+badge, category filter, bottom scroll)"},
+  "seed_data_creation": "None new. Cart state left with 2×ببسي كولا 300مل for the customer zboon@souq.iq (can be cleared by tapping the trash icon on the cart row).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Frontend URL: https://grocery-hub-1117.preview.emergentagent.com. Customer creds: zboon@souq.iq / Customer@123. Key testIDs on customer home: search-btn (top-left, navigates /search), fav-nav (top-left, navigates /favorites), add-cart-<productId> on each product card, fav-<productId> heart on each card. Search screen: search-input, search-back. Favorites: fav-back. Bottom tabs are text labels: الرئيسية/السلة/طلباتي/حسابي — click via get_by_text(..., exact=True).last. Home has NO TextInput anymore, so any old test that looked for a home search bar must be updated to go via search-btn."
+}

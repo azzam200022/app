@@ -11,8 +11,8 @@ export default function ManagerLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11 },
-        tabBarStyle: { backgroundColor: "#fff", borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 64 } : {}) },
+        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
+        tabBarStyle: { backgroundColor: "#fff", borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 56 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >

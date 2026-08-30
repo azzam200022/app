@@ -13,11 +13,11 @@ export default function CustomerLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11 },
+        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
         tabBarStyle: {
           backgroundColor: "#fff",
           borderTopColor: colors.border,
-          ...(Platform.OS === "web" ? { height: 64 } : {}),
+          ...(Platform.OS === "web" ? { height: 56 } : {}),
         },
         tabBarItemStyle: { alignSelf: "center" },
       }}
