@@ -104,13 +104,15 @@ export default function Login() {
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
-        <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=80" }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <LinearGradient colors={["rgba(26,31,27,0.55)", "rgba(26,31,27,0.97)"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#F6EFDD", "#EAF0E5", "#DCEADE"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        {/* faint decorative grocery motifs */}
+        <Feather name="shopping-cart" size={56} color="#1F4529" style={styles.decoCart} />
+        <View style={styles.decoAppleA} />
+        <View style={styles.decoAppleB} />
+        <View style={styles.decoAppleC} />
+        <Feather name="droplet" size={44} color="#C5A059" style={styles.decoDrop} />
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
-          <View style={styles.logoCard}>
-            <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
-          </View>
-          <T color="rgba(255,255,255,0.85)" size={type.lg} style={{ marginTop: spacing.lg }}>تسوّق الفخامة يصلك إلى باب بيتك</T>
+          <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
         </View>
       </View>
 
@@ -173,11 +175,15 @@ export function Field({ icon, secure, testID, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  hero: { height: 320 },
+  hero: { height: 400, overflow: "hidden" },
   heroContent: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: "center", alignItems: "center" },
-  logoCard: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 24, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderWidth: 1, borderColor: "rgba(197,160,89,0.5)" },
-  logoImg: { width: 200, height: 120 },
-  sheet: { flex: 1, marginTop: -24, backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  logoImg: { width: 260, height: 170 },
+  decoCart: { position: "absolute", top: 96, left: 44, opacity: 0.12 },
+  decoDrop: { position: "absolute", bottom: 70, right: 48, opacity: 0.16, transform: [{ rotate: "12deg" }] },
+  decoAppleA: { position: "absolute", top: 110, right: 60, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.2 },
+  decoAppleB: { position: "absolute", bottom: 90, left: 78, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.18 },
+  decoAppleC: { position: "absolute", top: 210, left: 30, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: "#C5A059", opacity: 0.22 },
+  sheet: { flex: 1, marginTop: -28, backgroundColor: colors.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, marginBottom: spacing.md },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%" },
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.lg },
