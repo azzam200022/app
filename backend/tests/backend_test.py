@@ -15,6 +15,7 @@ MANAGER = {"email": "manager@souq.iq", "password": "Manager@123"}
 DELIVERY = {"email": "mandoob@souq.iq", "password": "Delivery@123"}
 CUSTOMER = {"email": "zboon@souq.iq", "password": "Customer@123"}
 KNOWN_BARCODE = "8699449876882"
+SYNC_KEY = "binsaleem_pos_sync_2026"
 
 
 # ---------------- fixtures ----------------

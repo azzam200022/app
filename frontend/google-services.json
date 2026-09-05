@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "934796064759",
+    "project_id": "bin-salim-market-86634",
+    "storage_bucket": "bin-salim-market-86634.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:934796064759:android:322cbc20b8697f0e38a0f2",
+        "android_client_info": {
+          "package_name": "com.emergent.groceryhub.hfzqyg"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdT9TzZLW3Lo2_Q6Ga9zkoVohAEpdm-jE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

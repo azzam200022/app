@@ -45,3 +45,9 @@
 - Bin Saleem logo on printed invoice (manager-only printing). Currency IQD (د.ع).
 - Smooth logo entrance animation + gentle launch sound (expo-audio).
 - Catalog updated from month-8 price file: 11,011 products with retail selling prices (IQD).
+
+## Latest features (batch 3, 2026-06)
+- POS/cashier integration UI: manager dashboard → "ربط نقطة البيع" card → sync-settings screen showing endpoint URL, POST method, X-Sync-Key header, masked sync key (eye toggle), copy buttons, and JSON sample. Backend: GET /api/admin/sync-config (manager-only). Sync endpoint: POST /api/inventory/sync with X-Sync-Key header (env SYNC_KEY).
+- Colored bottom tab bar (customer + manager): dark teal (brandPrimary) background, gold active tint, cream-muted inactive; height unchanged. Delivery uses Stack (no tabs).
+- Collapsing header on customer home: Animated.FlatList maps scrollY → logo shrinks (34→24) and top-bar padding compacts, giving more product space.
+- Verified product image upload end-to-end: expo-image-picker → POST /api/upload (Emergent Object Storage) → image_url saved on product → served via /api/files. Confirmed 200 + bytes via curl.

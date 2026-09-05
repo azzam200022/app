@@ -1,14 +1,13 @@
 import "react-native-gesture-handler";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { I18nManager, LogBox, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
-import { createAudioPlayer } from "expo-audio";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/context/AuthContext";
@@ -36,18 +35,6 @@ if (Platform.OS === "android") {
 function AppServices() {
   const { user } = useAuth();
   const router = useRouter();
-  const played = useRef(false);
-
-  // gentle launch sound (once per app open)
-  useEffect(() => {
-    if (played.current) return;
-    played.current = true;
-    try {
-      const player = createAudioPlayer(require("../assets/sounds/launch.wav"));
-      player.volume = 0.5;
-      player.play();
-    } catch {}
-  }, []);
 
   // register for push whenever a user is present
   useEffect(() => {

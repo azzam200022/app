@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Animated } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -26,10 +26,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(logoAnim, { toValue: 1, duration: 750, useNativeDriver: true }).start();
-  }, [logoAnim]);
 
   const exchange = useCallback(async (sessionId: string) => {
     if (processed.has(sessionId)) return;
@@ -116,9 +112,7 @@ export default function Login() {
         <View style={styles.decoAppleC} />
         <Feather name="droplet" size={44} color="#C5A059" style={styles.decoDrop} />
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
-          <Animated.View style={{ opacity: logoAnim, transform: [{ scale: logoAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }, { translateY: logoAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
-            <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
-          </Animated.View>
+          <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
         </View>
       </View>
 

@@ -106,6 +106,7 @@ class ProductIn(BaseModel):
     description: Optional[str] = ""
     stock: int = 100
     is_published: bool = True
+    coming_soon: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -117,6 +118,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     stock: Optional[int] = None
     is_published: Optional[bool] = None
+    coming_soon: Optional[bool] = None
 
 
 class CartItemIn(BaseModel):
@@ -336,6 +338,41 @@ async def catalog_search(q: str = Query(""), user=Depends(require_manager)):
     return out
 
 
+class SyncItem(BaseModel):
+    barcode: str
+    quantity: Optional[int] = None
+    price: Optional[float] = None
+
+
+class SyncIn(BaseModel):
+    items: List[SyncItem]
+
+
+@api.post("/inventory/sync")
+async def inventory_sync(body: SyncIn, x_sync_key: Optional[str] = Header(None)):
+    if x_sync_key != os.environ.get("SYNC_KEY"):
+        raise HTTPException(status_code=401, detail="مفتاح المزامنة غير صالح")
+    updated = 0
+    not_found = []
+    for it in body.items:
+        setd = {}
+        if it.quantity is not None:
+            setd["stock"] = max(0, int(it.quantity))
+        if it.price is not None and it.price > 0:
+            setd["price"] = float(it.price)
+        if not setd:
+            continue
+        # also update reference catalog price
+        if "price" in setd:
+            await db.catalog.update_many({"barcode": it.barcode}, {"$set": {"price": setd["price"]}})
+        r = await db.products.update_many({"barcode": it.barcode, "deleted_at": None}, {"$set": setd})
+        if r.matched_count:
+            updated += r.matched_count
+        else:
+            not_found.append(it.barcode)
+    return {"updated": updated, "not_found": not_found, "count": len(body.items)}
+
+
 # ---------------- Catalog ----------------
 @api.get("/catalog/lookup/{barcode}")
 async def catalog_lookup(barcode: str, user=Depends(require_manager)):
@@ -366,6 +403,12 @@ def clean_product(p, favorites=None):
     p = dict(p)
     p.pop("deleted_at", None)
     p.pop("_id", None)
+    stock = p.get("stock", 0) or 0
+    coming = bool(p.get("coming_soon"))
+    p["coming_soon"] = coming
+    p["stock"] = stock
+    p["available"] = (stock > 0) and (not coming)
+    p["stock_status"] = "coming_soon" if coming else ("out" if stock <= 0 else "in")
     if favorites is not None:
         p["is_favorite"] = p["id"] in favorites
     return p
@@ -392,6 +435,32 @@ async def list_products(
         favs = await db.favorites.find({"user_id": user["user_id"]}, {"_id": 0, "product_id": 1}).to_list(1000)
         fav = {f["product_id"] for f in favs}
     return [clean_product(d, fav) for d in docs]
+
+
+@api.get("/products/bestsellers")
+async def bestsellers(authorization: Optional[str] = Header(None)):
+    pipeline = [
+        {"$unwind": "$items"},
+        {"$group": {"_id": "$items.product_id", "qty": {"$sum": "$items.quantity"}}},
+        {"$sort": {"qty": -1}},
+        {"$limit": 10},
+    ]
+    res = await db.orders.aggregate(pipeline).to_list(10)
+    ids = [r["_id"] for r in res]
+    docs = await db.products.find({"id": {"$in": ids}, "deleted_at": None, "is_published": True}, {"_id": 0}).to_list(20)
+    by_id = {d["id"]: d for d in docs}
+    ordered = [by_id[i] for i in ids if i in by_id]
+    if len(ordered) < 8:
+        have = {d["id"] for d in ordered}
+        extra = await db.products.find({"deleted_at": None, "is_published": True, "id": {"$nin": list(have)}}, {"_id": 0}).sort("created_at", -1).to_list(12)
+        ordered += extra
+    ordered = ordered[:10]
+    fav = set()
+    user = await get_user_by_token(authorization)
+    if user:
+        favs = await db.favorites.find({"user_id": user["user_id"]}, {"_id": 0, "product_id": 1}).to_list(1000)
+        fav = {f["product_id"] for f in favs}
+    return [clean_product(d, fav) for d in ordered]
 
 
 @api.get("/products/{pid}")
@@ -437,6 +506,7 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         "description": body.description or "",
         "stock": body.stock,
         "is_published": body.is_published,
+        "coming_soon": body.coming_soon,
         "created_at": now_utc().isoformat(),
         "deleted_at": None,
     }
@@ -511,6 +581,13 @@ async def get_cart(user=Depends(require_user)):
 
 @api.post("/cart/items")
 async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
+    prod = await db.products.find_one({"id": body.product_id, "deleted_at": None}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if prod.get("coming_soon"):
+        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
+    if (prod.get("stock", 0) or 0) <= 0:
+        raise HTTPException(status_code=400, detail="نفدت الكمية")
     cart = await db.carts.find_one({"user_id": user["user_id"]})
     items = cart["items"] if cart else []
     found = False
@@ -680,6 +757,23 @@ async def admin_users(user=Depends(require_manager)):
 async def admin_agents(user=Depends(require_manager)):
     docs = await db.users.find({"role": "delivery"}, {"_id": 0, "password_hash": 0}).to_list(200)
     return docs
+
+
+@api.get("/admin/sync-config")
+async def admin_sync_config(user=Depends(require_manager)):
+    """POS/cashier integration config: endpoint path + sync key + sample payload."""
+    return {
+        "path": "/api/inventory/sync",
+        "method": "POST",
+        "header_name": "X-Sync-Key",
+        "sync_key": os.environ.get("SYNC_KEY", ""),
+        "sample": {
+            "items": [
+                {"barcode": "8699449876882", "quantity": 25, "price": 1500},
+                {"barcode": "1234567890123", "quantity": 0},
+            ]
+        },
+    }
 
 
 @api.post("/admin/set-role")

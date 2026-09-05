@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors, font } from "@/src/lib/theme";
 
@@ -9,10 +9,10 @@ export default function ManagerLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
-        tabBarInactiveTintColor: colors.muted,
+        tabBarActiveTintColor: colors.gold,
+        tabBarInactiveTintColor: "rgba(251,247,238,0.7)",
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
-        tabBarStyle: { backgroundColor: "#fff", borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 56 } : {}) },
+        tabBarStyle: { backgroundColor: colors.brandPrimary, borderTopColor: colors.brandSecondary, borderTopWidth: StyleSheet.hairlineWidth, ...(Platform.OS === "web" ? { height: 56 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
@@ -21,6 +21,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="scan" options={{ title: "إضافة", tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} /> }} />
       <Tabs.Screen name="orders" options={{ title: "الطلبات", tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} /> }} />
       <Tabs.Screen name="agents" options={{ href: null }} />
+      <Tabs.Screen name="sync-settings" options={{ href: null }} />
     </Tabs>
   );
 }

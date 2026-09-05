@@ -60,6 +60,7 @@ export const api = {
     return req(`/products${s ? "?" + s : ""}`);
   },
   product: (id: string) => req(`/products/${id}`),
+  bestsellers: () => req(`/products/bestsellers`),
   categories: () => req("/categories"),
   createProduct: (body: any) => req("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: any) => req(`/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -87,6 +88,7 @@ export const api = {
   adminAgents: () => req("/admin/agents"),
   adminUsers: () => req("/admin/users"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
+  syncConfig: () => req("/admin/sync-config"),
   // delivery
   deliveryOrders: () => req("/delivery/orders"),
   deliverySetStatus: (id: string, status: string) => req(`/delivery/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),

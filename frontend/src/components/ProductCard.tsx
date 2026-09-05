@@ -12,6 +12,8 @@ import { T, Badge } from "@/src/components/ui";
 export function ProductCard({ product, onAdd, onToggleFav, width }: { product: any; onAdd?: (p: any) => void; onToggleFav?: (id: string, val: boolean) => void; width?: number }) {
   const router = useRouter();
   const [fav, setFav] = React.useState(!!product.is_favorite);
+  const unavailable = product.available === false;
+  const outLabel = product.stock_status === "coming_soon" ? "يتوفر قريباً" : "نفدت الكمية";
   const discount = product.old_price && product.old_price > product.price
     ? Math.round((1 - product.price / product.old_price) * 100)
     : 0;
@@ -36,8 +38,13 @@ export function ProductCard({ product, onAdd, onToggleFav, width }: { product: a
       style={[styles.card, width ? { width } : { flex: 1 }]}
     >
       <View style={styles.imgWrap}>
-        <Image source={{ uri: resolveImage(product.image_url) }} style={styles.img} contentFit="cover" transition={200} />
-        {discount > 0 && (
+        <Image source={{ uri: resolveImage(product.image_url) }} style={[styles.img, unavailable && { opacity: 0.4 }]} contentFit="cover" transition={200} />
+        {unavailable && (
+          <View style={styles.outOverlay}>
+            <View style={styles.outPill}><T weight="bold" size={type.sm} color="#fff">{outLabel}</T></View>
+          </View>
+        )}
+        {discount > 0 && !unavailable && (
           <View style={styles.badgePos}>
             <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />
           </View>
@@ -57,13 +64,15 @@ export function ProductCard({ product, onAdd, onToggleFav, width }: { product: a
           </View>
           <Pressable
             testID={`add-cart-${product.id}`}
+            disabled={unavailable}
             onPress={() => {
+              if (unavailable) return;
               if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onAdd?.(product);
             }}
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [unavailable ? styles.addBtnDisabled : styles.addBtn, pressed && !unavailable && { opacity: 0.8 }]}
           >
-            <Feather name="plus" size={20} color="#fff" />
+            <Feather name={unavailable ? "slash" : "plus"} size={20} color={unavailable ? colors.muted : "#fff"} />
           </Pressable>
         </View>
       </View>
@@ -82,4 +91,7 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", marginTop: spacing.sm, gap: spacing.sm },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  addBtnDisabled: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  outOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });

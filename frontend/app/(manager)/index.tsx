@@ -70,6 +70,15 @@ export default function ManagerDashboard() {
             <QuickAction icon="box" label="المنتجات" onPress={() => router.push("/(manager)/products")} testID="qa-products" />
           </View>
 
+          <Pressable testID="qa-sync" onPress={() => router.push("/(manager)/sync-settings")} style={styles.syncCard}>
+            <View style={styles.syncIcon}><Feather name="link" size={22} color="#fff" /></View>
+            <View style={{ flex: 1 }}>
+              <T weight="bold" color="#fff">ربط نقطة البيع (الكاشير)</T>
+              <T size={type.sm} color="rgba(255,255,255,0.8)">مزامنة المخزون والأسعار تلقائياً</T>
+            </View>
+            <Feather name="chevron-left" size={22} color="rgba(255,255,255,0.8)" />
+          </Pressable>
+
           <View style={styles.sectionHead}>
             <T weight="displayBold" size={type.lg}>أحدث الطلبات</T>
             <Pressable onPress={() => router.push("/(manager)/orders")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
@@ -108,6 +117,8 @@ const styles = StyleSheet.create({
   statCard: { width: "47%", flexGrow: 1, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
   statIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   actionsRow: { flexDirection: "row-reverse", gap: spacing.md, marginTop: spacing.lg },
+  syncCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.md },
+  syncIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
   qa: { flex: 1, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, alignItems: "center", gap: spacing.sm },
   qaIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xl, marginBottom: spacing.md },

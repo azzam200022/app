@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Animated } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ProductCard } from "@/src/components/ProductCard";
-import { CategoryChips } from "@/src/components/CategoryChips";
+import { CategoryCircles } from "@/src/components/CategoryCircles";
 import { api } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
@@ -25,6 +25,11 @@ export default function Home() {
   const [offers, setOffers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
+  const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
+  const barPadBottom = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.sm, 3], extrapolate: "clamp" });
+  const barPadTopExtra = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
 
   const loadProducts = useCallback(async (cat: string) => {
     const p = await api.products(cat === "الكل" ? {} : { category: cat });
@@ -65,8 +70,6 @@ export default function Home() {
     } catch (e: any) { show(e.message, "error"); }
   };
 
-  const chips = ["الكل", ...cats.map((c) => c.name)];
-
   const header = (
     <View>
       {/* Hero */}
@@ -88,7 +91,7 @@ export default function Home() {
       <View style={styles.sectionHead}>
         <T weight="displayBold" size={type.xl}>التصنيفات</T>
       </View>
-      <CategoryChips categories={chips} selected={selected} onSelect={onSelect} />
+      <CategoryCircles items={[{ name: "الكل" }, ...cats.map((c: any) => ({ name: c.name, image: c.image }))]} selected={selected} onSelect={onSelect} />
 
       {/* Offers row */}
       {offers.length > 0 && selected === "الكل" && (
@@ -119,10 +122,12 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
-      {/* Sticky header */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.xs }]}>
+      {/* Sticky collapsing header */}
+      <Animated.View style={[styles.topBar, { paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
         <View style={styles.topRow}>
-          <Image source={require("../../assets/images/logo-binsaleem.png")} style={styles.brandLogo} contentFit="contain" />
+          <Animated.View style={{ width: logoW, height: logoH }}>
+            <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
+          </Animated.View>
           <View style={styles.topActions}>
             <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
               <Feather name="search" size={19} color={colors.onSurface} />
@@ -132,18 +137,20 @@ export default function Home() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {loading && !refreshing ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={products}
           keyExtractor={(i) => i.id}
           numColumns={2}
           ListHeaderComponent={header}
           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
+          scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
           renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} />}
           ListEmptyComponent={<View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}

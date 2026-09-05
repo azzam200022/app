@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors, font } from "@/src/lib/theme";
 import { useCart } from "@/src/context/CartContext";
@@ -11,12 +11,13 @@ export default function CustomerLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
-        tabBarInactiveTintColor: colors.muted,
+        tabBarActiveTintColor: colors.gold,
+        tabBarInactiveTintColor: "rgba(251,247,238,0.7)",
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
         tabBarStyle: {
-          backgroundColor: "#fff",
-          borderTopColor: colors.border,
+          backgroundColor: colors.brandPrimary,
+          borderTopColor: colors.brandSecondary,
+          borderTopWidth: StyleSheet.hairlineWidth,
           ...(Platform.OS === "web" ? { height: 56 } : {}),
         },
         tabBarItemStyle: { alignSelf: "center" },

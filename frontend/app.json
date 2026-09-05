@@ -24,6 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.groceryhub.hfzqyg",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",

@@ -35,6 +35,15 @@ export default function ManagerProducts() {
 
   const del = async (id: string) => { try { await api.deleteProduct(id); show("تم حذف المنتج"); setItems((p) => p.filter((x) => x.id !== id)); } catch (e: any) { show(e.message, "error"); } };
 
+  const toggleComing = async (item: any) => {
+    const next = !item.coming_soon;
+    try {
+      await api.updateProduct(item.id, { coming_soon: next });
+      setItems((p) => p.map((x) => x.id === item.id ? { ...x, coming_soon: next } : x));
+      show(next ? "المنتج الآن: يتوفر قريباً" : "المنتج متاح للشراء");
+    } catch (e: any) { show(e.message, "error"); }
+  };
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -51,7 +60,11 @@ export default function ManagerProducts() {
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{item.name}</T>
                 <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 2 }}>{formatPrice(item.price)}</T>
-                <T color={colors.muted} size={type.sm}>{item.category}</T>
+                <T color={item.stock > 0 ? colors.muted : colors.error} size={type.sm}>{item.category} • المخزون: {item.stock ?? 0}</T>
+                <Pressable testID={`coming-${item.id}`} onPress={() => toggleComing(item)} style={[styles.comingBtn, item.coming_soon && styles.comingActive]}>
+                  <Feather name={item.coming_soon ? "clock" : "check"} size={12} color={item.coming_soon ? colors.gold : colors.brandPrimary} />
+                  <T size={11} weight="bold" color={item.coming_soon ? colors.gold : colors.brandPrimary}>{item.coming_soon ? "يتوفر قريباً (اضغط للإتاحة)" : "متاح — اجعله يتوفر قريباً"}</T>
+                </Pressable>
               </View>
               <View style={styles.actions}>
                 <Pressable testID={`edit-${item.id}`} onPress={() => openEdit(item)} style={styles.actionBtn}><Feather name="edit-2" size={18} color={colors.brandPrimary} /></Pressable>
@@ -85,6 +98,8 @@ const styles = StyleSheet.create({
   card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   img: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   actions: { gap: spacing.sm },
+  comingBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm },
+  comingActive: { backgroundColor: "#FBF1DE" },
   actionBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl },
