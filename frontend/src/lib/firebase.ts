@@ -4,12 +4,12 @@ import { getAuth, initializeAuth, getReactNativePersistence, GoogleAuthProvider,
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY as string,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID as string,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID as string,
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyD9RQqKgswaufdialaKgYy2zHAFVKIiviU",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "azzam-c1067.firebaseapp.com",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "azzam-c1067",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "azzam-c1067.firebasestorage.app",
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "71553026032",
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:71553026032:web:19706da78cf3ff872b3f35",
 };
 
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
