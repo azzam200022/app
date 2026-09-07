@@ -1,71 +1,51 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
+import { ResponseType } from "expo-auth-session";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
-import { api } from "@/src/lib/api";
 
 WebBrowser.maybeCompleteAuthSession();
-
-const processed = new Set<string>();
 
 export default function Login() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { loginEmail, loginWithToken } = useAuth();
+  const { loginEmail, loginGoogle, loginGoogleWithIdToken } = useAuth();
   const { show } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    responseType: ResponseType.IdToken,
+    scopes: ["profile", "email"],
+  });
 
-  const exchange = useCallback(async (sessionId: string) => {
-    if (processed.has(sessionId)) return;
-    processed.add(sessionId);
-    setGLoading(true);
-    try {
-      const res = await api.googleSession(sessionId);
-      await loginWithToken(res.session_token);
-      router.replace("/");
-    } catch (e: any) {
-      show(e.message || "فشل تسجيل الدخول عبر جوجل", "error");
-    } finally {
+  useEffect(() => {
+    if (Platform.OS === "web" || response?.type !== "success") return;
+    const idToken = response.params?.id_token;
+    if (!idToken) {
       setGLoading(false);
+      show("لم يتم استلام رمز Google", "error");
+      return;
     }
-  }, [loginWithToken, router, show]);
-
-  // Web: detect session_id on mount
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    const raw = window.location.hash + " " + window.location.search;
-    const m = raw.match(/session_id=([^&#\s]+)/);
-    if (m) {
-      exchange(decodeURIComponent(m[1])).then(() => {
-        try { window.history.replaceState(window.history.state, "", window.location.pathname); } catch {}
-      });
-    }
-  }, [exchange]);
-
-  // Mobile: cold start + hot links
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const handle = (url: string | null) => {
-      if (!url) return;
-      const m = url.match(/[?#&]session_id=([^&#]+)/);
-      if (m) exchange(decodeURIComponent(m[1]));
-    };
-    Linking.getInitialURL().then(handle);
-    const sub = Linking.addEventListener("url", (e) => handle(e.url));
-    return () => sub.remove();
-  }, [exchange]);
+    setGLoading(true);
+    loginGoogleWithIdToken(idToken)
+      .then(() => router.replace("/"))
+      .catch((error: any) => show(error.message, "error"))
+      .finally(() => setGLoading(false));
+  }, [response, loginGoogleWithIdToken, router, show]);
 
   const doLogin = async () => {
     if (!email || !password) return show("أدخل البريد وكلمة المرور", "error");
@@ -83,21 +63,18 @@ export default function Login() {
   const doGoogle = async () => {
     setGLoading(true);
     try {
-      const redirectUrl = Platform.OS === "web" ? window.location.origin + "/" : Linking.createURL("");
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
       if (Platform.OS === "web") {
-        window.location.href = authUrl;
+        await loginGoogle();
+        router.replace("/");
         return;
       }
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-      if (result.type === "success" && result.url) {
-        const m = result.url.match(/[?#&]session_id=([^&#]+)/);
-        if (m) await exchange(decodeURIComponent(m[1]));
-      }
+      if (!request) throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
+      await promptAsync();
     } catch (e: any) {
-      show("تعذر فتح نافذة جوجل", "error");
-    } finally {
       setGLoading(false);
+      show(e.message || "تعذر تسجيل الدخول عبر Google", "error");
+    } finally {
+      if (Platform.OS === "web") setGLoading(false);
     }
   };
 
