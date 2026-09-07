@@ -18,6 +18,9 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, EmailStr
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials as firebase_credentials
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -36,6 +39,16 @@ MANAGER_EMAILS = {"zzam8160@gmail.com"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+FIREBASE_APP = None
+FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+if FIREBASE_SERVICE_ACCOUNT_JSON:
+    try:
+        service_account = json.loads(FIREBASE_SERVICE_ACCOUNT_JSON)
+        FIREBASE_APP = firebase_admin.initialize_app(firebase_credentials.Certificate(service_account))
+    except Exception as exc:
+        logger.warning("Firebase Admin initialization failed: %s", exc)
+
 
 app = FastAPI()
 api = APIRouter(prefix="/api")
@@ -153,6 +166,39 @@ async def get_user_by_token(authorization: Optional[str]):
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.split(" ", 1)[1].strip()
+
+    # Firebase ID tokens are the primary authentication mechanism.
+    if FIREBASE_APP:
+        try:
+            decoded = firebase_auth.verify_id_token(token, app=FIREBASE_APP)
+            firebase_uid = decoded.get("uid")
+            email = (decoded.get("email") or "").lower()
+            user = await db.users.find_one({"firebase_uid": firebase_uid}, {"_id": 0})
+            if not user and email:
+                user = await db.users.find_one({"email": email}, {"_id": 0})
+                if user:
+                    await db.users.update_one(
+                        {"user_id": user["user_id"]},
+                        {"$set": {"firebase_uid": firebase_uid, "picture": decoded.get("picture")}},
+                    )
+                    user["firebase_uid"] = firebase_uid
+                    user["picture"] = decoded.get("picture")
+            if not user:
+                user = {
+                    "user_id": "usr_" + uuid.uuid4().hex[:12],
+                    "firebase_uid": firebase_uid,
+                    "name": decoded.get("name") or (email.split("@")[0] if email else "مستخدم"),
+                    "email": email,
+                    "role": "customer",
+                    "picture": decoded.get("picture"),
+                    "created_at": now_utc().isoformat(),
+                }
+                await db.users.insert_one(user.copy())
+            return user
+        except Exception:
+            pass
+
+    # Keep legacy JWT/session tokens working during migration.
     user_id = None
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
@@ -174,7 +220,6 @@ async def get_user_by_token(authorization: Optional[str]):
     if not user_id:
         return None
     return await db.users.find_one({"user_id": user_id}, {"_id": 0})
-
 
 async def require_user(authorization: Optional[str] = Header(None)):
     user = await get_user_by_token(authorization)
