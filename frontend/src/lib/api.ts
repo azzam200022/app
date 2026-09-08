@@ -1,6 +1,18 @@
 import { storage } from "@/src/utils/storage";
+import { Platform } from "react-native";
 
-export const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+const configuredBackend = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
+
+function getBackendUrl() {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    const { hostname, protocol } = window.location;
+    const isReplitPreview = hostname.endsWith(".replit.dev") || hostname.endsWith(".repl.co");
+    if (isReplitPreview) return `${protocol}//${hostname}:8000`;
+  }
+  return configuredBackend;
+}
+
+export const BACKEND = getBackendUrl();
 export const TOKEN_KEY = "souq_auth_token";
 
 let authToken: string | null = null;
@@ -28,7 +40,12 @@ async function req(path: string, opts: RequestInit = {}) {
   if (!token) token = await storage.secureGet(TOKEN_KEY, "");
   const headers: any = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BACKEND}/api${path}`, { ...opts, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND}/api${path}`, { ...opts, headers });
+  } catch {
+    throw new Error("خدمة المتجر غير متصلة حالياً. حاول مرة أخرى بعد تشغيل الخادم");
+  }
   const text = await res.text();
   let data: any = null;
   try {
@@ -37,7 +54,11 @@ async function req(path: string, opts: RequestInit = {}) {
     data = text;
   }
   if (!res.ok) {
-    const msg = (data && data.detail) || "حدث خطأ، حاول مرة أخرى";
+    const msg =
+      (data && data.detail) ||
+      (res.status === 404 || res.status === 502 || res.status === 503
+        ? "خدمة المتجر غير متاحة حالياً. يرجى تشغيل الخادم الخلفي"
+        : "تعذر تنفيذ الطلب، حاول مرة أخرى");
     throw new Error(typeof msg === "string" ? msg : "حدث خطأ");
   }
   return data;
