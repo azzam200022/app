@@ -74,10 +74,37 @@ CATEGORY_IMAGES = {
     "أخرى": "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&q=80",
 }
 DEFAULT_IMG = CATEGORY_IMAGES["أخرى"]
+CATALOG_ITEMS_CACHE = None
+EXISTING_PRODUCT_BARCODES_CACHE = None
 
 
 def now_utc():
     return datetime.now(timezone.utc)
+
+
+def local_catalog_items():
+    global CATALOG_ITEMS_CACHE
+    if CATALOG_ITEMS_CACHE is None:
+        path = ROOT_DIR / "data" / "catalog.json"
+        try:
+            CATALOG_ITEMS_CACHE = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+        except Exception as exc:
+            logger.warning("local catalog load failed: %s", exc)
+            CATALOG_ITEMS_CACHE = []
+    return CATALOG_ITEMS_CACHE
+
+
+async def existing_product_barcodes():
+    global EXISTING_PRODUCT_BARCODES_CACHE
+    if EXISTING_PRODUCT_BARCODES_CACHE is not None:
+        return EXISTING_PRODUCT_BARCODES_CACHE
+    try:
+        docs = await db.products.find({"deleted_at": None}, {"_id": 0, "barcode": 1}).to_list(10000)
+        EXISTING_PRODUCT_BARCODES_CACHE = {doc.get("barcode") for doc in docs if doc.get("barcode")}
+    except Exception as exc:
+        logger.warning("existing product check skipped: %s", exc)
+        EXISTING_PRODUCT_BARCODES_CACHE = set()
+    return EXISTING_PRODUCT_BARCODES_CACHE
 
 
 def hash_pw(pw: str) -> str:
@@ -207,7 +234,19 @@ async def get_user_by_token(authorization: Optional[str]):
                 }
                 await db.users.insert_one(user.copy())
             return user
-        except Exception:
+        except Exception as exc:
+            verified_email = locals().get("email", "")
+            verified_uid = locals().get("firebase_uid")
+            if verified_email in MANAGER_EMAILS and verified_uid:
+                logger.warning("Firebase manager fallback active: %s", exc)
+                return {
+                    "user_id": verified_uid,
+                    "firebase_uid": verified_uid,
+                    "name": decoded.get("name") or verified_email.split("@")[0],
+                    "email": verified_email,
+                    "role": "manager",
+                    "picture": decoded.get("picture"),
+                }
             pass
 
     # Keep legacy JWT/session tokens working during migration.
@@ -377,7 +416,14 @@ async def catalog_search(q: str = Query(""), user=Depends(require_manager)):
     q = (q or "").strip()
     if len(q) < 2:
         return []
-    docs = await db.catalog.find({"name": {"$regex": re.escape(q), "$options": "i"}}, {"_id": 0}).limit(30).to_list(30)
+    local_items = local_catalog_items()
+    docs = [
+        item for item in local_items
+        if q.casefold() in str(item.get("name") or "").casefold()
+    ][:30]
+    if not local_items:
+        docs = await db.catalog.find({"name": {"$regex": re.escape(q), "$options": "i"}}, {"_id": 0}).limit(30).to_list(30)
+    existing_barcodes = await existing_product_barcodes()
     out = []
     for it in docs:
         price = it.get("price") or 0
@@ -386,10 +432,9 @@ async def catalog_search(q: str = Query(""), user=Depends(require_manager)):
         if special and special > 0 and price and special < price:
             old_price = price
             price = special
-        already = await db.products.find_one({"barcode": it["barcode"], "deleted_at": None}, {"_id": 0})
         out.append({
             "barcode": it["barcode"], "name": it["name"], "category": it["category"],
-            "price": price, "old_price": old_price, "already_added": already is not None,
+            "price": price, "old_price": old_price, "already_added": it["barcode"] in existing_barcodes,
             "suggested_image": CATEGORY_IMAGES.get(it["category"], DEFAULT_IMG),
         })
     return out
@@ -433,8 +478,11 @@ async def inventory_sync(body: SyncIn, x_sync_key: Optional[str] = Header(None))
 # ---------------- Catalog ----------------
 @api.get("/catalog/lookup/{barcode}")
 async def catalog_lookup(barcode: str, user=Depends(require_manager)):
-    item = await db.catalog.find_one({"barcode": barcode}, {"_id": 0})
-    existing = await db.products.find_one({"barcode": barcode, "deleted_at": None}, {"_id": 0})
+    local_items = local_catalog_items()
+    item = next((entry for entry in local_items if entry.get("barcode") == barcode), None)
+    if item is None and not local_items:
+        item = await db.catalog.find_one({"barcode": barcode}, {"_id": 0})
+    existing = barcode in await existing_product_barcodes()
     if not item:
         return {"found": False, "already_added": existing is not None}
     price = item.get("price") or 0
@@ -509,7 +557,7 @@ async def bestsellers(authorization: Optional[str] = Header(None)):
     ordered = [by_id[i] for i in ids if i in by_id]
     if len(ordered) < 8:
         have = {d["id"] for d in ordered}
-        extra = await db.products.find({"deleted_at": None, "is_published": True, "id": {"$nin": list(have)}}, {"_id": 0}).sort("created_at", -1).to_list(12)
+        extra = await db.products.find({"deleted_at": None, "is_published": True, "id": {"$nin": list(have)}}).sort("created_at", -1).to_list(12)
         ordered += extra
     ordered = ordered[:10]
     fav = set()
@@ -568,6 +616,8 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         "deleted_at": None,
     }
     await db.products.insert_one(doc)
+    if body.barcode and EXISTING_PRODUCT_BARCODES_CACHE is not None:
+        EXISTING_PRODUCT_BARCODES_CACHE.add(body.barcode)
     return clean_product(doc)
 
 
@@ -749,8 +799,7 @@ async def cancel_order(oid: str, user=Depends(require_user)):
     return {"ok": True}
 
 
-# ---------------- Manager ops ----------------
-@api.get("/admin/stats")
+# ---------------- Manager ops ----------------n@api.get("/admin/stats")
 async def admin_stats(user=Depends(require_manager)):
     total_products = await db.products.count_documents({"deleted_at": None})
     total_orders = await db.orders.count_documents({})
@@ -841,8 +890,7 @@ async def admin_set_role(body: RoleIn, user=Depends(require_manager)):
     return {"ok": True}
 
 
-# ---------------- Delivery ops ----------------
-@api.get("/delivery/orders")
+# ---------------- Delivery ops ----------------n@api.get("/delivery/orders")
 async def delivery_orders(user=Depends(require_delivery)):
     q = {"agent_id": user["user_id"]}
     return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
@@ -872,6 +920,8 @@ async def delivery_location(oid: str, body: LocationIn, user=Depends(require_del
         raise HTTPException(status_code=403, detail="غير مصرح")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
     return {"ok": True}
+
+
 storage_key = None
 
 
@@ -977,10 +1027,11 @@ async def seed():
 
     # Reset catalog if version changed (v2 adds real selling prices)
     meta = await db.meta.find_one({"key": "catalog_version"})
-    if not meta or meta.get("value") != CATALOG_VERSION:
+    catalog_needs_seed = not meta or meta.get("value") != CATALOG_VERSION
+    if catalog_needs_seed:
         await db.catalog.delete_many({})
 
-    if await db.catalog.count_documents({}) == 0:
+    if catalog_needs_seed:
         path = ROOT_DIR / "data" / "catalog.json"
         if path.exists():
             items = json.loads(path.read_text(encoding="utf-8"))
@@ -999,7 +1050,7 @@ async def seed():
             if batch:
                 await db.catalog.insert_many(batch)
             await db.meta.update_one({"key": "catalog_version"}, {"$set": {"value": CATALOG_VERSION}}, upsert=True)
-            logger.info(f"Seeded catalog: {await db.catalog.count_documents({})}")
+            logger.info(f"Seeded catalog: {len(items)}")
 
     async def ensure_user(email, name, pw, role):
         if not await db.users.find_one({"email": email}):
