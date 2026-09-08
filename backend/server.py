@@ -15,21 +15,18 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFi
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, EmailStr
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials as firebase_credentials
+from firebase_admin import firestore
+from firestore_store import FirestoreDatabase
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
-
-JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_SECRET = os.environ.get("JWT_SECRET") or os.environ.get("SESSION_SECRET", "development-only-change-me")
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
@@ -41,13 +38,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 FIREBASE_APP = None
+FIRESTORE_CLIENT = None
 FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 if FIREBASE_SERVICE_ACCOUNT_JSON:
     try:
         service_account = json.loads(FIREBASE_SERVICE_ACCOUNT_JSON)
         FIREBASE_APP = firebase_admin.initialize_app(firebase_credentials.Certificate(service_account))
+        FIRESTORE_CLIENT = firestore.client(app=FIREBASE_APP)
     except Exception as exc:
         logger.warning("Firebase Admin initialization failed: %s", exc)
+else:
+    logger.warning("FIREBASE_SERVICE_ACCOUNT_JSON is missing; Firestore API is not configured")
+
+db = FirestoreDatabase(FIRESTORE_CLIENT)
 
 
 app = FastAPI()
@@ -173,23 +176,32 @@ async def get_user_by_token(authorization: Optional[str]):
             decoded = firebase_auth.verify_id_token(token, app=FIREBASE_APP)
             firebase_uid = decoded.get("uid")
             email = (decoded.get("email") or "").lower()
+            forced_role = "manager" if email in MANAGER_EMAILS else None
             user = await db.users.find_one({"firebase_uid": firebase_uid}, {"_id": 0})
             if not user and email:
                 user = await db.users.find_one({"email": email}, {"_id": 0})
                 if user:
+                    updates = {
+                        "firebase_uid": firebase_uid,
+                        "picture": decoded.get("picture"),
+                    }
+                    if forced_role and user.get("role") != forced_role:
+                        updates["role"] = forced_role
                     await db.users.update_one(
                         {"user_id": user["user_id"]},
-                        {"$set": {"firebase_uid": firebase_uid, "picture": decoded.get("picture")}},
+                        {"$set": updates},
                     )
                     user["firebase_uid"] = firebase_uid
                     user["picture"] = decoded.get("picture")
+                    if forced_role:
+                        user["role"] = forced_role
             if not user:
                 user = {
                     "user_id": "usr_" + uuid.uuid4().hex[:12],
                     "firebase_uid": firebase_uid,
                     "name": decoded.get("name") or (email.split("@")[0] if email else "مستخدم"),
                     "email": email,
-                    "role": "customer",
+                    "role": forced_role or "customer",
                     "picture": decoded.get("picture"),
                     "created_at": now_utc().isoformat(),
                 }
@@ -1029,4 +1041,5 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    client.close()
+    if FIRESTORE_CLIENT:
+        FIRESTORE_CLIENT.close()
