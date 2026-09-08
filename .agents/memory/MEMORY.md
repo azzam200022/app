@@ -1,0 +1,4 @@
+- [Firebase web sign-in](firebase-web-auth.md) — Replit preview domains are not accepted by Firebase web popups; use Expo OAuth token exchange for web sign-in.
+- [Workflow environment overrides](workflow-env-overrides.md) — pass current Replit service URLs through workflow commands when protected `.env` files cannot be edited.
+- [Manager role source of truth](manager-role-source-of-truth.md) — enforce manager permissions during backend Firebase-token synchronization, not only in frontend state.
+- [Catalog quota resilience](catalog-quota-resilience.md) — use the local catalog export for manager search and barcode lookup when Firestore quotas are unreliable.
