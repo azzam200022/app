@@ -24,8 +24,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
+  const googleWebClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured";
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    webClientId: googleWebClientId,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     responseType: ResponseType.IdToken,
@@ -67,6 +69,12 @@ export default function Login() {
         await loginGoogle();
         router.replace("/");
         return;
+      }
+      if (
+        !process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID &&
+        !process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+      ) {
+        throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
       }
       if (!request) throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
       await promptAsync();
