@@ -31,6 +31,10 @@ JWT_SECRET = os.environ.get("JWT_SECRET") or os.environ.get("SESSION_SECRET", "d
 APP_NAME = "souq-market"
 CATALOG_VERSION = 2
 MANAGER_EMAILS = {"zzam8160@gmail.com"}
+PREVIEW_MODE = os.environ.get(
+    "PREVIEW_MODE",
+    "true" if os.environ.get("NODE_ENV") != "production" else "false",
+).lower() in {"1", "true", "yes"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -324,6 +328,25 @@ async def login(body: LoginIn):
     if not u or not u.get("password_hash") or not verify_pw(body.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="البريد أو كلمة المرور غير صحيحة")
     return {"token": make_jwt(u["user_id"]), "user": public_user(u)}
+
+
+@api.post("/auth/preview/{role}")
+async def preview_login(role: str):
+    """Development-only role shortcuts for previewing the three app experiences."""
+    if not PREVIEW_MODE:
+        raise HTTPException(status_code=404, detail="غير متاح")
+    preview_accounts = {
+        "manager": "manager@souq.iq",
+        "delivery": "mandoob@souq.iq",
+        "customer": "zboon@souq.iq",
+    }
+    email = preview_accounts.get(role)
+    if not email:
+        raise HTTPException(status_code=400, detail="دور غير صالح")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=503, detail="حساب المعاينة غير جاهز")
+    return {"token": make_jwt(user["user_id"]), "user": public_user(user)}
 
 
 @api.post("/auth/session")
