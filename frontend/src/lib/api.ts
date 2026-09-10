@@ -68,6 +68,8 @@ export const api = {
   // auth
   register: (body: any) => req("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (body: any) => req("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+  previewLogin: (role: "manager" | "delivery" | "customer") =>
+    req(`/auth/preview/${role}`, { method: "POST" }),
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
