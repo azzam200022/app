@@ -21,15 +21,13 @@ import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials as firebase_credentials
 from firebase_admin import firestore
+from firebase_admin import storage as firebase_storage
 from firestore_store import FirestoreDatabase
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 JWT_SECRET = os.environ.get("JWT_SECRET") or os.environ.get("SESSION_SECRET", "development-only-change-me")
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
-STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
-STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 APP_NAME = "souq-market"
 CATALOG_VERSION = 2
 MANAGER_EMAILS = {"zzam8160@gmail.com"}
@@ -39,12 +37,18 @@ logger = logging.getLogger(__name__)
 
 FIREBASE_APP = None
 FIRESTORE_CLIENT = None
+FIREBASE_BUCKET = None
 FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 if FIREBASE_SERVICE_ACCOUNT_JSON:
     try:
         service_account = json.loads(FIREBASE_SERVICE_ACCOUNT_JSON)
         FIREBASE_APP = firebase_admin.initialize_app(firebase_credentials.Certificate(service_account))
         FIRESTORE_CLIENT = firestore.client(app=FIREBASE_APP)
+        storage_bucket = (
+            os.environ.get("FIREBASE_STORAGE_BUCKET")
+            or f"{service_account.get('project_id')}.firebasestorage.app"
+        )
+        FIREBASE_BUCKET = firebase_storage.bucket(storage_bucket, app=FIREBASE_APP)
     except Exception as exc:
         logger.warning("Firebase Admin initialization failed: %s", exc)
 else:
@@ -922,31 +926,26 @@ async def delivery_location(oid: str, body: LocationIn, user=Depends(require_del
         raise HTTPException(status_code=403, detail="غير مصرح")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
     return {"ok": True}
-storage_key = None
-
-
 def init_storage():
-    global storage_key
-    if storage_key:
-        return storage_key
-    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
-    resp.raise_for_status()
-    storage_key = resp.json()["storage_key"]
-    return storage_key
+    if FIREBASE_BUCKET is None:
+        raise RuntimeError("Firebase Storage is not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON.")
+    return FIREBASE_BUCKET
 
 
 def put_object(path, data, content_type):
-    key = init_storage()
-    resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
-    resp.raise_for_status()
-    return resp.json()
+    blob = init_storage().blob(path)
+    blob.upload_from_string(data, content_type=content_type)
+    blob.cache_control = "public,max-age=86400"
+    blob.patch()
+    return {"path": path}
 
 
 def get_object(path):
-    key = init_storage()
-    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    blob = init_storage().blob(path)
+    if not blob.exists():
+        raise FileNotFoundError(path)
+    blob.reload()
+    return blob.download_as_bytes(), blob.content_type or "application/octet-stream"
 
 
 @api.post("/upload")
@@ -978,6 +977,11 @@ async def files(path: str):
 @api.get("/")
 async def root():
     return {"message": "Souq Market API"}
+
+
+@api.get("/healthz")
+async def healthz():
+    return {"ok": True, "firebase": FIREBASE_APP is not None, "firestore": FIRESTORE_CLIENT is not None}
 
 
 app.include_router(api)
@@ -1084,10 +1088,8 @@ async def on_startup():
         await seed()
     except Exception as e:
         logger.error(f"seed error: {e}")
-    try:
-        await run_in_threadpool(init_storage)
-    except Exception as e:
-        logger.warning(f"storage init skipped: {e}")
+    if FIREBASE_BUCKET is None:
+        logger.warning("Firebase Storage is not configured; image uploads are disabled")
 
 
 @app.on_event("shutdown")
