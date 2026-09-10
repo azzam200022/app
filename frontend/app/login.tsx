@@ -18,12 +18,14 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Login() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { loginEmail, loginGoogle, loginGoogleWithIdToken } = useAuth();
+  const { loginEmail, loginPreview, loginGoogle, loginGoogleWithIdToken } = useAuth();
   const { show } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const isPreview = __DEV__;
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured";
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -86,6 +88,18 @@ export default function Login() {
     }
   };
 
+  const doPreviewLogin = async (role: "manager" | "delivery" | "customer") => {
+    setPreviewLoading(role);
+    try {
+      await loginPreview(role);
+      router.replace("/");
+    } catch (e: any) {
+      show(e.message || "تعذر دخول المعاينة", "error");
+    } finally {
+      setPreviewLoading(null);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
@@ -117,14 +131,42 @@ export default function Login() {
             <View style={styles.line} />
           </View>
 
-          <Pressable testID="google-login" onPress={doGoogle} disabled={gLoading} style={styles.googleBtn}>
-            {gLoading ? <ActivityIndicator color={colors.onSurface} /> : (
-              <View style={styles.googleRow}>
-                <Image source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }} style={{ width: 20, height: 20 }} />
-                <T weight="semi">المتابعة عبر جوجل</T>
-              </View>
-            )}
-          </Pressable>
+          {isPreview ? (
+            <View style={styles.previewBox}>
+              <T weight="bold" color={colors.brandPrimary} style={styles.previewTitle}>وضع المعاينة</T>
+              <T color={colors.muted} size={type.sm} style={styles.previewHint}>اختر لوحة لتجربة التطبيق بدون تسجيل Google</T>
+              <PreviewButton
+                label="الدخول إلى لوحة المدير"
+                icon="briefcase"
+                loading={previewLoading === "manager"}
+                disabled={previewLoading !== null}
+                onPress={() => doPreviewLogin("manager")}
+              />
+              <PreviewButton
+                label="الدخول كمندوب توصيل"
+                icon="truck"
+                loading={previewLoading === "delivery"}
+                disabled={previewLoading !== null}
+                onPress={() => doPreviewLogin("delivery")}
+              />
+              <PreviewButton
+                label="الدخول كزبون"
+                icon="shopping-bag"
+                loading={previewLoading === "customer"}
+                disabled={previewLoading !== null}
+                onPress={() => doPreviewLogin("customer")}
+              />
+            </View>
+          ) : (
+            <Pressable testID="google-login" onPress={doGoogle} disabled={gLoading} style={styles.googleBtn}>
+              {gLoading ? <ActivityIndicator color={colors.onSurface} /> : (
+                <View style={styles.googleRow}>
+                  <Image source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }} style={{ width: 20, height: 20 }} />
+                  <T weight="semi">المتابعة عبر جوجل</T>
+                </View>
+              )}
+            </Pressable>
+          )}
 
           <Pressable testID="go-register" onPress={() => router.push("/register")} style={styles.registerLink}>
             <T color={colors.muted}>ليس لديك حساب؟ <T color={colors.brandPrimary} weight="bold">أنشئ حساباً</T></T>
@@ -132,6 +174,25 @@ export default function Login() {
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function PreviewButton({ label, icon, loading, disabled, onPress }: {
+  label: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  loading: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.previewButton, disabled && !loading && styles.previewButtonDisabled]}>
+      {loading ? <ActivityIndicator color={colors.brandPrimary} /> : (
+        <View style={styles.previewButtonRow}>
+          <Feather name={icon} size={18} color={colors.brandPrimary} />
+          <T weight="semi">{label}</T>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -175,5 +236,11 @@ const styles = StyleSheet.create({
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   googleBtn: { height: 54, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   googleRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },
+  previewBox: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: "#EEF5ED", borderWidth: 1, borderColor: "#C6DBC7" },
+  previewTitle: { textAlign: "center" },
+  previewHint: { textAlign: "center", marginTop: 4, marginBottom: spacing.sm },
+  previewButton: { height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandPrimary, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
+  previewButtonDisabled: { opacity: 0.55 },
+  previewButtonRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   registerLink: { alignItems: "center", marginTop: spacing.xl },
 });
