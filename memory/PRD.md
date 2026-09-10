@@ -5,7 +5,7 @@
 
 ## Architecture
 - Frontend: Expo Router (RTL, Arabic-only), fonts Tajawal + Cairo, expo-image, linear-gradient, expo-camera, expo-image-picker, expo-print, expo-location.
-- Backend: FastAPI + MongoDB (motor). JWT email/password auth + Emergent Google Auth. Emergent Object Storage for product images.
+- Backend: FastAPI + Firebase Admin, Firestore, Firebase Authentication, and Firebase Storage. Firebase ID tokens are verified server-side and product images are stored in the Firebase bucket.
 - Data: catalog seeded from user's PDF = 12,688 items (barcode + name + category). PDF had NO prices → manager enters price manually. 24 sample published products seeded.
 
 ## User personas
@@ -20,7 +20,7 @@
 - إضافة منتجات عبر الباركود (auto-fill من الكتالوج) + رفع صورة.
 
 ## Implemented (2026-06)
-- المصادقة: تسجيل/دخول بالبريد (JWT) + دخول جوجل. حسابات مزروعة. `zzam8160@gmail.com` يُعيَّن مديراً تلقائياً عند دخول جوجل.
+- المصادقة: Firebase Authentication بالبريد/كلمة المرور وجوجل، مع مزامنة المستخدمين والأدوار في Firestore. `zzam8160@gmail.com` يُعيَّن مديراً تلقائياً.
 - الزبون: الرئيسية (بانر عروض + تصنيفات أفقية + شبكة منتجات)، بحث، تفاصيل منتج، سلة، مفضلة، عروض، إتمام طلب مع تحديد موقع GPS + معاينة خريطة، تتبع الطلب بخط زمني.
 - المدير: لوحة إحصاءات، إضافة منتج (مسح باركود/إدخال يدوي + نموذج + رفع صورة)، إدارة المنتجات (تعديل سعر/حذف)، إدارة الطلبات (فلترة + تحديث الحالة + تعيين مندوب)، إدارة المستخدمين/المندوبين.
 - المندوب: قائمة الطلبات المسندة + معاينة خريطة + زر ملاحة (Google/Apple Maps) + تأكيد التوصيل.
@@ -39,7 +39,7 @@
 - تباعد قاعدة بيانات المعاينة عن الإنتاج بعد أول نشر.
 
 ## Latest features (batch 2)
-- Push notifications (Emergent/SuprSend): notify manager on new order + customer on status change. register-push + send_push implemented. Needs google-services.json + build.
+- Push notifications: notify manager on new order + customer on status change. Needs `google-services.json` + build for native push delivery.
 - Live delivery tracking: agent broadcasts location every 20s for active orders (agent_location); customer sees live 2-pin map refreshing every 15s.
 - Catalog name search: GET /api/catalog/search + UI in Add screen (30 priced results, tap to add).
 - Bin Saleem logo on printed invoice (manager-only printing). Currency IQD (د.ع).
@@ -50,4 +50,4 @@
 - POS/cashier integration UI: manager dashboard → "ربط نقطة البيع" card → sync-settings screen showing endpoint URL, POST method, X-Sync-Key header, masked sync key (eye toggle), copy buttons, and JSON sample. Backend: GET /api/admin/sync-config (manager-only). Sync endpoint: POST /api/inventory/sync with X-Sync-Key header (env SYNC_KEY).
 - Colored bottom tab bar (customer + manager): dark teal (brandPrimary) background, gold active tint, cream-muted inactive; height unchanged. Delivery uses Stack (no tabs).
 - Collapsing header on customer home: Animated.FlatList maps scrollY → logo shrinks (34→24) and top-bar padding compacts, giving more product space.
-- Verified product image upload end-to-end: expo-image-picker → POST /api/upload (Emergent Object Storage) → image_url saved on product → served via /api/files. Confirmed 200 + bytes via curl.
+- Product image upload: expo-image-picker → POST /api/upload → Firebase Storage → image_url saved on the Firestore product → served via /api/files.
