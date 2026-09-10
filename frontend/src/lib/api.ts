@@ -7,7 +7,7 @@ function getBackendUrl() {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const { hostname, protocol } = window.location;
     const isReplitPreview = hostname.endsWith(".replit.dev") || hostname.endsWith(".repl.co");
-    if (isReplitPreview) return `${protocol}//${hostname}:8000`;
+    if (isReplitPreview) return `${protocol}//${hostname}`;
   }
   return configuredBackend;
 }
