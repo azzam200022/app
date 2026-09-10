@@ -21,6 +21,7 @@ type AuthCtx = {
   loading: boolean;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerEmail: (name: string, email: string, password: string) => Promise<void>;
+  loginPreview: (role: "manager" | "delivery" | "customer") => Promise<void>;
   loginGoogle: () => Promise<void>;
   loginGoogleWithIdToken: (idToken: string) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
@@ -105,6 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const loginPreview = async (role: "manager" | "delivery" | "customer") => {
+    const result = await api.previewLogin(role);
+    await storage.secureSet(TOKEN_KEY, result.token);
+    setAuthToken(result.token);
+    setUser(result.user);
+  };
+
   const finishGoogleLogin = async (credential: any) => {
     try {
       await syncFirebaseUser(credential.user);
@@ -157,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, loginEmail, registerEmail, loginGoogle, loginGoogleWithIdToken, loginWithToken, logout, refresh }}>
+    <Ctx.Provider value={{ user, loading, loginEmail, registerEmail, loginPreview, loginGoogle, loginGoogleWithIdToken, loginWithToken, logout, refresh }}>
       {children}
     </Ctx.Provider>
   );
