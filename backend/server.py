@@ -184,6 +184,7 @@ class OrderIn(BaseModel):
     notes: Optional[str] = ""
     lat: Optional[float] = None
     lng: Optional[float] = None
+    area: Optional[str] = None
 
 
 class StatusUpdateIn(BaseModel):
@@ -766,6 +767,45 @@ STATUS_LABEL = {
 }
 
 
+DELIVERY_AVAILABLE_STATUSES = ("pending", "confirmed", "preparing")
+try:
+    STORE_LAT = float(os.environ.get("STORE_LAT", "33.3152"))
+    STORE_LNG = float(os.environ.get("STORE_LNG", "44.3661"))
+except (TypeError, ValueError):
+    STORE_LAT, STORE_LNG = 33.3152, 44.3661
+
+
+def infer_order_area(address: str) -> str:
+    return re.split(r"[،,\n]", address or "", maxsplit=1)[0].strip() or "غير محددة"
+
+
+def approximate_distance_km(location):
+    if not location or location.get("lat") is None or location.get("lng") is None:
+        return None
+    try:
+        from math import asin, cos, radians, sin, sqrt
+        lat = radians(float(location["lat"]))
+        lng = radians(float(location["lng"]))
+        store_lat = radians(STORE_LAT)
+        store_lng = radians(STORE_LNG)
+        dlat = lat - store_lat
+        dlng = lng - store_lng
+        haversine = sin(dlat / 2) ** 2 + cos(store_lat) * cos(lat) * sin(dlng / 2) ** 2
+        return round(6371 * 2 * asin(sqrt(haversine)), 1)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def delivery_order_view(order, delivery_state: str):
+    item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in order.get("items", []))
+    view = dict(order)
+    view["delivery_state"] = delivery_state
+    view["area"] = view.get("area") or infer_order_area(view.get("address", ""))
+    view["item_count"] = item_count
+    view["distance_km"] = approximate_distance_km(view.get("location"))
+    return view
+
+
 @api.post("/orders")
 async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
@@ -778,6 +818,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "customer_name": body.name,
         "phone": body.phone,
         "address": body.address,
+        "area": body.area or infer_order_area(body.address),
         "notes": body.notes or "",
         "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
         "items": cart["items"],
@@ -921,8 +962,45 @@ async def admin_set_role(body: RoleIn, user=Depends(require_manager)):
 # ---------------- Delivery ops ----------------
 @api.get("/delivery/orders")
 async def delivery_orders(user=Depends(require_delivery)):
-    q = {"agent_id": user["user_id"]}
-    return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    available = await db.orders.find(
+        {"agent_id": None, "status": {"$in": DELIVERY_AVAILABLE_STATUSES}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    assigned = await db.orders.find(
+        {"agent_id": user["user_id"], "status": {"$in": ["out_for_delivery", "delivered"]}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    orders = available + assigned
+    orders.sort(key=lambda order: order.get("created_at", ""), reverse=True)
+    return [
+        delivery_order_view(order, "available" if order.get("agent_id") is None else "assigned")
+        for order in orders
+    ]
+
+
+@api.post("/delivery/orders/{oid}/claim")
+async def delivery_claim(oid: str, user=Depends(require_delivery)):
+    claimed_at = now_utc().isoformat()
+    claimed = await db.orders.find_one_and_update(
+        {
+            "id": oid,
+            "agent_id": None,
+            "status": {"$in": DELIVERY_AVAILABLE_STATUSES},
+        },
+        {
+            "$set": {
+                "agent_id": user["user_id"],
+                "agent_name": user["name"],
+                "status": "out_for_delivery",
+                "claimed_at": claimed_at,
+            },
+            "$push": {"timeline": {"status": "out_for_delivery", "at": claimed_at}},
+        },
+    )
+    if not claimed:
+        raise HTTPException(status_code=409, detail="تم استلام الطلب من مندوب آخر أو لم يعد متاحاً")
+    await notify_customer_status(oid, "out_for_delivery")
+    return delivery_order_view(claimed, "assigned")
 
 
 @api.post("/delivery/orders/{oid}/status")
