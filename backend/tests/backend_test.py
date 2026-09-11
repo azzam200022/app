@@ -296,6 +296,30 @@ class TestLifecycle:
         assert "delivered" in statuses and "out_for_delivery" in statuses
 
 
+    def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
+        oid = placed_order["order"]["id"]
+        for status in ("confirmed", "preparing"):
+            r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token), json={"status": status}, timeout=15)
+            assert r.status_code == 200, r.text
+
+        available = s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15)
+        assert available.status_code == 200
+        order = next(o for o in available.json() if o["id"] == oid)
+        assert order["delivery_state"] == "available"
+        assert order["item_count"] == sum(item["quantity"] for item in order["items"])
+        assert order["area"]
+
+        claimed = s.post(f"{API}/delivery/orders/{oid}/claim", headers=H(delivery_token), timeout=15)
+        assert claimed.status_code == 200, claimed.text
+        assert claimed.json()["delivery_state"] == "assigned"
+        assert claimed.json()["status"] == "out_for_delivery"
+
+        assigned = s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json()
+        final = next(o for o in assigned if o["id"] == oid)
+        assert final["delivery_state"] == "assigned"
+        assert final["agent_id"]
+
+
 # ---------------- Admin ops ----------------
 class TestAdmin:
     def test_stats(self, s, manager_token):
