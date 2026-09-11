@@ -22,8 +22,9 @@ export default function DeliveryHome() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<"active" | "done">("active");
+  const [tab, setTab] = useState<"available" | "active" | "done">("available");
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setOrders(await api.deliveryOrders()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); setRefreshing(false); }
@@ -34,11 +35,28 @@ export default function DeliveryHome() {
     try { await api.deliverySetStatus(id, "delivered"); show("تم تسجيل التوصيل 🎉"); load(); } catch (e: any) { show(e.message, "error"); }
   };
 
+  const claimOrder = async (id: string) => {
+    if (claiming) return;
+    setClaiming(id);
+    try {
+      await api.deliveryClaim(id);
+      show("تم استلام الطلب بنجاح");
+      setTab("active");
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+      await load();
+    } finally {
+      setClaiming(null);
+    }
+  };
+
   const isToday = (iso: string) => { const d = new Date(iso); const n = new Date(); return d.toDateString() === n.toDateString(); };
-  const active = orders.filter((o) => o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const done = orders.filter((o) => o.status === "delivered").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const collectedToday = done.filter((o) => isToday(o.created_at)).reduce((s, o) => s + (o.total || 0), 0);
-  const list = tab === "active" ? active : done;
+  const list = tab === "available" ? available : tab === "active" ? active : done;
 
   // Broadcast live location for active deliveries
   const activeIds = active.map((o) => o.id).join(",");
@@ -71,6 +89,7 @@ export default function DeliveryHome() {
       </View>
       <View style={styles.info}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name}</T></View>
       <Pressable style={styles.info} onPress={() => Linking.openURL(`tel:${item.phone}`)}><Feather name="phone" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>{item.phone}</T></Pressable>
+      {item.delivery_state === "available" && <View style={styles.info}><Feather name="map" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المنطقة: {item.area}</T></View>}
       <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{item.address}</T></View>
 
       {/* Items thumbnails */}
@@ -85,9 +104,19 @@ export default function DeliveryHome() {
       </View>
 
       <View style={styles.cardBottom}>
-        <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
+        <T color={colors.muted} size={type.sm}>{item.item_count ?? item.items.length} منتج</T>
         <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)} • نقداً</T>
       </View>
+
+      {item.delivery_state === "available" && (
+        <>
+          <View style={styles.availableMeta}>
+            <View style={styles.info}><Feather name="navigation" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary}>{item.distance_km != null ? String(item.distance_km) + " كم تقريباً" : "المسافة غير متاحة"}</T></View>
+            <T size={type.sm} weight="semi" color={colors.brandPrimary}>طلب متاح الآن</T>
+          </View>
+          <Button title={claiming === item.id ? "جارٍ استلام الطلب..." : "استلام الطلب"} icon="check" onPress={() => claimOrder(item.id)} disabled={claiming === item.id} testID={"claim-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
+        </>
+      )}
 
       {item.location ? (
         <Pressable testID={`map-${item.id}`} onPress={() => openDirections(item.location.lat, item.location.lng, item.address)} style={styles.mapPreview}>
@@ -131,6 +160,9 @@ export default function DeliveryHome() {
 
       {/* Tabs */}
       <View style={styles.tabs}>
+        <Pressable testID="tab-available" onPress={() => setTab("available")} style={[styles.tab, tab === "available" && styles.tabActive]}>
+          <T weight="bold" color={tab === "available" ? "#fff" : colors.onSurfaceSecondary}>متاحة ({available.length})</T>
+        </Pressable>
         <Pressable testID="tab-active" onPress={() => setTab("active")} style={[styles.tab, tab === "active" && styles.tabActive]}>
           <T weight="bold" color={tab === "active" ? "#fff" : colors.onSurfaceSecondary}>نشطة ({active.length})</T>
         </Pressable>
@@ -140,7 +172,7 @@ export default function DeliveryHome() {
       </View>
 
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : list.length === 0 ? (
-        <View style={styles.center}><EmptyState icon={tab === "active" ? "package" : "check-circle"} title={tab === "active" ? "لا توجد طلبات نشطة" : "لا توجد طلبات مكتملة"} subtitle={tab === "active" ? "ستظهر الطلبات المسندة إليك هنا" : "الطلبات التي توصّلها ستظهر هنا"} /></View>
+        <View style={styles.center}><EmptyState icon={tab === "active" ? "package" : "check-circle"} title={tab === "available" ? "لا توجد طلبات متاحة" : tab === "active" ? "لا توجد طلبات نشطة" : "لا توجد طلبات مكتملة"} subtitle={tab === "available" ? "ستظهر هنا الطلبات الجاهزة للاستلام" : tab === "active" ? "ستظهر الطلبات المسندة إليك هنا" : "الطلبات التي توصّلها ستظهر هنا"} /></View>
       ) : (
         <FlatList data={list} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + spacing.xl }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
@@ -186,6 +218,7 @@ const styles = StyleSheet.create({
   qtyTag: { position: "absolute", top: 0, insetInlineStart: 0, backgroundColor: colors.brandPrimary, borderBottomEndRadius: radius.sm, paddingHorizontal: 5, paddingVertical: 1 },
   moreThumb: { alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.brandTertiary },
   cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
+  availableMeta: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
   mapPreview: { marginTop: spacing.md, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
   mapImg: { width: "100%", height: 130, backgroundColor: colors.surfaceSecondary },
   mapPill: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
