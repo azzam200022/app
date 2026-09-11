@@ -6,6 +6,7 @@ so the HTTP contract does not change while storage moves to Firestore.
 """
 
 from copy import deepcopy
+import asyncio
 import re
 import uuid
 
@@ -164,6 +165,39 @@ class FirestoreCollection:
         updated = self._update_document(snapshot, update)
         self.reference.document(self._document_id(snapshot)).set(updated)
         return FirestoreResult(matched_count=1, modified_count=1)
+
+    async def find_one_and_update(self, query, update):
+        """Atomically update a document when it still matches the claim query."""
+        if not self.reference:
+            return None
+        document_id = next((query.get(key) for key in ("id", "user_id", "session_token", "key", "barcode", "path") if query.get(key)), None)
+        if not document_id:
+            return None
+
+        def commit_claim():
+            client = getattr(self.reference, "_client", None)
+            if not client:
+                return None
+            document_ref = self.reference.document(str(document_id))
+            for attempt in range(3):
+                transaction = client.transaction()
+                snapshot = document_ref.get(transaction=transaction)
+                if not snapshot.exists:
+                    return None
+                current = snapshot.to_dict() or {}
+                if not _matches(current, query):
+                    return None
+                updated = self._update_document(current, update)
+                transaction.set(document_ref, updated)
+                try:
+                    transaction.commit()
+                    return updated
+                except Exception:
+                    if attempt == 2:
+                        raise
+            return None
+
+        return await asyncio.to_thread(commit_claim)
 
     async def update_many(self, query, update):
         documents = [doc for doc in self._all() if _matches(doc, query or {})]
