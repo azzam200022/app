@@ -171,7 +171,7 @@ export default function ManagerOrders() {
                 </View>
                 <View style={styles.info}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name} • {item.phone}</T></View>
                 <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} numberOfLines={1} style={{ flex: 1 }}>{item.address}</T></View>
-                {item.agent_name ? <View style={styles.info}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>{item.agent_name}</T></View> : null}
+                {item.agent_name ? <View style={styles.info}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}</T></View> : ["pending", "confirmed", "preparing"].includes(item.status) ? <View style={styles.info}><Feather name="users" size={14} color={colors.muted} /><T size={type.sm} color={colors.muted}>متاح للمندوبين للاستلام</T></View> : null}
                 <View style={styles.cardBottom}>
                   <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
                   <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)}</T>
