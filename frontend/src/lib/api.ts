@@ -114,6 +114,7 @@ export const api = {
   syncConfig: () => req("/admin/sync-config"),
   // delivery
   deliveryOrders: () => req("/delivery/orders"),
+  deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
   deliverySetStatus: (id: string, status: string) => req(`/delivery/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   deliverySetLocation: (id: string, lat: number, lng: number) => req(`/delivery/orders/${id}/location`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
 };
