@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, StyleSheet, FlatList, Pressable, Modal, ActivityIndicator, Switch, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, EmptyState } from "@/src/components/ui";
@@ -17,6 +17,7 @@ const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL 
 
 export default function ManagerOrders() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { show } = useToast();
   const [filter, setFilter] = useState("all");
   const [orders, setOrders] = useState<any[]>([]);
@@ -24,6 +25,7 @@ export default function ManagerOrders() {
   const [assignFor, setAssignFor] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [autoPrint, setAutoPrint] = useState(false);
+  const [printPrefsReady, setPrintPrefsReady] = useState(false);
   const [printerUrl, setPrinterUrl] = useState<string | null>(null);
   const printedRef = useRef<Set<string>>(new Set());
   const autoRef = useRef(false);
@@ -38,6 +40,7 @@ export default function ManagerOrders() {
       autoRef.current = !!on;
       if (purl) setPrinterUrl(purl as string);
       printedRef.current = new Set((printed as string[]) || []);
+      setPrintPrefsReady(true);
     })();
   }, []);
 
@@ -66,7 +69,7 @@ export default function ManagerOrders() {
     } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
   }, [show, autoPrintNew]);
 
-  useFocusEffect(useCallback(() => { load(filter); }, [load, filter]));
+  useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter); }, [load, filter, printPrefsReady]));
 
   // poll for new orders while auto-print is enabled
   useEffect(() => {
@@ -149,11 +152,16 @@ export default function ManagerOrders() {
             thumbColor="#fff"
           />
         </View>
-        {Platform.OS === "ios" && (
+        {Platform.OS === "ios" ? (
           <Pressable testID="choose-printer" onPress={choosePrinter} style={styles.printerBtn}>
             <Feather name="settings" size={14} color={colors.brandPrimary} />
             <T size={type.sm} weight="semi" color={colors.brandPrimary}>{printerUrl ? "تغيير الطابعة الافتراضية" : "اختيار طابعة افتراضية (طباعة صامتة)"}</T>
           </Pressable>
+        ) : (
+          <View style={styles.printerNote}>
+            <Feather name="info" size={14} color={colors.muted} />
+            <T size={type.sm} color={colors.muted}>على Android والويب ستظهر نافذة النظام لاختيار الطابعة عند الطباعة.</T>
+          </View>
         )}
         <CategoryChips categories={FILTERS.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = FILTERS.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
       </View>
@@ -177,6 +185,10 @@ export default function ManagerOrders() {
                   <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)}</T>
                 </View>
                 <View style={styles.btnRow}>
+                  <Pressable testID={`details-${item.id}`} onPress={() => router.push("/order/" + item.id)} style={styles.detailBtn}>
+                    <Feather name="file-text" size={16} color={colors.brandPrimary} />
+                    <T size={type.sm} weight="bold" color={colors.brandPrimary}>التفاصيل</T>
+                  </Pressable>
                   <Pressable testID={`print-${item.id}`} onPress={() => doPrint(item)} style={styles.printBtn}>
                     <Feather name="printer" size={16} color={colors.brandPrimary} />
                     <T size={type.sm} weight="bold" color={colors.brandPrimary}>طباعة</T>
@@ -216,8 +228,10 @@ const styles = StyleSheet.create({
   autoLeft: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, flex: 1 },
   printIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   printerBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, alignSelf: "flex-end", marginHorizontal: spacing.lg, marginBottom: spacing.sm },
+  printerNote: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   btnRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
-  printBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.lg, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
+  detailBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
+  printBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   card: { backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
   cardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
