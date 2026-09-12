@@ -20,6 +20,7 @@ export default function OrderDetail() {
   const { user } = useAuth();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const isStaff = user?.role === "manager" || user?.role === "delivery";
 
   const load = async () => {
     try { setOrder(await api.order(id!)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
@@ -45,9 +46,9 @@ export default function OrderDetail() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace("/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
+        <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
         <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
-        {user?.role === "manager" ? (
+        {isStaff ? (
           <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
             <Feather name="printer" size={20} color={colors.brandPrimary} />
           </Pressable>
@@ -112,8 +113,11 @@ export default function OrderDetail() {
 
         {/* Address & total */}
         <View style={styles.infoCard}>
-          <View style={styles.infoRow}><Feather name="map-pin" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{order.address}</T></View>
+          <View style={styles.infoRow}><Feather name="user" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary}>{order.customer_name}</T></View>
           <View style={styles.infoRow}><Feather name="phone" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary}>{order.phone}</T></View>
+          <View style={styles.infoRow}><Feather name="map-pin" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{order.address}</T></View>
+          {order.area && <View style={styles.infoRow}><Feather name="map" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary}>{order.area}</T></View>}
+          {order.notes ? <View style={styles.infoRow}><Feather name="message-square" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{order.notes}</T></View> : null}
           <View style={[styles.infoRow, { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs }]}>
             <T weight="bold">الإجمالي (دفع عند الاستلام)</T>
             <T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(order.total)}</T>
@@ -135,7 +139,7 @@ export default function OrderDetail() {
           </View>
         ) : null}
 
-        {(order.status === "pending" || order.status === "confirmed") && (
+        {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
           <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
       </ScrollView>
