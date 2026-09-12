@@ -65,7 +65,8 @@ export default function ManagerOrders() {
     try {
       const data = await api.adminOrders(f);
       setOrders(data);
-      autoPrintNew(data);
+      const printData = autoRef.current && f !== "all" ? await api.adminOrders("all") : data;
+      autoPrintNew(printData);
     } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
   }, [show, autoPrintNew]);
 
@@ -75,8 +76,13 @@ export default function ManagerOrders() {
   useEffect(() => {
     if (!autoPrint) return;
     const iv = setInterval(async () => {
-      try { const data = await api.adminOrders(filter); setOrders(data); autoPrintNew(data); } catch {}
-    }, 20000);
+      try {
+        const data = await api.adminOrders(filter);
+        setOrders(data);
+        const printData = filter !== "all" ? await api.adminOrders("all") : data;
+        autoPrintNew(printData);
+      } catch {}
+    }, 5000);
     return () => clearInterval(iv);
   }, [autoPrint, filter, autoPrintNew]);
 
