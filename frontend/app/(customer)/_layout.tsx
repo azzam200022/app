@@ -16,6 +16,7 @@ export default function CustomerLayout() {
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
         tabBarStyle: {
           backgroundColor: colors.brandPrimary,
+          direction: "rtl",
           borderTopColor: colors.brandSecondary,
           borderTopWidth: StyleSheet.hairlineWidth,
           ...(Platform.OS === "web" ? { height: 56 } : {}),
