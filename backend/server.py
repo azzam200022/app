@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import json
+import io
 import logging
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -17,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, EmailStr
+from pypdf import PdfReader
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials as firebase_credentials
@@ -102,6 +104,10 @@ def local_catalog_items():
     return CATALOG_ITEMS_CACHE
 
 
+def normalize_barcode(value) -> str:
+    return re.sub(r"[^0-9]", "", str(value or "").translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")))
+
+
 async def existing_product_barcodes():
     global EXISTING_PRODUCT_BARCODES_CACHE
     if EXISTING_PRODUCT_BARCODES_CACHE is not None:
@@ -161,6 +167,7 @@ class ProductIn(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+    barcode: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
     price: Optional[float] = None
@@ -484,23 +491,114 @@ async def inventory_sync(body: SyncIn, x_sync_key: Optional[str] = Header(None))
         raise HTTPException(status_code=401, detail="مفتاح المزامنة غير صالح")
     updated = 0
     not_found = []
+    duplicate_barcodes = []
     for it in body.items:
         setd = {}
         if it.quantity is not None:
-            setd["stock"] = max(0, int(it.quantity))
+            quantity = max(0, int(it.quantity))
+            setd["stock"] = quantity
+            setd["coming_soon"] = quantity == 1
         if it.price is not None and it.price > 0:
             setd["price"] = float(it.price)
         if not setd:
             continue
+        matches = await db.products.find({"barcode": it.barcode, "deleted_at": None}, {"_id": 0, "id": 1}).to_list(2)
+        if not matches:
+            not_found.append(it.barcode)
+            continue
+        if len(matches) > 1:
+            duplicate_barcodes.append(it.barcode)
+            continue
         # also update reference catalog price
         if "price" in setd:
             await db.catalog.update_many({"barcode": it.barcode}, {"$set": {"price": setd["price"]}})
-        r = await db.products.update_many({"barcode": it.barcode, "deleted_at": None}, {"$set": setd})
-        if r.matched_count:
-            updated += r.matched_count
+        await db.products.update_one({"id": matches[0]["id"], "deleted_at": None}, {"$set": setd})
+        updated += 1
+    return {"updated": updated, "not_found": sorted(set(not_found)), "duplicate_barcodes": sorted(set(duplicate_barcodes)), "count": len(body.items)}
+
+
+ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+
+
+def parse_pdf_number(value):
+    normalized = str(value).replace("٬", ",").replace("٫", ".").replace(",", "").strip()
+    return float(normalized)
+
+
+def parse_inventory_pdf(content: bytes):
+    reader = PdfReader(io.BytesIO(content))
+    rows = []
+    invalid_rows = []
+    barcode_pattern = re.compile(r"(?<!\d)(\d{8,14})(?!\d)")
+    number_pattern = re.compile(r"(?<!\d)\d+(?:[.,]\d+)?(?!\d)")
+    price_pattern = re.compile(r"(?:السعر|سعر|price)\s*[:：-]?\s*([\d٠-٩][\d٠-٩,٬]*(?:[.٫][\d٠-٩]+)?)", re.I)
+    quantity_pattern = re.compile(r"(?:الكمية|كمية|quantity|qty|المخزون|stock)\s*[:：-]?\s*([\d٠-٩]+)", re.I)
+
+    for page_number, page in enumerate(reader.pages, 1):
+        text = page.extract_text() or ""
+        for line_number, raw_line in enumerate(text.splitlines(), 1):
+            line = raw_line.translate(ARABIC_DIGITS).replace("٬", ",").replace("٫", ".").strip()
+            barcode_match = barcode_pattern.search(line)
+            if not barcode_match:
+                continue
+            barcode = normalize_barcode(barcode_match.group(1))
+            remainder = line[:barcode_match.start()] + " " + line[barcode_match.end():]
+            price_match = price_pattern.search(remainder)
+            quantity_match = quantity_pattern.search(remainder)
+            numbers = [parse_pdf_number(token) for token in number_pattern.findall(remainder)]
+            price = parse_pdf_number(price_match.group(1)) if price_match else None
+            quantity = int(parse_pdf_number(quantity_match.group(1))) if quantity_match else None
+            if price is None or quantity is None:
+                integers = [int(value) for value in numbers if value.is_integer() and value >= 0]
+                if price is None and numbers:
+                    price = max(numbers)
+                if quantity is None and integers:
+                    quantity = min(integers)
+            if price is None or price <= 0 or quantity is None or quantity < 0:
+                invalid_rows.append({"page": page_number, "line": line_number, "barcode": barcode})
+                continue
+            rows.append({"barcode": barcode, "price": round(price, 2), "quantity": quantity, "page": page_number, "line": line_number})
+
+    by_barcode = {}
+    duplicate_barcodes = set()
+    for row in rows:
+        if row["barcode"] in by_barcode:
+            duplicate_barcodes.add(row["barcode"])
         else:
-            not_found.append(it.barcode)
-    return {"updated": updated, "not_found": not_found, "count": len(body.items)}
+            by_barcode[row["barcode"]] = row
+    unique_rows = [row for barcode, row in by_barcode.items() if barcode not in duplicate_barcodes]
+    return unique_rows, sorted(duplicate_barcodes), invalid_rows
+
+
+@api.post("/admin/inventory/pdf")
+async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manager)):
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="يرجى رفع ملف PDF فقط")
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم ملف PDF يتجاوز 15 ميغابايت")
+    try:
+        rows, duplicate_barcodes, invalid_rows = parse_inventory_pdf(content)
+    except Exception:
+        logger.exception("Inventory PDF parsing failed")
+        raise HTTPException(status_code=400, detail="تعذر قراءة ملف PDF. تأكد أنه يحتوي على نص واضح وبيانات الباركود والسعر والكمية")
+
+    updated = 0
+    not_found = []
+    duplicate_products = []
+    for row in rows:
+        products = await db.products.find({"barcode": row["barcode"], "deleted_at": None}, {"_id": 0}).to_list(2)
+        if not products:
+            not_found.append(row["barcode"])
+            continue
+        if len(products) > 1:
+            duplicate_products.append(row["barcode"])
+            continue
+        setd = {"price": row["price"], "stock": row["quantity"], "coming_soon": row["quantity"] == 1}
+        await db.products.update_one({"id": products[0]["id"], "deleted_at": None}, {"$set": setd})
+        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": row["price"]}})
+        updated += 1
+    return {"updated": updated, "count": len(rows), "not_found": sorted(set(not_found)), "duplicate_barcodes": sorted(set(duplicate_barcodes + duplicate_products)), "invalid_rows": invalid_rows}
 
 
 # ---------------- Catalog ----------------
@@ -627,10 +725,18 @@ async def categories():
 
 @api.post("/products")
 async def create_product(body: ProductIn, user=Depends(require_manager)):
+    barcode = normalize_barcode(body.barcode)
+    if not barcode:
+        raise HTTPException(status_code=400, detail="الباركود مطلوب لكل منتج")
+    if not re.fullmatch(r"\d{8,14}", barcode):
+        raise HTTPException(status_code=400, detail="الباركود يجب أن يتكون من 8 إلى 14 رقماً")
+    duplicate = await db.products.find_one({"barcode": barcode, "deleted_at": None}, {"_id": 0, "id": 1})
+    if duplicate:
+        raise HTTPException(status_code=409, detail="هذا الباركود مستخدم لمنتج آخر")
     pid = "prod_" + uuid.uuid4().hex[:12]
     doc = {
         "id": pid,
-        "barcode": body.barcode or "",
+        "barcode": barcode,
         "name": body.name,
         "category": body.category or "أخرى",
         "price": body.price,
@@ -652,6 +758,14 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
 @api.put("/products/{pid}")
 async def update_product(pid: str, body: ProductUpdate, user=Depends(require_manager)):
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    if body.barcode is not None:
+        barcode = normalize_barcode(body.barcode)
+        if not re.fullmatch(r"\d{8,14}", barcode):
+            raise HTTPException(status_code=400, detail="الباركود يجب أن يتكون من 8 إلى 14 رقماً")
+        duplicate = await db.products.find_one({"barcode": barcode, "id": {"$ne": pid}, "deleted_at": None}, {"_id": 0, "id": 1})
+        if duplicate:
+            raise HTTPException(status_code=409, detail="هذا الباركود مستخدم لمنتج آخر")
+        upd["barcode"] = barcode
     if not upd:
         raise HTTPException(status_code=400, detail="لا يوجد تغيير")
     r = await db.products.update_one({"id": pid, "deleted_at": None}, {"$set": upd})
