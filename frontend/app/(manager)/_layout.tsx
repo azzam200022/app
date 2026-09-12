@@ -12,7 +12,7 @@ export default function ManagerLayout() {
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: "rgba(251,247,238,0.7)",
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
-        tabBarStyle: { backgroundColor: colors.brandPrimary, borderTopColor: colors.brandSecondary, borderTopWidth: StyleSheet.hairlineWidth, ...(Platform.OS === "web" ? { height: 56 } : {}) },
+        tabBarStyle: { backgroundColor: colors.brandPrimary, direction: "rtl", borderTopColor: colors.brandSecondary, borderTopWidth: StyleSheet.hairlineWidth, ...(Platform.OS === "web" ? { height: 56 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
