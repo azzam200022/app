@@ -96,13 +96,13 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, direction: "rtl" }}>
       <SafeAreaProvider>
         <AuthProvider>
           <CartProvider>
             <ToastProvider>
               <AppServices />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FBFBF9" } }}>
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FBFBF9", direction: "rtl" } }}>
                 <Stack.Screen name="checkout" options={{ presentation: "modal" }} />
               </Stack>
             </ToastProvider>
