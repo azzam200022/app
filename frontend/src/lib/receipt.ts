@@ -26,17 +26,26 @@ function money(n: number) {
   return Math.round(n || 0).toLocaleString("en-US") + " د.ع";
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/\'/g, "&#039;");
+}
+
 export function buildReceiptHTML(order: any, logoSrc = ""): string {
-  const date = new Date(order.created_at).toLocaleString("ar-EG");
+  const date = new Date(order.created_at).toLocaleString("ar-IQ");
   const rows = order.items
     .map(
       (it: any, i: number) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td class="r">${it.name}</td>
-        <td class="c">${it.quantity}</td>
+        <td class="r">${escapeHtml(it.name || "منتج")}</td>
+        <td class="c">${Number(it.quantity || 0)}</td>
         <td class="c">${money(it.price)}</td>
-        <td class="c b">${money(it.line_total)}</td>
+        <td class="c b">${money(it.line_total ?? (Number(it.price || 0) * Number(it.quantity || 0)))}</td>
       </tr>`
     )
     .join("");
@@ -71,11 +80,12 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
     <div class="meta"><span>رقم الطلب: <b>#${order.id.replace("ORD", "")}</b></span><span class="status">${STATUS_LABEL[order.status] || order.status}</span></div>
     <div class="meta"><span>التاريخ: <b>${date}</b></span></div>
     <div class="box">
-      <div><b>الزبون:</b> ${order.customer_name}</div>
-      <div><b>الهاتف:</b> ${order.phone}</div>
-      <div><b>العنوان:</b> ${order.address}</div>
-      ${order.notes ? `<div><b>ملاحظات:</b> ${order.notes}</div>` : ""}
-      ${order.agent_name ? `<div><b>المندوب:</b> ${order.agent_name}</div>` : ""}
+      <div><b>الزبون:</b> ${escapeHtml(order.customer_name)}</div>
+      <div><b>الهاتف:</b> ${escapeHtml(order.phone)}</div>
+      <div><b>العنوان:</b> ${escapeHtml(order.address)}</div>
+      ${order.area ? `<div><b>المنطقة:</b> ${escapeHtml(order.area)}</div>` : ""}
+      ${order.notes ? `<div><b>ملاحظات:</b> ${escapeHtml(order.notes)}</div>` : ""}
+      ${order.agent_name ? `<div><b>المندوب:</b> ${escapeHtml(order.agent_name)}</div>` : ""}
     </div>
     <table>
       <thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
