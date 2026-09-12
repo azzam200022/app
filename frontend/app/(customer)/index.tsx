@@ -38,10 +38,14 @@ export default function Home() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [c, o] = await Promise.all([api.categories(), api.products({ offers: true })]);
+      const [c, o, p] = await Promise.all([
+        api.categories(),
+        api.products({ offers: true }),
+        api.products(selected === "الكل" ? {} : { category: selected }),
+      ]);
       setCats(c);
       setOffers(o.slice(0, 6));
-      await loadProducts(selected);
+      setProducts(p);
     } catch (e: any) {
       show(e.message, "error");
     } finally {
@@ -149,6 +153,10 @@ export default function Home() {
           ListHeaderComponent={header}
           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
+          initialNumToRender={12}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== "web"}
           scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
