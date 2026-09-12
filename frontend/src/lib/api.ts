@@ -139,6 +139,28 @@ export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ 
   return res.json();
 }
 
+export async function uploadInventoryPdf(uri: string, name: string, platformWeb: boolean) {
+  let token = authToken;
+  if (!token) token = await storage.secureGet(TOKEN_KEY, "");
+  const form = new FormData();
+  if (platformWeb) {
+    const blob = await (await fetch(uri)).blob();
+    form.append("file", blob, name);
+  } else {
+    form.append("file", { uri, name, type: "application/pdf" } as any);
+  }
+  const res = await fetch(BACKEND + "/api/admin/inventory/pdf", {
+    method: "POST",
+    headers: token ? { Authorization: "Bearer " + token } as any : {},
+    body: form,
+  });
+  const text = await res.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) throw new Error(data?.detail || "تعذر معالجة ملف PDF");
+  return data;
+}
+
 export const STATUS_LABEL: Record<string, string> = {
   pending: "قيد المراجعة",
   confirmed: "تم التأكيد",
