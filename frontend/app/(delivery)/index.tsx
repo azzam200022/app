@@ -126,6 +126,10 @@ export default function DeliveryHome() {
       ) : null}
 
       <View style={styles.navRow}>
+        <Pressable testID={`details-${item.id}`} onPress={() => router.push("/order/" + item.id)} style={styles.detailBtn}>
+          <Feather name="file-text" size={16} color={colors.brandPrimary} />
+          <T size={type.sm} weight="bold" color={colors.brandPrimary}>عرض تفاصيل الطلب</T>
+        </Pressable>
         <Pressable testID={`nav-${item.id}`} onPress={() => openDirections(item.location?.lat, item.location?.lng, item.address)} style={styles.navBtn}>
           <Feather name="map" size={16} color={colors.brandPrimary} />
           <T size={type.sm} weight="bold" color={colors.brandPrimary}>{item.location ? "التوصيل عبر الخرائط" : "بحث عن العنوان في الخرائط"}</T>
@@ -223,7 +227,8 @@ const styles = StyleSheet.create({
   mapImg: { width: "100%", height: 130, backgroundColor: colors.surfaceSecondary },
   mapPill: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   navRow: { marginTop: spacing.sm },
-  navBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
+  detailBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
+  navBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, alignItems: "center" },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5E9E9", alignItems: "center", justifyContent: "center" },
