@@ -202,6 +202,16 @@ class AssignIn(BaseModel):
     agent_id: str
 
 
+class ReturnItemIn(BaseModel):
+    product_id: str
+    quantity: int = Field(..., ge=1)
+
+
+class ReturnIn(BaseModel):
+    items: List[ReturnItemIn]
+    reason: Optional[str] = ""
+
+
 class RoleIn(BaseModel):
     user_id: str
     role: str
@@ -981,11 +991,99 @@ async def cancel_order(oid: str, user=Depends(require_user)):
     return {"ok": True}
 
 
+@api.post("/delivery/orders/{oid}/returns")
+async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_delivery)):
+    if not body.items:
+        raise HTTPException(status_code=400, detail="حدد منتجاً واحداً على الأقل")
+    order = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if not order or order.get("agent_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if order.get("status") not in ("out_for_delivery", "delivered"):
+        raise HTTPException(status_code=400, detail="لا يمكن تسجيل مرتجع قبل خروج الطلب للتوصيل")
+
+    previous_returns = await db.returns.find({"order_id": oid}, {"_id": 0}).to_list(200)
+    returned_by_product = {}
+    for previous in previous_returns:
+        for item in previous.get("items", []):
+            pid = str(item.get("product_id"))
+            returned_by_product[pid] = returned_by_product.get(pid, 0) + int(item.get("quantity", 0) or 0)
+
+    order_items = {str(item.get("product_id")): item for item in order.get("items", [])}
+    requested_by_product = {}
+    return_items = []
+    for requested in body.items:
+        pid = str(requested.product_id)
+        if pid in requested_by_product:
+            raise HTTPException(status_code=400, detail="لا يمكن تكرار المنتج في نفس المرتجع")
+        source = order_items.get(pid)
+        if not source:
+            raise HTTPException(status_code=400, detail="المنتج غير موجود في هذا الطلب")
+        ordered_qty = int(source.get("quantity", 0) or 0)
+        available_qty = ordered_qty - returned_by_product.get(pid, 0)
+        if requested.quantity > available_qty:
+            raise HTTPException(status_code=400, detail=f"الكمية المتاحة للإرجاع من {source.get('name', 'المنتج')} هي {max(available_qty, 0)}")
+        requested_by_product[pid] = requested.quantity
+        return_items.append({
+            "product_id": pid,
+            "name": source.get("name", ""),
+            "image_url": source.get("image_url"),
+            "price": float(source.get("price", 0) or 0),
+            "quantity": requested.quantity,
+            "line_total": float(source.get("price", 0) or 0) * requested.quantity,
+        })
+
+    if not return_items:
+        raise HTTPException(status_code=400, detail="حدد كمية الإرجاع")
+    total = sum(item["line_total"] for item in return_items)
+    is_full = all(
+        returned_by_product.get(pid, 0) + requested_by_product.get(pid, 0) >= int(source.get("quantity", 0) or 0)
+        for pid, source in order_items.items()
+    )
+    created_at = now_utc().isoformat()
+    return_id = "RET" + uuid.uuid4().hex[:8].upper()
+    doc = {
+        "id": return_id,
+        "order_id": oid,
+        "customer_name": order.get("customer_name", ""),
+        "customer_phone": order.get("phone", ""),
+        "agent_id": user["user_id"],
+        "agent_name": user.get("name", order.get("agent_name", "")),
+        "items": return_items,
+        "total": total,
+        "return_type": "full" if is_full else "partial",
+        "reason": body.reason or "",
+        "status": "accepted",
+        "created_at": created_at,
+    }
+    await db.returns.insert_one(doc)
+    await db.orders.update_one(
+        {"id": oid},
+        {
+            "$set": {
+                "return_status": "full" if is_full else "partial",
+                "returned_total": float(order.get("returned_total", 0) or 0) + total,
+            },
+            "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
+        },
+    )
+    try:
+        await send_push(await manager_ids(), {"title": "مرتجع جديد ↩️", "message": f"تم تسجيل مرتجع للطلب {oid} بواسطة {doc['agent_name']}", "action_url": f"/returns/{return_id}"})
+    except Exception as e:
+        logger.warning(f"return push failed: {e}")
+    return doc
+
+
 # ---------------- Manager ops ----------------
+@api.get("/admin/returns")
+async def admin_returns(user=Depends(require_manager)):
+    return await db.returns.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
 @api.get("/admin/stats")
 async def admin_stats(user=Depends(require_manager)):
     total_products = await db.products.count_documents({"deleted_at": None})
     total_orders = await db.orders.count_documents({})
+    total_returns = await db.returns.count_documents({})
     pending = await db.orders.count_documents({"status": {"$in": ["pending", "confirmed", "preparing"]}})
     delivered = await db.orders.count_documents({"status": "delivered"})
     agg = await db.orders.aggregate([{"$match": {"status": "delivered"}}, {"$group": {"_id": None, "sum": {"$sum": "$total"}}}]).to_list(1)
@@ -995,6 +1093,7 @@ async def admin_stats(user=Depends(require_manager)):
         "orders": total_orders,
         "active_orders": pending,
         "delivered": delivered,
+        "returns": total_returns,
         "revenue": revenue,
     }
 
