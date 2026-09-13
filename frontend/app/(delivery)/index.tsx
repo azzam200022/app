@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -25,6 +25,9 @@ export default function DeliveryHome() {
   const [tab, setTab] = useState<"available" | "active" | "done">("available");
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [returnFor, setReturnFor] = useState<any>(null);
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     try { setOrders(await api.deliveryOrders()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); setRefreshing(false); }
@@ -48,6 +51,47 @@ export default function DeliveryHome() {
       await load();
     } finally {
       setClaiming(null);
+    }
+  };
+
+  const openReturn = (order: any) => {
+    setReturnFor(order);
+    setReturnQuantities(Object.fromEntries(order.items.map((item: any) => [item.product_id, 0])));
+  };
+
+  const adjustReturnQuantity = (productId: string, delta: number) => {
+    const source = returnFor?.items.find((item: any) => item.product_id === productId);
+    if (!source) return;
+    setReturnQuantities((current) => ({
+      ...current,
+      [productId]: Math.max(0, Math.min(source.quantity, (current[productId] || 0) + delta)),
+    }));
+  };
+
+  const selectAllReturnQuantities = () => {
+    if (!returnFor) return;
+    setReturnQuantities(Object.fromEntries(returnFor.items.map((item: any) => [item.product_id, item.quantity])));
+  };
+
+  const submitReturn = async () => {
+    if (!returnFor) return;
+    const items = returnFor.items
+      .filter((item: any) => (returnQuantities[item.product_id] || 0) > 0)
+      .map((item: any) => ({ product_id: item.product_id, quantity: returnQuantities[item.product_id] }));
+    if (!items.length) {
+      show("حدد كمية منتج واحد على الأقل", "error");
+      return;
+    }
+    setReturnSubmitting(true);
+    try {
+      await api.deliveryCreateReturn(returnFor.id, { items });
+      show("تم تسجيل المرتجع بنجاح");
+      setReturnFor(null);
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setReturnSubmitting(false);
     }
   };
 
@@ -138,6 +182,12 @@ export default function DeliveryHome() {
       {item.status === "out_for_delivery" && (
         <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => markDelivered(item.id)} testID={`deliver-${item.id}`} style={{ marginTop: spacing.sm, minHeight: 46 }} />
       )}
+      {item.delivery_state !== "available" && (item.status === "out_for_delivery" || item.status === "delivered") && item.return_status !== "full" && (
+        <Pressable testID={"return-" + item.id} onPress={() => openReturn(item)} style={styles.returnBtn}>
+          <Feather name="rotate-ccw" size={16} color={colors.error} />
+          <T size={type.sm} weight="bold" color={colors.error}>تسجيل مرتجع</T>
+        </Pressable>
+      )}
     </View>
   );
 
@@ -182,6 +232,44 @@ export default function DeliveryHome() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
           renderItem={renderCard} />
       )}
+
+      <Modal visible={!!returnFor} transparent animationType="slide" onRequestClose={() => setReturnFor(null)}>
+        <Pressable style={styles.modalBg} onPress={() => setReturnFor(null)}>
+          <Pressable style={[styles.returnSheet, { paddingBottom: insets.bottom + spacing.lg }]} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.grabber} />
+            <View style={styles.returnHeader}>
+              <View>
+                <T weight="displayBold" size={type.xl}>تسجيل مرتجع</T>
+                <T color={colors.muted} size={type.sm}>الطلب #{returnFor?.id?.replace("ORD", "")}</T>
+              </View>
+              <Pressable onPress={selectAllReturnQuantities} style={styles.selectAllBtn}><T size={type.sm} weight="bold" color={colors.brandPrimary}>إرجاع الكل</T></Pressable>
+            </View>
+            <ScrollView style={styles.returnList} showsVerticalScrollIndicator={false}>
+              {(returnFor?.items || []).map((item: any) => {
+                const quantity = returnQuantities[item.product_id] || 0;
+                return (
+                  <View key={item.product_id} style={styles.returnItem}>
+                    <View style={{ flex: 1 }}>
+                      <T weight="semi" numberOfLines={2}>{item.name}</T>
+                      <T color={colors.muted} size={type.sm}>المطلوب: {item.quantity} • {formatPrice(item.price)}</T>
+                    </View>
+                    <View style={styles.quantityControls}>
+                      <Pressable onPress={() => adjustReturnQuantity(item.product_id, -1)} style={styles.qtyBtn}><Feather name="minus" size={16} color={colors.brandPrimary} /></Pressable>
+                      <T weight="bold" style={styles.qtyValue}>{quantity}</T>
+                      <Pressable onPress={() => adjustReturnQuantity(item.product_id, 1)} style={styles.qtyBtn}><Feather name="plus" size={16} color={colors.brandPrimary} /></Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.returnFooter}>
+              <T color={colors.muted} size={type.sm}>سيتم تسجيل الكميات المحددة فقط</T>
+              <Button title={returnSubmitting ? "جارٍ التسجيل..." : "تأكيد المرتجع"} icon="rotate-ccw" onPress={submitReturn} disabled={returnSubmitting} style={{ minHeight: 46 }} />
+              <Button title="إلغاء" variant="secondary" onPress={() => setReturnFor(null)} disabled={returnSubmitting} style={{ minHeight: 44 }} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Logout confirmation */}
       <Modal visible={confirmLogout} transparent animationType="fade" onRequestClose={() => setConfirmLogout(false)}>
@@ -229,6 +317,17 @@ const styles = StyleSheet.create({
   navRow: { marginTop: spacing.sm },
   detailBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   navBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
+  returnBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.sm },
+  returnSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, maxHeight: "86%" },
+  grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: "center", marginBottom: spacing.md },
+  returnHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
+  selectAllBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: colors.brandTertiary },
+  returnList: { maxHeight: 300 },
+  returnItem: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  quantityControls: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  qtyBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
+  qtyValue: { minWidth: 22, textAlign: "center" },
+  returnFooter: { gap: spacing.sm, marginTop: spacing.md },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, alignItems: "center" },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5E9E9", alignItems: "center", justifyContent: "center" },
