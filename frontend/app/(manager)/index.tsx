@@ -70,7 +70,7 @@ export default function ManagerDashboard() {
     { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
     { icon: "box", label: "المنتجات", onPress: () => router.push("/(manager)/products"), testID: "qa-products" },
     { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
-    { icon: "rotate-ccw", label: "المرتجعات", onPress: () => router.push("/(manager)/orders"), testID: "qa-returns" },
+    { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
     { icon: "tag", label: "الخصومات", onPress: () => router.push("/(manager)/products"), testID: "qa-discounts" },
     { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
   ];
@@ -176,10 +176,13 @@ export default function ManagerDashboard() {
   );
 }
 
-function QuickAction({ icon, label, onPress, testID }: any) {
+function QuickAction({ icon, label, count, onPress, testID }: any) {
   return (
     <Pressable testID={testID} onPress={onPress} style={styles.qa}>
-      <View style={styles.qaIcon}><Feather name={icon} size={20} color={colors.brandPrimary} /></View>
+      <View style={styles.qaIcon}>
+        <Feather name={icon} size={20} color={colors.brandPrimary} />
+        {typeof count === "number" && <View style={styles.qaBadge}><T weight="bold" size={9} color="#fff">{count > 99 ? "99+" : count}</T></View>}
+      </View>
       <T weight="semi" size={11} style={{ textAlign: "center" }} numberOfLines={1}>{label}</T>
     </Pressable>
   );
@@ -204,6 +207,7 @@ const styles = StyleSheet.create({
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
   qa: { width: "23.5%", minHeight: 82, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: spacing.xs },
   qaIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  qaBadge: { position: "absolute", top: -3, insetInlineEnd: -5, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   insightsRow: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.lg },
   insightCard: { flex: 1, minHeight: 188, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
   cardTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
