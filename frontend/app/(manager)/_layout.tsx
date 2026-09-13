@@ -22,6 +22,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="orders" options={{ title: "الطلبات", tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} /> }} />
       <Tabs.Screen name="agents" options={{ href: null }} />
       <Tabs.Screen name="sync-settings" options={{ href: null }} />
+      <Tabs.Screen name="returns" options={{ href: null }} />
     </Tabs>
   );
 }
