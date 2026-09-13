@@ -106,6 +106,7 @@ export const api = {
   // admin
   adminStats: () => req("/admin/stats"),
   adminOrders: (status?: string) => req(`/admin/orders${status ? "?status=" + status : ""}`),
+  adminReturns: () => req("/admin/returns"),
   adminSetStatus: (id: string, status: string) => req(`/admin/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req(`/admin/orders/${id}/assign`, { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
@@ -117,6 +118,7 @@ export const api = {
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
   deliverySetStatus: (id: string, status: string) => req(`/delivery/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   deliverySetLocation: (id: string, lat: number, lng: number) => req(`/delivery/orders/${id}/location`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  deliveryCreateReturn: (id: string, body: any) => req(`/delivery/orders/${id}/returns`, { method: "POST", body: JSON.stringify(body) }),
 };
 
 export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string }> {
