@@ -149,9 +149,9 @@ export default function Home() {
         <Animated.FlatList
           data={products}
           keyExtractor={(i) => i.id}
-          numColumns={2}
+          numColumns={3}
           ListHeaderComponent={header}
-          columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
+          columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
           initialNumToRender={12}
           maxToRenderPerBatch={8}
