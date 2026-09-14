@@ -99,7 +99,8 @@ export const api = {
   addToCart: (product_id: string, quantity = 1) => req("/cart/items", { method: "POST", body: JSON.stringify({ product_id, quantity }) }),
   setCartItem: (product_id: string, quantity: number) => req("/cart/items", { method: "PUT", body: JSON.stringify({ product_id, quantity }) }),
   removeCartItem: (id: string) => req(`/cart/items/${id}`, { method: "DELETE" }),
-  // orders
+  // coupons and orders
+  validateCoupon: (code: string) => req("/coupons/validate", { method: "POST", body: JSON.stringify({ code }) }),
   createOrder: (body: any) => req("/orders", { method: "POST", body: JSON.stringify(body) }),
   myOrders: () => req("/orders"),
   order: (id: string) => req(`/orders/${id}`),
@@ -114,6 +115,10 @@ export const api = {
   adminUsers: () => req("/admin/users"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
   syncConfig: () => req("/admin/sync-config"),
+  adminCoupons: () => req("/admin/coupons"),
+  createCoupon: (body: any) => req("/admin/coupons", { method: "POST", body: JSON.stringify(body) }),
+  updateCoupon: (code: string, body: any) => req("/admin/coupons/" + code, { method: "PUT", body: JSON.stringify(body) }),
+  deleteCoupon: (code: string) => req("/admin/coupons/" + code, { method: "DELETE" }),
   adminBanners: () => req("/admin/banners"),
   createBanner: (body: any) => req("/admin/banners", { method: "POST", body: JSON.stringify(body) }),
   updateBanner: (id: string, body: any) => req(`/admin/banners/${id}`, { method: "PUT", body: JSON.stringify(body) }),
