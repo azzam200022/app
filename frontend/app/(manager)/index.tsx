@@ -73,7 +73,6 @@ export default function ManagerDashboard() {
     { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
     { icon: "tag", label: "الخصومات", onPress: () => router.push("/(manager)/products"), testID: "qa-discounts" },
             { icon: "image", label: "البانورامات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
-{ icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
     { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
   ];
 
