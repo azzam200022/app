@@ -179,6 +179,22 @@ class ProductUpdate(BaseModel):
     coming_soon: Optional[bool] = None
 
 
+class BannerIn(BaseModel):
+    title: str = ""
+    subtitle: str = ""
+    image_url: str
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class BannerUpdate(BaseModel):
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class CartItemIn(BaseModel):
     product_id: str
     quantity: int = 1
@@ -639,6 +655,62 @@ async def catalog_lookup(barcode: str, user=Depends(require_manager)):
     }
 
 
+# ---------------- Banners ----------------
+@api.get("/banners")
+async def public_banners():
+    return await db.banners.find({"is_active": True}, {"_id": 0}).sort("sort_order", 1).to_list(50)
+
+
+@api.get("/admin/banners")
+async def admin_banners(user=Depends(require_manager)):
+    return await db.banners.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+
+
+@api.post("/admin/banners")
+async def create_banner(body: BannerIn, user=Depends(require_manager)):
+    if not body.image_url.strip():
+        raise HTTPException(status_code=400, detail="صورة البانوراما مطلوبة")
+    bid = "banner_" + uuid.uuid4().hex[:12]
+    doc = {
+        "id": bid,
+        "title": body.title.strip(),
+        "subtitle": body.subtitle.strip(),
+        "image_url": body.image_url.strip(),
+        "sort_order": body.sort_order,
+        "is_active": body.is_active,
+        "created_at": now_utc().isoformat(),
+    }
+    await db.banners.insert_one(doc)
+    return doc
+
+
+@api.put("/admin/banners/{bid}")
+async def update_banner(bid: str, body: BannerUpdate, user=Depends(require_manager)):
+    updates = body.model_dump(exclude_none=True)
+    if "image_url" in updates and not updates["image_url"].strip():
+        raise HTTPException(status_code=400, detail="صورة البانوراما مطلوبة")
+    if "title" in updates:
+        updates["title"] = updates["title"].strip()
+    if "subtitle" in updates:
+        updates["subtitle"] = updates["subtitle"].strip()
+    if "image_url" in updates:
+        updates["image_url"] = updates["image_url"].strip()
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
+    result = await db.banners.update_one({"id": bid}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="البانوراما غير موجودة")
+    return await db.banners.find_one({"id": bid}, {"_id": 0})
+
+
+@api.delete("/admin/banners/{bid}")
+async def delete_banner(bid: str, user=Depends(require_manager)):
+    result = await db.banners.delete_one({"id": bid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="البانوراما غير موجودة")
+    return {"ok": True}
+
+
 # ---------------- Products ----------------
 def clean_product(p, favorites=None):
     p = dict(p)
@@ -1084,6 +1156,7 @@ async def admin_stats(user=Depends(require_manager)):
     total_products = await db.products.count_documents({"deleted_at": None})
     total_orders = await db.orders.count_documents({})
     total_returns = await db.returns.count_documents({})
+    total_banners = await db.banners.count_documents({"is_active": True})
     pending = await db.orders.count_documents({"status": {"$in": ["pending", "confirmed", "preparing"]}})
     delivered = await db.orders.count_documents({"status": "delivered"})
     agg = await db.orders.aggregate([{"$match": {"status": "delivered"}}, {"$group": {"_id": None, "sum": {"$sum": "$total"}}}]).to_list(1)
@@ -1094,6 +1167,7 @@ async def admin_stats(user=Depends(require_manager)):
         "active_orders": pending,
         "delivered": delivered,
         "returns": total_returns,
+        "banners": total_banners,
         "revenue": revenue,
     }
 
