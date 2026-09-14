@@ -91,6 +91,7 @@ export const api = {
   lookup: (barcode: string) => req(`/catalog/lookup/${barcode}`),
   catalogSearch: (q: string) => req(`/catalog/search?q=${encodeURIComponent(q)}`),
   banners: () => req("/banners"),
+  deliveryAreas: () => req("/delivery/areas"),
   // favorites
   favorites: () => req("/favorites"),
   toggleFav: (id: string) => req(`/favorites/${id}`, { method: "POST" }),
@@ -116,6 +117,10 @@ export const api = {
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
   syncConfig: () => req("/admin/sync-config"),
   adminCoupons: () => req("/admin/coupons"),
+  adminDeliveryAreas: () => req("/admin/delivery-areas"),
+  createDeliveryArea: (body: any) => req("/admin/delivery-areas", { method: "POST", body: JSON.stringify(body) }),
+  updateDeliveryArea: (id: string, body: any) => req("/admin/delivery-areas/" + id, { method: "PUT", body: JSON.stringify(body) }),
+  deleteDeliveryArea: (id: string) => req("/admin/delivery-areas/" + id, { method: "DELETE" }),
   createCoupon: (body: any) => req("/admin/coupons", { method: "POST", body: JSON.stringify(body) }),
   updateCoupon: (code: string, body: any) => req("/admin/coupons/" + code, { method: "PUT", body: JSON.stringify(body) }),
   deleteCoupon: (code: string) => req("/admin/coupons/" + code, { method: "DELETE" }),
