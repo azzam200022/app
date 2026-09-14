@@ -208,6 +208,7 @@ class OrderIn(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     area: Optional[str] = None
+    delivery_area_id: Optional[str] = None
     coupon_code: Optional[str] = None
 
 
@@ -250,6 +251,18 @@ class CouponUpdate(BaseModel):
     discount_percent: Optional[float] = Field(None, gt=0, le=100)
     max_uses: Optional[int] = Field(None, ge=1)
     expires_at: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class DeliveryAreaIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=80)
+    fee: float = Field(0, ge=0, le=1000000)
+    is_active: bool = True
+
+
+class DeliveryAreaUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=80)
+    fee: Optional[float] = Field(None, ge=0, le=1000000)
     is_active: Optional[bool] = None
 
 
@@ -731,6 +744,32 @@ async def delete_banner(bid: str, user=Depends(require_manager)):
     return {"ok": True}
 
 
+# ---------------- Delivery areas ----------------
+def normalize_delivery_area(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    name = " ".join(str(value).strip().split())
+    if not name:
+        raise HTTPException(status_code=400, detail="اسم منطقة التوصيل مطلوب")
+    return name
+
+
+def delivery_area_public_view(area):
+    view = dict(area)
+    view.pop("_id", None)
+    view["fee"] = round(float(view.get("fee", 0) or 0), 2)
+    return view
+
+
+async def resolve_delivery_area(area_id: Optional[str]):
+    if not area_id:
+        return None
+    area = await db.delivery_areas.find_one({"id": area_id, "is_active": True}, {"_id": 0})
+    if not area:
+        raise HTTPException(status_code=400, detail="منطقة التوصيل غير متاحة حالياً")
+    return delivery_area_public_view(area)
+
+
 # ---------------- Coupons administration ----------------
 @api.get("/admin/coupons")
 async def admin_coupons(user=Depends(require_manager)):
@@ -790,6 +829,61 @@ async def delete_coupon(code: str, user=Depends(require_manager)):
     result = await db.coupons.delete_one({"id": code})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="كود الخصم غير موجود")
+    return {"ok": True}
+
+
+# ---------------- Delivery area administration ----------------
+@api.get("/delivery/areas")
+async def public_delivery_areas():
+    areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(100)
+    return [delivery_area_public_view(area) for area in areas]
+
+
+@api.get("/admin/delivery-areas")
+async def admin_delivery_areas(user=Depends(require_manager)):
+    areas = await db.delivery_areas.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    return [delivery_area_public_view(area) for area in areas]
+
+
+@api.post("/admin/delivery-areas")
+async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manager)):
+    name = normalize_delivery_area(body.name)
+    if await db.delivery_areas.find_one({"name": name}):
+        raise HTTPException(status_code=409, detail="منطقة التوصيل موجودة مسبقاً")
+    doc = {
+        "id": "area_" + uuid.uuid4().hex[:12],
+        "name": name,
+        "fee": round(float(body.fee), 2),
+        "is_active": body.is_active,
+        "created_at": now_utc().isoformat(),
+    }
+    await db.delivery_areas.insert_one(doc)
+    return delivery_area_public_view(doc)
+
+
+@api.put("/admin/delivery-areas/{area_id}")
+async def update_delivery_area(area_id: str, body: DeliveryAreaUpdate, user=Depends(require_manager)):
+    updates = body.model_dump(exclude_none=True)
+    if "name" in updates:
+        updates["name"] = normalize_delivery_area(updates["name"])
+        duplicate = await db.delivery_areas.find_one({"name": updates["name"], "id": {"$ne": area_id}})
+        if duplicate:
+            raise HTTPException(status_code=409, detail="منطقة التوصيل موجودة مسبقاً")
+    if "fee" in updates:
+        updates["fee"] = round(float(updates["fee"]), 2)
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
+    result = await db.delivery_areas.update_one({"id": area_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="منطقة التوصيل غير موجودة")
+    return delivery_area_public_view(await db.delivery_areas.find_one({"id": area_id}, {"_id": 0}))
+
+
+@api.delete("/admin/delivery-areas/{area_id}")
+async def delete_delivery_area(area_id: str, user=Depends(require_manager)):
+    result = await db.delivery_areas.delete_one({"id": area_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="منطقة التوصيل غير موجودة")
     return {"ok": True}
 
 
@@ -1181,6 +1275,8 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
+    delivery_area = await resolve_delivery_area(body.delivery_area_id)
+    delivery_fee = float(delivery_area["fee"]) if delivery_area else 0.0
     coupon_code = normalize_coupon_code(body.coupon_code)
     coupon = None
     discount_amount = 0.0
@@ -1188,7 +1284,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         coupon = await reserve_coupon(coupon_code, user["user_id"])
         discount_amount = coupon_discount(cart["total"], coupon)
     subtotal = round(float(cart["total"]), 2)
-    total = round(subtotal - discount_amount, 2)
+    total = round(subtotal - discount_amount + delivery_fee, 2)
     oid = "ORD" + uuid.uuid4().hex[:8].upper()
     doc = {
         "id": oid,
@@ -1196,7 +1292,9 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "customer_name": body.name,
         "phone": body.phone,
         "address": body.address,
-        "area": body.area or infer_order_area(body.address),
+        "area": delivery_area["name"] if delivery_area else (body.area or infer_order_area(body.address)),
+        "delivery_area_id": delivery_area["id"] if delivery_area else None,
+        "delivery_fee": round(delivery_fee, 2),
         "notes": body.notes or "",
         "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
         "items": cart["items"],
