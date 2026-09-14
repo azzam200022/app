@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Animated } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Animated, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -10,7 +10,7 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ProductCard } from "@/src/components/ProductCard";
 import { CategoryCircles } from "@/src/components/CategoryCircles";
-import { api } from "@/src/lib/api";
+import { api, resolveImage } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -23,6 +23,8 @@ export default function Home() {
   const [selected, setSelected] = useState("الكل");
   const [products, setProducts] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
+  const [bannerIndex, setBannerIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const scrollY = React.useRef(new Animated.Value(0)).current;
@@ -42,10 +44,13 @@ export default function Home() {
         api.categories(),
         api.products({ offers: true }),
         api.products(selected === "الكل" ? {} : { category: selected }),
+        api.banners(),
       ]);
       setCats(c);
       setOffers(o.slice(0, 6));
       setProducts(p);
+      setBanners(Array.isArray(b) ? b : []);
+      setBannerIndex(0);
     } catch (e: any) {
       show(e.message, "error");
     } finally {
@@ -76,20 +81,43 @@ export default function Home() {
 
   const header = (
     <View>
-      {/* Hero */}
-      <Pressable style={styles.hero} onPress={() => router.push("/offers")}>
-        <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
-        <View style={styles.heroContent}>
-          <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
-          <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>وفّر أكثر مع خصومات اليوم</T>
-          <T color="rgba(255,255,255,0.85)">تسوّق أفخر المنتجات بأفضل الأسعار</T>
-          <View style={styles.heroCta}>
-            <T weight="bold" color={colors.gold}>تسوّق العروض</T>
-            <Feather name="arrow-left" size={16} color={colors.gold} />
-          </View>
+      {/* Offers banner carousel */}
+      {banners.length > 0 ? (
+        <View style={styles.hero}>
+          <FlatList
+            data={banners}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.id}
+            onMomentumScrollEnd={(event) => setBannerIndex(Math.round(event.nativeEvent.contentOffset.x / (Dimensions.get("window").width - spacing.lg * 2)))}
+            renderItem={({ item }) => (
+              <Pressable style={styles.heroSlide} onPress={() => router.push("/offers")}>
+                <Image source={{ uri: resolveImage(item.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+                <View style={styles.heroContent}>
+                  <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
+                  <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>{item.title || "وفّر أكثر مع خصومات اليوم"}</T>
+                  <T color="rgba(255,255,255,0.85)">{item.subtitle || "تسوّق أفخر المنتجات بأفضل الأسعار"}</T>
+                  <View style={styles.heroCta}><T weight="bold" color={colors.gold}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.gold} /></View>
+                </View>
+              </Pressable>
+            )}
+          />
+          {banners.length > 1 && <View style={styles.dots}>{banners.map((item, index) => <View key={item.id} style={[styles.dot, index === bannerIndex && styles.dotActive]} />)}</View>}
         </View>
-      </Pressable>
+      ) : (
+        <Pressable style={styles.hero} onPress={() => router.push("/offers")}>
+          <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+          <View style={styles.heroContent}>
+            <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
+            <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>وفّر أكثر مع خصومات اليوم</T>
+            <T color="rgba(255,255,255,0.85)">تسوّق أفخر المنتجات بأفضل الأسعار</T>
+            <View style={styles.heroCta}><T weight="bold" color={colors.gold}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.gold} /></View>
+          </View>
+        </Pressable>
+      )
 
       {/* Categories */}
       <View style={styles.sectionHead}>
@@ -176,6 +204,10 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   brandLogo: { width: 118, height: 34 },
   hero: { height: 168, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden" },
+  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 168 },
+  dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
+  dotActive: { width: 18, backgroundColor: colors.gold },
   heroContent: { flex: 1, padding: spacing.lg, justifyContent: "flex-end" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.sm },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
