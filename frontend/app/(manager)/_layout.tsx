@@ -23,6 +23,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="agents" options={{ href: null }} />
       <Tabs.Screen name="sync-settings" options={{ href: null }} />
       <Tabs.Screen name="returns" options={{ href: null }} />
+      <Tabs.Screen name="banners" options={{ href: null }} />
     </Tabs>
   );
 }
