@@ -90,6 +90,7 @@ export const api = {
   deleteProduct: (id: string) => req(`/products/${id}`, { method: "DELETE" }),
   lookup: (barcode: string) => req(`/catalog/lookup/${barcode}`),
   catalogSearch: (q: string) => req(`/catalog/search?q=${encodeURIComponent(q)}`),
+  banners: () => req("/banners"),
   // favorites
   favorites: () => req("/favorites"),
   toggleFav: (id: string) => req(`/favorites/${id}`, { method: "POST" }),
@@ -113,6 +114,10 @@ export const api = {
   adminUsers: () => req("/admin/users"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
   syncConfig: () => req("/admin/sync-config"),
+  adminBanners: () => req("/admin/banners"),
+  createBanner: (body: any) => req("/admin/banners", { method: "POST", body: JSON.stringify(body) }),
+  updateBanner: (id: string, body: any) => req(`/admin/banners/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBanner: (id: string) => req(`/admin/banners/${id}`, { method: "DELETE" }),
   // delivery
   deliveryOrders: () => req("/delivery/orders"),
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
