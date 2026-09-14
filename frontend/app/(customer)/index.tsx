@@ -40,7 +40,7 @@ export default function Home() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [c, o, p] = await Promise.all([
+      const [c, o, p, b] = await Promise.all([
         api.categories(),
         api.products({ offers: true }),
         api.products(selected === "الكل" ? {} : { category: selected }),
