@@ -208,6 +208,7 @@ class OrderIn(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     area: Optional[str] = None
+    coupon_code: Optional[str] = None
 
 
 class StatusUpdateIn(BaseModel):
@@ -231,6 +232,25 @@ class ReturnIn(BaseModel):
 class RoleIn(BaseModel):
     user_id: str
     role: str
+
+
+class CouponValidateIn(BaseModel):
+    code: str = Field(..., min_length=3, max_length=32)
+
+
+class CouponIn(BaseModel):
+    code: str = Field(..., min_length=3, max_length=32)
+    discount_percent: float = Field(..., gt=0, le=100)
+    max_uses: Optional[int] = Field(None, ge=1)
+    expires_at: Optional[str] = None
+    is_active: bool = True
+
+
+class CouponUpdate(BaseModel):
+    discount_percent: Optional[float] = Field(None, gt=0, le=100)
+    max_uses: Optional[int] = Field(None, ge=1)
+    expires_at: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 # ---------------- Auth ----------------
@@ -711,6 +731,68 @@ async def delete_banner(bid: str, user=Depends(require_manager)):
     return {"ok": True}
 
 
+# ---------------- Coupons administration ----------------
+@api.get("/admin/coupons")
+async def admin_coupons(user=Depends(require_manager)):
+    coupons = await db.coupons.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [coupon_public_view(coupon) for coupon in coupons]
+
+
+@api.post("/admin/coupons")
+async def create_coupon(body: CouponIn, user=Depends(require_manager)):
+    code = normalize_coupon_code(body.code)
+    if body.expires_at:
+        if coupon_expired({"expires_at": body.expires_at}):
+            raise HTTPException(status_code=400, detail="تاريخ انتهاء الكود يجب أن يكون في المستقبل")
+        try:
+            datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="تاريخ انتهاء غير صالح")
+    if await db.coupons.find_one({"id": code}):
+        raise HTTPException(status_code=409, detail="كود الخصم موجود مسبقاً")
+    doc = {
+        "id": code,
+        "code": code,
+        "discount_percent": float(body.discount_percent),
+        "max_uses": body.max_uses,
+        "usage_count": 0,
+        "redeemed_by": [],
+        "expires_at": body.expires_at,
+        "is_active": body.is_active,
+        "created_at": now_utc().isoformat(),
+    }
+    await db.coupons.insert_one(doc)
+    return coupon_public_view(doc)
+
+
+@api.put("/admin/coupons/{code}")
+async def update_coupon(code: str, body: CouponUpdate, user=Depends(require_manager)):
+    code = normalize_coupon_code(code)
+    updates = body.model_dump(exclude_none=True)
+    if "expires_at" in updates:
+        if coupon_expired({"expires_at": updates["expires_at"]}):
+            raise HTTPException(status_code=400, detail="تاريخ انتهاء الكود يجب أن يكون في المستقبل")
+        try:
+            datetime.fromisoformat(updates["expires_at"].replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="تاريخ انتهاء غير صالح")
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
+    result = await db.coupons.update_one({"id": code}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="كود الخصم غير موجود")
+    return coupon_public_view(await db.coupons.find_one({"id": code}, {"_id": 0}))
+
+
+@api.delete("/admin/coupons/{code}")
+async def delete_coupon(code: str, user=Depends(require_manager)):
+    code = normalize_coupon_code(code)
+    result = await db.coupons.delete_one({"id": code})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="كود الخصم غير موجود")
+    return {"ok": True}
+
+
 # ---------------- Products ----------------
 def clean_product(p, favorites=None):
     p = dict(p)
@@ -882,6 +964,98 @@ async def toggle_favorite(pid: str, user=Depends(require_user)):
     return {"is_favorite": True}
 
 
+# ---------------- Coupons ----------------
+COUPON_CODE_RE = re.compile(r"^[A-Z0-9_-]{3,32}$")
+
+
+def normalize_coupon_code(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    code = str(value).strip().upper()
+    if not code:
+        return None
+    if not COUPON_CODE_RE.fullmatch(code):
+        raise HTTPException(status_code=400, detail="كود الخصم غير صالح أو يحتوي أكثر من كود")
+    return code
+
+
+def coupon_public_view(coupon):
+    view = dict(coupon)
+    view.pop("redeemed_by", None)
+    view.pop("_id", None)
+    return view
+
+
+def coupon_expired(coupon) -> bool:
+    expires_at = coupon.get("expires_at")
+    if not expires_at:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed <= now_utc()
+    except (TypeError, ValueError):
+        return True
+
+
+def ensure_coupon_available(coupon, user_id: str):
+    if not coupon or not coupon.get("is_active", False):
+        raise HTTPException(status_code=400, detail="كود الخصم غير موجود أو غير فعال")
+    if coupon_expired(coupon):
+        raise HTTPException(status_code=400, detail="انتهت صلاحية كود الخصم")
+    redeemed_by = coupon.get("redeemed_by") or []
+    if user_id in redeemed_by:
+        raise HTTPException(status_code=409, detail="لا يمكنك استخدام كود الخصم نفسه أكثر من مرة")
+    max_uses = coupon.get("max_uses")
+    if max_uses is not None and int(coupon.get("usage_count", 0) or 0) >= int(max_uses):
+        raise HTTPException(status_code=400, detail="اكتمل عدد مرات استخدام كود الخصم")
+
+
+def coupon_discount(subtotal: float, coupon) -> float:
+    percent = float(coupon.get("discount_percent", 0) or 0)
+    return round(min(max(subtotal * percent / 100, 0), subtotal), 2)
+
+
+async def reserve_coupon(code: str, user_id: str):
+    coupon = await db.coupons.find_one({"id": code})
+    ensure_coupon_available(coupon, user_id)
+    usage_count = int(coupon.get("usage_count", 0) or 0)
+    query = {
+        "id": code,
+        "is_active": True,
+        "usage_count": usage_count,
+        "redeemed_by": {"$nin": [user_id]},
+    }
+    if coupon.get("expires_at"):
+        query["expires_at"] = coupon["expires_at"]
+    reserved = await db.coupons.find_one_and_update(
+        query,
+        {"$set": {"usage_count": usage_count + 1}, "$push": {"redeemed_by": user_id}},
+    )
+    if not reserved:
+        raise HTTPException(status_code=409, detail="تعذر تطبيق كود الخصم؛ حاول مرة أخرى")
+    return coupon
+
+
+@api.post("/coupons/validate")
+async def validate_coupon(body: CouponValidateIn, user=Depends(require_user)):
+    code = normalize_coupon_code(body.code)
+    cart = await build_cart(user["user_id"])
+    if not cart["items"]:
+        raise HTTPException(status_code=400, detail="السلة فارغة")
+    coupon = await db.coupons.find_one({"id": code})
+    ensure_coupon_available(coupon, user["user_id"])
+    discount = coupon_discount(cart["total"], coupon)
+    return {
+        "coupon_code": code,
+        "discount_percent": float(coupon["discount_percent"]),
+        "subtotal": cart["total"],
+        "discount_amount": discount,
+        "total": round(cart["total"] - discount, 2),
+    }
+
+
 # ---------------- Cart ----------------
 async def build_cart(user_id):
     cart = await db.carts.find_one({"user_id": user_id}, {"_id": 0})
@@ -1007,6 +1181,14 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
+    coupon_code = normalize_coupon_code(body.coupon_code)
+    coupon = None
+    discount_amount = 0.0
+    if coupon_code:
+        coupon = await reserve_coupon(coupon_code, user["user_id"])
+        discount_amount = coupon_discount(cart["total"], coupon)
+    subtotal = round(float(cart["total"]), 2)
+    total = round(subtotal - discount_amount, 2)
     oid = "ORD" + uuid.uuid4().hex[:8].upper()
     doc = {
         "id": oid,
@@ -1018,7 +1200,11 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "notes": body.notes or "",
         "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
         "items": cart["items"],
-        "total": cart["total"],
+        "subtotal": subtotal,
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_code,
+        "coupon_discount_percent": float(coupon["discount_percent"]) if coupon else 0.0,
+        "total": total,
         "status": "pending",
         "payment": "cod",
         "agent_id": None,
@@ -1030,7 +1216,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
     try:
-        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {body.name} بقيمة {int(cart['total'])} د.ع", "action_url": f"/order/{oid}"})
+        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {body.name} بقيمة {int(total)} د.ع", "action_url": f"/order/{oid}"})
     except Exception as e:
         logger.warning(f"push failed: {e}")
     return doc
