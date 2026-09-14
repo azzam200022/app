@@ -23,6 +23,9 @@ export default function Checkout() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -49,11 +52,26 @@ export default function Checkout() {
     } finally { setLocating(false); }
   };
 
+  const applyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return show("اكتب كود الخصم أولاً", "error");
+    setCouponLoading(true);
+    try {
+      const result = await api.validateCoupon(code);
+      setAppliedCoupon(result);
+      setCouponCode(result.coupon_code);
+      show("تم تطبيق كود الخصم ✓");
+    } catch (e: any) {
+      setAppliedCoupon(null);
+      show(e.message, "error");
+    } finally { setCouponLoading(false); }
+  };
+
   const submit = async () => {
     if (!name || !phone || !address) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
     setLoading(true);
     try {
-      const order = await api.createOrder({ name, phone, address, notes, lat: coords?.lat, lng: coords?.lng });
+      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords?.lat, lng: coords?.lng });
       await reload();
       router.replace(`/order/${order.id}?new=1`);
     } catch (e: any) { show(e.message, "error"); }
@@ -113,10 +131,23 @@ export default function Checkout() {
             <Feather name="check-circle" size={22} color={colors.brandPrimary} />
           </View>
 
+          <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>كود الخصم</T>
+          <View style={styles.couponRow}>
+            <View style={{ flex: 1 }}>
+              <Input icon="tag" placeholder="أدخل الكود" value={couponCode} onChangeText={(value: string) => { setCouponCode(value); setAppliedCoupon(null); }} autoCapitalize="characters" testID="co-coupon" />
+            </View>
+            <Pressable testID="co-apply-coupon" onPress={applyCoupon} disabled={couponLoading} style={styles.couponBtn}>
+              {couponLoading ? <ActivityIndicator color="#fff" /> : <T weight="bold" color="#fff">تطبيق</T>}
+            </Pressable>
+          </View>
+          {appliedCoupon ? <T color={colors.success} size={type.sm} style={{ marginTop: -spacing.sm }}>خصم {appliedCoupon.discount_percent}% — وفرت {formatPrice(appliedCoupon.discount_amount)}</T> : null}
+
           <View style={styles.summary}>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={colors.success}>مجاني</T></View>
-            <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(cart.total)}</T></View>
+            {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
+            {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>الخصم</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
+            <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(appliedCoupon?.total ?? cart.total)}</T></View>
           </View>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -153,5 +184,7 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
+  couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
+  couponBtn: { height: 54, paddingHorizontal: spacing.lg, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
 });
