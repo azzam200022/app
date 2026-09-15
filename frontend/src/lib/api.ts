@@ -92,6 +92,7 @@ export const api = {
   catalogSearch: (q: string) => req(`/catalog/search?q=${encodeURIComponent(q)}`),
   banners: () => req("/banners"),
   deliveryAreas: () => req("/delivery/areas"),
+  deliveryQuote: (lat: number, lng: number) => req("/delivery/quote", { method: "POST", body: JSON.stringify({ lat, lng }) }),
   // favorites
   favorites: () => req("/favorites"),
   toggleFav: (id: string) => req(`/favorites/${id}`, { method: "POST" }),
