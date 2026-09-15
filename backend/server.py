@@ -1319,8 +1319,12 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
+    if body.lat is None or body.lng is None:
+        raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة")
     delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
-    delivery_fee = float(delivery_area["fee"]) if delivery_area else 0.0
+    if not delivery_area:
+        raise HTTPException(status_code=400, detail="الموقع خارج نطاق التوصيل")
+    delivery_fee = float(delivery_area["fee"])
     coupon_code = normalize_coupon_code(body.coupon_code)
     coupon = None
     discount_amount = 0.0
