@@ -257,13 +257,24 @@ class CouponUpdate(BaseModel):
 class DeliveryAreaIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
     fee: float = Field(0, ge=0, le=1000000)
+    center_lat: float = Field(..., ge=-90, le=90)
+    center_lng: float = Field(..., ge=-180, le=180)
+    radius_km: float = Field(..., gt=0, le=100)
     is_active: bool = True
 
 
 class DeliveryAreaUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=80)
     fee: Optional[float] = Field(None, ge=0, le=1000000)
+    center_lat: Optional[float] = Field(None, ge=-90, le=90)
+    center_lng: Optional[float] = Field(None, ge=-180, le=180)
+    radius_km: Optional[float] = Field(None, gt=0, le=100)
     is_active: Optional[bool] = None
+
+
+class DeliveryQuoteIn(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
 
 
 # ---------------- Auth ----------------
@@ -761,13 +772,33 @@ def delivery_area_public_view(area):
     return view
 
 
-async def resolve_delivery_area(area_id: Optional[str]):
-    if not area_id:
+def distance_between_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    first_lat, second_lat = radians(lat1), radians(lat2)
+    dlat = second_lat - first_lat
+    dlng = radians(lng2) - radians(lng1)
+    value = sin(dlat / 2) ** 2 + cos(first_lat) * cos(second_lat) * sin(dlng / 2) ** 2
+    return 6371 * 2 * asin(sqrt(min(1, max(0, value))))
+
+
+async def resolve_delivery_area_for_location(lat: Optional[float], lng: Optional[float]):
+    areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).to_list(200)
+    geo_areas = [area for area in areas if area.get("center_lat") is not None and area.get("center_lng") is not None and area.get("radius_km") is not None]
+    if not geo_areas:
         return None
-    area = await db.delivery_areas.find_one({"id": area_id, "is_active": True}, {"_id": 0})
-    if not area:
-        raise HTTPException(status_code=400, detail="منطقة التوصيل غير متاحة حالياً")
-    return delivery_area_public_view(area)
+    if lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة أولاً")
+    matches = []
+    for area in geo_areas:
+        distance = distance_between_km(float(area["center_lat"]), float(area["center_lng"]), float(lat), float(lng))
+        if distance <= float(area["radius_km"]):
+            matches.append((distance, area))
+    if not matches:
+        raise HTTPException(status_code=400, detail="موقعك خارج مناطق التوصيل الحالية")
+    distance, area = min(matches, key=lambda item: (item[0], float(item[1].get("radius_km", 0))))
+    view = delivery_area_public_view(area)
+    view["distance_km"] = round(distance, 2)
+    return view
 
 
 # ---------------- Coupons administration ----------------
@@ -839,6 +870,14 @@ async def public_delivery_areas():
     return [delivery_area_public_view(area) for area in areas]
 
 
+@api.post("/delivery/quote")
+async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
+    area = await resolve_delivery_area_for_location(body.lat, body.lng)
+    if not area:
+        return {"area_id": None, "area_name": None, "fee": 0.0, "distance_km": None}
+    return {"area_id": area["id"], "area_name": area["name"], "fee": area["fee"], "distance_km": area["distance_km"]}
+
+
 @api.get("/admin/delivery-areas")
 async def admin_delivery_areas(user=Depends(require_manager)):
     areas = await db.delivery_areas.find({}, {"_id": 0}).sort("name", 1).to_list(200)
@@ -854,6 +893,9 @@ async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manage
         "id": "area_" + uuid.uuid4().hex[:12],
         "name": name,
         "fee": round(float(body.fee), 2),
+        "center_lat": float(body.center_lat),
+        "center_lng": float(body.center_lng),
+        "radius_km": round(float(body.radius_km), 3),
         "is_active": body.is_active,
         "created_at": now_utc().isoformat(),
     }
@@ -871,6 +913,8 @@ async def update_delivery_area(area_id: str, body: DeliveryAreaUpdate, user=Depe
             raise HTTPException(status_code=409, detail="منطقة التوصيل موجودة مسبقاً")
     if "fee" in updates:
         updates["fee"] = round(float(updates["fee"]), 2)
+    if "radius_km" in updates:
+        updates["radius_km"] = round(float(updates["radius_km"]), 3)
     if not updates:
         raise HTTPException(status_code=400, detail="لا يوجد تغيير")
     result = await db.delivery_areas.update_one({"id": area_id}, {"$set": updates})
@@ -1275,7 +1319,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
-    delivery_area = await resolve_delivery_area(body.delivery_area_id)
+    delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
     delivery_fee = float(delivery_area["fee"]) if delivery_area else 0.0
     coupon_code = normalize_coupon_code(body.coupon_code)
     coupon = None
