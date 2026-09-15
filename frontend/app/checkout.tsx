@@ -29,6 +29,10 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
+  const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const deliveryFee = Number(deliveryQuote?.fee || 0);
+  const displayedTotal = (appliedCoupon?.total ?? cart.total) + deliveryFee;
 
   const detectLocation = async () => {
     setLocating(true);
@@ -45,8 +49,17 @@ export default function Checkout() {
       }
       if (!perm.granted) { setLocating(false); return show("نحتاج صلاحية الموقع لتحديده على الخريطة", "error"); }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      show("تم تحديد موقعك على الخريطة ✓");
+      const nextCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setCoords(nextCoords);
+      setQuoteLoading(true);
+      try {
+        const quote = await api.deliveryQuote(nextCoords.lat, nextCoords.lng);
+        setDeliveryQuote(quote);
+        show(quote.area_name ? "تم تحديد المنطقة ورسوم التوصيل ✓" : "تم تحديد موقعك، لا توجد مناطق مسعّرة حالياً");
+      } catch (e: any) {
+        setDeliveryQuote(null);
+        show(e.message, "error");
+      } finally { setQuoteLoading(false); }
     } catch {
       show("تعذّر تحديد الموقع، حاول مجدداً", "error");
     } finally { setLocating(false); }
@@ -69,9 +82,11 @@ export default function Checkout() {
 
   const submit = async () => {
     if (!name || !phone || !address) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
+    if (!coords) return show("حدد موقع التوصيل على الخريطة أولاً", "error");
+    if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
     setLoading(true);
     try {
-      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords?.lat, lng: coords?.lng });
+      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng });
       await reload();
       router.replace(`/order/${order.id}?new=1`);
     } catch (e: any) { show(e.message, "error"); }
@@ -144,10 +159,11 @@ export default function Checkout() {
 
           <View style={styles.summary}>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
-            <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={colors.success}>مجاني</T></View>
+            <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryFee > 0 ? colors.onSurface : colors.success}>{quoteLoading ? "جارٍ الحساب..." : deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"}</T></View>
+            {deliveryQuote?.area_name ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>الخصم</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
-            <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(appliedCoupon?.total ?? cart.total)}</T></View>
+            <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(displayedTotal)}</T></View>
           </View>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
