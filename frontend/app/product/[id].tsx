@@ -18,10 +18,11 @@ export default function ProductDetail() {
   const router = useRouter();
   const { add } = useCart();
   const { show } = useToast();
-  const [product, setProduct] = useState<any>(null);
+  const initialProduct = id ? getCachedProduct(id) : undefined;
+  const [product, setProduct] = useState<any>(initialProduct || null);
   const [qty, setQty] = useState(1);
   const [fav, setFav] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialProduct);
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -60,8 +61,26 @@ export default function ProductDetail() {
     finally { setAdding(false); }
   };
 
-  if (loading || !product) {
-    return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
+  if (loading && !product) {
+    return (
+      <View style={styles.root}>
+        <View style={[styles.loadingHeader, { paddingTop: insets.top + spacing.md }]}>
+          <Pressable onPress={() => router.back()} style={styles.circleBtn}>
+            <Feather name="arrow-right" size={22} color={colors.onSurface} />
+          </Pressable>
+          <ActivityIndicator color={colors.brandPrimary} />
+          <View style={{ width: 44 }} />
+        </View>
+        <View style={styles.loadingImage} />
+        <View style={styles.loadingBody}>
+          <ActivityIndicator color={colors.brandPrimary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!product) {
+    return <View style={styles.center}><T color={colors.muted}>تعذر تحميل المنتج</T></View>;
   }
 
   const discount = product.old_price && product.old_price > product.price ? Math.round((1 - product.price / product.old_price) * 100) : 0;
@@ -70,7 +89,7 @@ export default function ProductDetail() {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.imgWrap}>
-          <Image source={{ uri: resolveImage(product.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <Image source={{ uri: resolveImage(product.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
           <LinearGradient colors={["rgba(0,0,0,0.25)", "transparent"]} style={styles.topScrim} />
           <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
             <Pressable testID="pd-back" onPress={() => router.back()} style={styles.circleBtn}>
@@ -119,6 +138,9 @@ export default function ProductDetail() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  loadingHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
+  loadingImage: { width: "100%", height: 360, backgroundColor: colors.surfaceSecondary },
+  loadingBody: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   imgWrap: { width: "100%", height: 360, backgroundColor: colors.surfaceSecondary },
   topScrim: { position: "absolute", top: 0, left: 0, right: 0, height: 120 },
   topBar: { position: "absolute", left: spacing.lg, right: spacing.lg, flexDirection: "row-reverse", justifyContent: "space-between" },
