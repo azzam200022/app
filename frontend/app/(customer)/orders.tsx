@@ -5,7 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, EmptyState } from "@/src/components/ui";
-import { api, formatPrice, STATUS_LABEL } from "@/src/lib/api";
+import { api, formatPrice, getCachedOrders, STATUS_LABEL } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -31,8 +31,9 @@ export default function Orders() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { show } = useToast();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedOrders = getCachedOrders();
+  const [orders, setOrders] = useState<any[]>(cachedOrders || []);
+  const [loading, setLoading] = useState(cachedOrders === undefined);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (force = false) => {
