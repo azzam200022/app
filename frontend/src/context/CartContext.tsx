@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { api, getCachedProduct, setCachedCart } from "@/src/lib/api";
+import { api, getCachedCart, getCachedProduct, setCachedCart } from "@/src/lib/api";
 import { useAuth } from "@/src/context/AuthContext";
 
 type CartItem = { product_id: string; name: string; price: number; image_url: string; quantity: number; line_total: number };
@@ -25,9 +25,10 @@ function optimisticCart(current: Cart, id: string, quantity: number, product?: a
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [cart, setCart] = useState<Cart>(empty);
+  const initialCart = (getCachedCart() as Cart | undefined) || empty;
+  const [cart, setCart] = useState<Cart>(initialCart);
   const [loading, setLoading] = useState(false);
-  const cartRef = useRef<Cart>(empty);
+  const cartRef = useRef<Cart>(initialCart);
   const mutationVersion = useRef(0);
   const mutationQueue = useRef<Promise<unknown>>(Promise.resolve());
   cartRef.current = cart;
