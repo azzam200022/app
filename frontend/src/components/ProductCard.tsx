@@ -9,7 +9,7 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { resolveImage, formatPrice, api } from "@/src/lib/api";
 import { T, Badge } from "@/src/components/ui";
 
-export function ProductCard({
+export const ProductCard = React.memo(function ProductCard({
   product,
   onAdd,
   onIncrease,
@@ -54,7 +54,7 @@ export function ProductCard({
       style={[styles.card, width ? { width } : { flex: 1 }]}
     >
       <View style={styles.imgWrap}>
-        <Image source={{ uri: resolveImage(product.image_url) }} style={[styles.img, unavailable && { opacity: 0.4 }]} contentFit="cover" transition={200} />
+        <Image source={{ uri: resolveImage(product.image_url) }} style={[styles.img, unavailable && { opacity: 0.4 }]} contentFit="cover" cachePolicy="memory-disk" transition={200} />
         {unavailable && (
           <View style={styles.outOverlay}>
             <View style={styles.outPill}><T weight="bold" size={type.sm} color="#fff">{outLabel}</T></View>
@@ -125,7 +125,7 @@ export function ProductCard({
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: { backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
