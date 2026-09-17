@@ -10,19 +10,23 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, EmptyState } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
+import { useToast } from "@/src/context/ToastContext";
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { cart, reload, setQty, remove, loading } = useCart();
-  const [busy, setBusy] = useState(false);
+  const { show } = useToast();
 
-  useFocusEffect(useCallback(() => { reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
-  const changeQty = async (id: string, qty: number) => {
+  const changeQty = (id: string, qty: number) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    setBusy(true);
-    try { await setQty(id, qty); } finally { setBusy(false); }
+    void setQty(id, qty).catch((error: any) => show(error.message, "error"));
+  };
+
+  const removeItem = (id: string) => {
+    void remove(id).catch((error: any) => show(error.message, "error"));
   };
 
   return (
@@ -61,7 +65,7 @@ export default function CartScreen() {
                         <Feather name="plus" size={16} color={colors.onSurface} />
                       </Pressable>
                     </View>
-                    <Pressable testID={`remove-${item.product_id}`} onPress={() => remove(item.product_id)} hitSlop={8}>
+                    <Pressable testID={`remove-${item.product_id}`} onPress={() => removeItem(item.product_id)} hitSlop={8}>
                       <Feather name="trash-2" size={18} color={colors.error} />
                     </Pressable>
                   </View>
@@ -74,7 +78,7 @@ export default function CartScreen() {
               <T color={colors.muted}>الإجمالي</T>
               <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary}>{formatPrice(cart.total)}</T>
             </View>
-            <Button title="متابعة الدفع" icon="arrow-left" onPress={() => router.push("/checkout")} testID="go-checkout" loading={busy} />
+            <Button title="متابعة الدفع" icon="arrow-left" onPress={() => router.push("/checkout")} testID="go-checkout" />
           </View>
         </>
       )}
