@@ -35,22 +35,22 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     try {
-      const o = await api.myOrders();
+      const o = await api.myOrders(force);
       setOrders(o);
     } catch (e: any) { show(e.message, "error"); }
     finally { setLoading(false); setRefreshing(false); }
   }, [show]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <T weight="displayBold" size={type.xl}>طلباتي</T>
       </View>
-      {loading ? (
+      {loading && orders.length === 0 ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
       ) : orders.length === 0 ? (
         <View style={styles.center}><EmptyState icon="package" title="لا توجد طلبات بعد" subtitle="ابدأ التسوق لتظهر طلباتك هنا" /></View>
@@ -59,7 +59,7 @@ export default function Orders() {
           data={orders}
           keyExtractor={(i) => i.id}
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={colors.brandPrimary} />}
           renderItem={({ item }) => (
             <Pressable testID={`order-${item.id}`} onPress={() => router.push(`/order/${item.id}`)} style={styles.card}>
               <View style={styles.cardTop}>
