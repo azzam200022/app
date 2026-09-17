@@ -22,23 +22,23 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const isStaff = user?.role === "manager" || user?.role === "delivery";
 
-  const load = async () => {
-    try { setOrder(await api.order(id!)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+  const load = async (force = false) => {
+    try { setOrder(await api.order(id!, force)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
 
   // live refresh while out for delivery (tracks agent location)
   useEffect(() => {
     if (!order || order.status !== "out_for_delivery") return;
-    const iv = setInterval(async () => { try { setOrder(await api.order(id!)); } catch {} }, 15000);
+    const iv = setInterval(async () => { try { setOrder(await api.order(id!, true)); } catch {} }, 15000);
     return () => clearInterval(iv);
   }, [order?.status, id]);
 
   const cancel = async () => {
-    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); load(); } catch (e: any) { show(e.message, "error"); }
+    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); }
   };
 
-  if (loading || !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
+  if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
 
   const cancelled = order.status === "cancelled";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
