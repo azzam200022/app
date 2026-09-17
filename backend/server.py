@@ -3,6 +3,7 @@ import re
 import uuid
 import json
 import io
+import asyncio
 import logging
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -86,6 +87,31 @@ CATEGORY_IMAGES = {
 DEFAULT_IMG = CATEGORY_IMAGES["أخرى"]
 CATALOG_ITEMS_CACHE = None
 EXISTING_PRODUCT_BARCODES_CACHE = None
+
+# Keep list/cart payloads small. Product descriptions are only needed by the
+# product detail endpoint, not by the home grid or cart.
+PRODUCT_LIST_PROJECTION = {
+    "id": 1,
+    "name": 1,
+    "category": 1,
+    "price": 1,
+    "old_price": 1,
+    "image_url": 1,
+    "stock": 1,
+    "is_published": 1,
+    "coming_soon": 1,
+    "created_at": 1,
+    "deleted_at": 1,
+}
+CART_PRODUCT_PROJECTION = {
+    "id": 1,
+    "name": 1,
+    "price": 1,
+    "image_url": 1,
+    "stock": 1,
+    "coming_soon": 1,
+    "deleted_at": 1,
+}
 
 
 def now_utc():
@@ -286,7 +312,9 @@ async def get_user_by_token(authorization: Optional[str]):
     # Firebase ID tokens are the primary authentication mechanism.
     if FIREBASE_APP:
         try:
-            decoded = firebase_auth.verify_id_token(token, app=FIREBASE_APP)
+            decoded = await asyncio.to_thread(
+                firebase_auth.verify_id_token, token, app=FIREBASE_APP
+            )
             firebase_uid = decoded.get("uid")
             email = (decoded.get("email") or "").lower()
             forced_role = "manager" if email in MANAGER_EMAILS else None
@@ -961,9 +989,10 @@ async def list_products(
         q["name"] = {"$regex": search, "$options": "i"}
     if offers:
         q["old_price"] = {"$ne": None, "$gt": 0}
-    docs = await db.products.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    docs_task = db.products.find(q, PRODUCT_LIST_PROJECTION).sort("created_at", -1).to_list(500)
+    user_task = get_user_by_token(authorization)
+    docs, user = await asyncio.gather(docs_task, user_task)
     fav = set()
-    user = await get_user_by_token(authorization)
     if user:
         favs = await db.favorites.find({"user_id": user["user_id"]}, {"_id": 0, "product_id": 1}).to_list(1000)
         fav = {f["product_id"] for f in favs}
@@ -998,11 +1027,12 @@ async def bestsellers(authorization: Optional[str] = Header(None)):
 
 @api.get("/products/{pid}")
 async def get_product(pid: str, authorization: Optional[str] = Header(None)):
-    d = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0})
+    product_task = db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0})
+    user_task = get_user_by_token(authorization)
+    d, user = await asyncio.gather(product_task, user_task)
     if not d:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     fav = set()
-    user = await get_user_by_token(authorization)
     if user:
         f = await db.favorites.find_one({"user_id": user["user_id"], "product_id": pid})
         if f:
@@ -1012,17 +1042,22 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
 
 @api.get("/categories")
 async def categories():
-    pipeline = [
-        {"$match": {"deleted_at": None, "is_published": True}},
-        {"$group": {"_id": "$category", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}},
+    docs = await db.products.find(
+        {"deleted_at": None, "is_published": True},
+        {"_id": 0, "category": 1},
+    ).to_list(5000)
+    counts = {}
+    for doc in docs:
+        category = doc.get("category") or "أخرى"
+        counts[category] = counts.get(category, 0) + 1
+    return [
+        {
+            "name": category,
+            "count": count,
+            "image": CATEGORY_IMAGES.get(category, DEFAULT_IMG),
+        }
+        for category, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
     ]
-    res = await db.products.aggregate(pipeline).to_list(100)
-    out = []
-    for r in res:
-        cat = r["_id"] or "أخرى"
-        out.append({"name": cat, "count": r["count"], "image": CATEGORY_IMAGES.get(cat, DEFAULT_IMG)})
-    return out
 
 
 @api.post("/products")
@@ -1195,26 +1230,48 @@ async def validate_coupon(body: CouponValidateIn, user=Depends(require_user)):
 
 
 # ---------------- Cart ----------------
-async def build_cart(user_id):
-    cart = await db.carts.find_one({"user_id": user_id}, {"_id": 0})
-    items = cart["items"] if cart else []
+async def load_cart_products(items, seed=None):
+    seed = dict(seed or {})
+    ids = [str(item.get("product_id")) for item in items if item.get("product_id")]
+    missing_ids = [product_id for product_id in ids if product_id not in seed]
+    if missing_ids:
+        products = await db.products.find(
+            {"id": {"$in": list(dict.fromkeys(missing_ids))}, "deleted_at": None},
+            CART_PRODUCT_PROJECTION,
+        ).to_list(len(missing_ids))
+        seed.update({product["id"]: product for product in products})
+    return seed
+
+
+def cart_from_items(items, products_by_id):
     out = []
     total = 0.0
-    for it in items:
-        p = await db.products.find_one({"id": it["product_id"], "deleted_at": None}, {"_id": 0})
-        if not p:
+    for item in items:
+        product = products_by_id.get(str(item.get("product_id")))
+        quantity = max(int(item.get("quantity", 0) or 0), 0)
+        if not product or quantity <= 0:
             continue
-        line = p["price"] * it["quantity"]
-        total += line
-        out.append({
-            "product_id": p["id"],
-            "name": p["name"],
-            "price": p["price"],
-            "image_url": p["image_url"],
-            "quantity": it["quantity"],
-            "line_total": line,
-        })
-    return {"items": out, "total": total, "count": sum(i["quantity"] for i in out)}
+        line_total = float(product.get("price", 0) or 0) * quantity
+        total += line_total
+        out.append(
+            {
+                "product_id": product["id"],
+                "name": product.get("name", ""),
+                "price": product.get("price", 0),
+                "image_url": product.get("image_url", ""),
+                "quantity": quantity,
+                "line_total": line_total,
+            }
+        )
+    return {"items": out, "total": total, "count": sum(item["quantity"] for item in out)}
+
+
+async def build_cart(user_id, cart_doc=None, items=None, products_by_id=None):
+    if cart_doc is None:
+        cart_doc = await db.carts.find_one({"user_id": user_id}, {"_id": 0})
+    cart_items = list(items if items is not None else (cart_doc or {}).get("items", []))
+    products = products_by_id or await load_cart_products(cart_items)
+    return cart_from_items(cart_items, products)
 
 
 @api.get("/cart")
@@ -1224,15 +1281,19 @@ async def get_cart(user=Depends(require_user)):
 
 @api.post("/cart/items")
 async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
-    prod = await db.products.find_one({"id": body.product_id, "deleted_at": None}, {"_id": 0})
+    cart_task = db.carts.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    product_task = db.products.find_one(
+        {"id": body.product_id, "deleted_at": None},
+        CART_PRODUCT_PROJECTION,
+    )
+    cart, prod = await asyncio.gather(cart_task, product_task)
     if not prod:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon"):
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     if (prod.get("stock", 0) or 0) <= 0:
         raise HTTPException(status_code=400, detail="نفدت الكمية")
-    cart = await db.carts.find_one({"user_id": user["user_id"]})
-    items = cart["items"] if cart else []
+    items = list((cart or {}).get("items", []))
     found = False
     for it in items:
         if it["product_id"] == body.product_id:
@@ -1243,24 +1304,29 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         items.append({"product_id": body.product_id, "quantity": body.quantity})
     items = [i for i in items if i["quantity"] > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
-    return await build_cart(user["user_id"])
+    products = await load_cart_products(items, {prod["id"]: prod})
+    return cart_from_items(items, products)
 
 
 @api.put("/cart/items")
 async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
     cart = await db.carts.find_one({"user_id": user["user_id"]})
-    items = cart["items"] if cart else []
+    items = list((cart or {}).get("items", []))
     items = [i for i in items if i["product_id"] != body.product_id]
     if body.quantity > 0:
         items.append({"product_id": body.product_id, "quantity": body.quantity})
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
-    return await build_cart(user["user_id"])
+    products = await load_cart_products(items)
+    return cart_from_items(items, products)
 
 
 @api.delete("/cart/items/{pid}")
 async def remove_cart_item(pid: str, user=Depends(require_user)):
-    await db.carts.update_one({"user_id": user["user_id"]}, {"$pull": {"items": {"product_id": pid}}})
-    return await build_cart(user["user_id"])
+    cart = await db.carts.find_one({"user_id": user["user_id"]})
+    items = [item for item in (cart or {}).get("items", []) if item["product_id"] != pid]
+    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
+    products = await load_cart_products(items)
+    return cart_from_items(items, products)
 
 
 # ---------------- Orders ----------------
