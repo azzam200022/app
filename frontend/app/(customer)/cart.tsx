@@ -51,7 +51,7 @@ export default function CartScreen() {
             contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             renderItem={({ item }) => (
               <View style={styles.item} testID={`cart-item-${item.product_id}`}>
-                <Image source={{ uri: resolveImage(item.image_url) }} style={styles.itemImg} contentFit="cover" />
+                <Image source={{ uri: resolveImage(item.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
                 <View style={{ flex: 1 }}>
                   <T weight="semi" numberOfLines={2}>{item.name}</T>
                   <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 4 }}>{formatPrice(item.price)}</T>
