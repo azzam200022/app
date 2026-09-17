@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
-import { api, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
+import { api, getCachedOrders, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
 import { printOrder } from "@/src/lib/receipt";
 import { staticMapUrl, staticMapUrlTwo, openDirections } from "@/src/lib/maps";
 import { useAuth } from "@/src/context/AuthContext";
@@ -18,8 +18,9 @@ export default function OrderDetail() {
   const router = useRouter();
   const { show } = useToast();
   const { user } = useAuth();
-  const [order, setOrder] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
+  const [order, setOrder] = useState<any>(cachedOrder || null);
+  const [loading, setLoading] = useState(!cachedOrder);
   const isStaff = user?.role === "manager" || user?.role === "delivery";
 
   const load = async (force = false) => {
@@ -101,7 +102,7 @@ export default function OrderDetail() {
         <View style={styles.itemsCard}>
           {order.items.map((it: any, idx: number) => (
             <View key={it.product_id} style={[styles.item, idx < order.items.length - 1 && styles.itemBorder]}>
-              <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" />
+              <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{it.name}</T>
                 <T color={colors.muted} size={type.sm}>{it.quantity} × {formatPrice(it.price)}</T>
