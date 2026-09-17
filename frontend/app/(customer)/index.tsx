@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Animated, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,49 +26,58 @@ export default function Home() {
   const [banners, setBanners] = useState<any[]>([]);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const categoryRequest = React.useRef(0);
   const scrollY = React.useRef(new Animated.Value(0)).current;
   const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
   const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
   const barPadBottom = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.sm, 3], extrapolate: "clamp" });
   const barPadTopExtra = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
 
-  const loadProducts = useCallback(async (cat: string) => {
-    const p = await api.products(cat === "الكل" ? {} : { category: cat });
-    setProducts(p);
-  }, []);
-
-  const loadAll = useCallback(async () => {
+  const loadProducts = useCallback(async (cat: string, force = false) => {
+    const requestId = ++categoryRequest.current;
+    setProductsLoading(true);
     try {
-      const [c, o, p, b] = await Promise.all([
-        api.categories(),
-        api.products({ offers: true }),
-        api.products(selected === "الكل" ? {} : { category: selected }),
-        api.banners(),
-      ]);
-      setCats(c);
-      setOffers(o.slice(0, 6));
-      setProducts(p);
-      setBanners(Array.isArray(b) ? b : []);
-      setBannerIndex(0);
+      const p = await api.products(cat === "الكل" ? {} : { category: cat }, force);
+      if (requestId === categoryRequest.current) setProducts(p);
     } catch (e: any) {
-      show(e.message, "error");
+      if (requestId === categoryRequest.current) show(e.message, "error");
     } finally {
-      setLoading(false);
+      if (requestId === categoryRequest.current) setProductsLoading(false);
     }
-  }, [selected, loadProducts, show]);
+  }, [show]);
+
+  const loadAll = useCallback(async (force = false) => {
+    const results = await Promise.allSettled([
+      api.categories(force),
+      api.products({ offers: true }, force),
+      api.products(selected === "الكل" ? {} : { category: selected }, force),
+      api.banners(force),
+    ]);
+    const [c, o, p, b] = results;
+    if (c.status === "fulfilled") setCats(c.value);
+    if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 6) : []);
+    if (p.status === "fulfilled") setProducts(p.value);
+    if (b.status === "fulfilled") {
+      setBanners(Array.isArray(b.value) ? b.value : []);
+      setBannerIndex(0);
+    }
+    const failed = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+    if (failed) show(failed.reason?.message || "تعذر تحميل بعض البيانات", "error");
+    setLoading(false);
+  }, [selected, show]);
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
-  const onSelect = async (c: string) => {
+  const onSelect = (c: string) => {
     setSelected(c);
-    setLoading(true);
-    try { await loadProducts(c); } finally { setLoading(false); }
+    void loadProducts(c);
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadAll();
+    await loadAll(true);
     setRefreshing(false);
   };
 
@@ -79,7 +88,11 @@ export default function Home() {
     } catch (e: any) { show(e.message, "error"); }
   };
 
-  const getQuantity = (id: string) => cart.items.find((item) => item.product_id === id)?.quantity || 0;
+  const quantities = useMemo(() => {
+    const result: Record<string, number> = {};
+    cart.items.forEach((item) => { result[item.product_id] = item.quantity; });
+    return result;
+  }, [cart.items]);
 
   const onIncrease = async (p: any) => {
     try {
@@ -160,7 +173,7 @@ export default function Home() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={getQuantity(item.id)} width={160} /></View>
+              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
             )}
           />
         </View>
@@ -191,10 +204,7 @@ export default function Home() {
         </View>
       </Animated.View>
 
-      {loading && !refreshing ? (
-        <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>
-      ) : (
-        <Animated.FlatList
+      <Animated.FlatList
           data={products}
           keyExtractor={(i) => i.id}
           numColumns={2}
@@ -208,10 +218,10 @@ export default function Home() {
           scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
-           renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={getQuantity(item.id)} />}
-          ListEmptyComponent={<View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
+           renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} />}
+          ListEmptyComponent={loading ? <View style={{ padding: spacing["2xl"], alignItems: "center" }}><ActivityIndicator color={colors.brandPrimary} /></View> : <View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
+          ListFooterComponent={productsLoading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginVertical: spacing.md }} /> : null}
         />
-      )}
     </View>
   );
 }
