@@ -9,7 +9,23 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { resolveImage, formatPrice, api } from "@/src/lib/api";
 import { T, Badge } from "@/src/components/ui";
 
-export function ProductCard({ product, onAdd, onToggleFav, width }: { product: any; onAdd?: (p: any) => void; onToggleFav?: (id: string, val: boolean) => void; width?: number }) {
+export function ProductCard({
+  product,
+  onAdd,
+  onIncrease,
+  onDecrease,
+  onToggleFav,
+  quantity = 0,
+  width,
+}: {
+  product: any;
+  onAdd?: (p: any) => void;
+  onIncrease?: (p: any) => void;
+  onDecrease?: (p: any) => void;
+  onToggleFav?: (id: string, val: boolean) => void;
+  quantity?: number;
+  width?: number;
+}) {
   const router = useRouter();
   const [fav, setFav] = React.useState(!!product.is_favorite);
   const unavailable = product.available === false;
@@ -62,18 +78,49 @@ export function ProductCard({ product, onAdd, onToggleFav, width }: { product: a
               <T size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
             ) : null}
           </View>
-          <Pressable
-            testID={`add-cart-${product.id}`}
-            disabled={unavailable}
-            onPress={() => {
-              if (unavailable) return;
-              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onAdd?.(product);
-            }}
-            style={({ pressed }) => [unavailable ? styles.addBtnDisabled : styles.addBtn, pressed && !unavailable && { opacity: 0.8 }]}
-          >
-            <Feather name={unavailable ? "slash" : "plus"} size={20} color={unavailable ? colors.muted : "#fff"} />
-          </Pressable>
+          {quantity > 0 && !unavailable ? (
+            <View style={styles.quantityControls}>
+              <Pressable
+                testID={`decrease-cart-${product.id}`}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  if (Platform.OS !== "web") Haptics.selectionAsync();
+                  onDecrease?.(product);
+                }}
+                style={styles.quantityBtn}
+                hitSlop={4}
+              >
+                <Feather name="minus" size={16} color={colors.onSurface} />
+              </Pressable>
+              <T weight="bold" style={styles.quantityText}>{quantity}</T>
+              <Pressable
+                testID={`increase-cart-${product.id}`}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  if (Platform.OS !== "web") Haptics.selectionAsync();
+                  onIncrease?.(product);
+                }}
+                style={styles.quantityBtn}
+                hitSlop={4}
+              >
+                <Feather name="plus" size={16} color={colors.onSurface} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              testID={`add-cart-${product.id}`}
+              disabled={unavailable}
+              onPress={(event) => {
+                event.stopPropagation();
+                if (unavailable) return;
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onAdd?.(product);
+              }}
+              style={({ pressed }) => [unavailable ? styles.addBtnDisabled : styles.addBtn, pressed && !unavailable && { opacity: 0.8 }]}
+            >
+              <Feather name={unavailable ? "slash" : "shopping-cart"} size={18} color={unavailable ? colors.muted : "#fff"} />
+            </Pressable>
+          )}
         </View>
       </View>
     </Pressable>
@@ -92,6 +139,9 @@ const styles = StyleSheet.create({
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  outOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  quantityControls: { height: 40, minWidth: 94, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
+  quantityBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  quantityText: { minWidth: 20, textAlign: "center" },
+  outOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });
