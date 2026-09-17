@@ -17,7 +17,7 @@ import { useToast } from "@/src/context/ToastContext";
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { add } = useCart();
+  const { cart, add, setQty, remove } = useCart();
   const { show } = useToast();
   const [cats, setCats] = useState<any[]>([]);
   const [selected, setSelected] = useState("الكل");
@@ -79,6 +79,26 @@ export default function Home() {
     } catch (e: any) { show(e.message, "error"); }
   };
 
+  const getQuantity = (id: string) => cart.items.find((item) => item.product_id === id)?.quantity || 0;
+
+  const onIncrease = async (p: any) => {
+    try {
+      await add(p.id, 1);
+    } catch (e: any) {
+      show(e.message, "error");
+    }
+  };
+
+  const onDecrease = async (p: any) => {
+    const quantity = getQuantity(p.id);
+    try {
+      if (quantity <= 1) await remove(p.id);
+      else await setQty(p.id, quantity - 1);
+    } catch (e: any) {
+      show(e.message, "error");
+    }
+  };
+
   const header = (
     <View>
       {/* Offers banner carousel */}
@@ -117,7 +137,7 @@ export default function Home() {
             <View style={styles.heroCta}><T weight="bold" color={colors.gold}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.gold} /></View>
           </View>
         </Pressable>
-      )
+      )}
 
       {/* Categories */}
       <View style={styles.sectionHead}>
@@ -140,7 +160,7 @@ export default function Home() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} width={160} /></View>
+              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={getQuantity(item.id)} width={160} /></View>
             )}
           />
         </View>
@@ -177,9 +197,9 @@ export default function Home() {
         <Animated.FlatList
           data={products}
           keyExtractor={(i) => i.id}
-          numColumns={3}
+          numColumns={2}
           ListHeaderComponent={header}
-          columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
+           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
           initialNumToRender={12}
           maxToRenderPerBatch={8}
@@ -188,7 +208,7 @@ export default function Home() {
           scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
-          renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} />}
+           renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={getQuantity(item.id)} />}
           ListEmptyComponent={<View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
         />
       )}
