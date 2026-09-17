@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, Badge } from "@/src/components/ui";
-import { api, resolveImage, formatPrice } from "@/src/lib/api";
+import { api, getCachedProduct, resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -25,14 +25,23 @@ export default function ProductDetail() {
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    const cached = id ? getCachedProduct(id) : undefined;
+    if (cached) {
+      setProduct(cached);
+      setFav(!!cached.is_favorite);
+      setLoading(false);
+    }
     (async () => {
       try {
         const p = await api.product(id!);
+        if (!active) return;
         setProduct(p);
         setFav(!!p.is_favorite);
-      } catch (e: any) { show(e.message, "error"); }
-      finally { setLoading(false); }
+      } catch (e: any) { if (active) show(e.message, "error"); }
+      finally { if (active) setLoading(false); }
     })();
+    return () => { active = false; };
   }, [id]); // eslint-disable-line
 
   const toggleFav = async () => {
