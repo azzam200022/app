@@ -10,7 +10,13 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ProductCard } from "@/src/components/ProductCard";
 import { CategoryCircles } from "@/src/components/CategoryCircles";
-import { api, resolveImage } from "@/src/lib/api";
+import {
+  api,
+  getCachedBanners,
+  getCachedCategories,
+  getCachedProducts,
+  resolveImage,
+} from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -19,13 +25,13 @@ export default function Home() {
   const router = useRouter();
   const { cart, add, setQty, remove } = useCart();
   const { show } = useToast();
-  const [cats, setCats] = useState<any[]>([]);
+  const [cats, setCats] = useState<any[]>(() => getCachedCategories() || []);
   const [selected, setSelected] = useState("الكل");
-  const [products, setProducts] = useState<any[]>([]);
-  const [offers, setOffers] = useState<any[]>([]);
-  const [banners, setBanners] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>(() => getCachedProducts() || []);
+  const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 6) || []);
+  const [banners, setBanners] = useState<any[]>(() => getCachedBanners() || []);
   const [bannerIndex, setBannerIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCachedProducts() === undefined);
   const [productsLoading, setProductsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const categoryRequest = React.useRef(0);
@@ -70,10 +76,10 @@ export default function Home() {
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
-  const onSelect = (c: string) => {
+  const onSelect = useCallback((c: string) => {
     setSelected(c);
     void loadProducts(c);
-  };
+  }, [loadProducts]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -81,12 +87,12 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  const onAdd = async (p: any) => {
+  const onAdd = useCallback(async (p: any) => {
     try {
       await add(p.id, 1);
       show("تمت الإضافة إلى السلة");
     } catch (e: any) { show(e.message, "error"); }
-  };
+  }, [add, show]);
 
   const quantities = useMemo(() => {
     const result: Record<string, number> = {};
@@ -94,23 +100,23 @@ export default function Home() {
     return result;
   }, [cart.items]);
 
-  const onIncrease = async (p: any) => {
+  const onIncrease = useCallback(async (p: any) => {
     try {
       await add(p.id, 1);
     } catch (e: any) {
       show(e.message, "error");
     }
-  };
+  }, [add, show]);
 
-  const onDecrease = async (p: any) => {
-    const quantity = getQuantity(p.id);
+  const onDecrease = useCallback(async (p: any) => {
+    const quantity = cart.items.find((item) => item.product_id === p.id)?.quantity || 0;
     try {
       if (quantity <= 1) await remove(p.id);
       else await setQty(p.id, quantity - 1);
     } catch (e: any) {
       show(e.message, "error");
     }
-  };
+  }, [cart.items, remove, setQty, show]);
 
   const header = (
     <View>
