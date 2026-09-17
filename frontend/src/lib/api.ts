@@ -64,6 +64,39 @@ export function setCachedCart(cart: any) {
   setCachedValue("cart", cart, CACHE_TTLS.cart);
 }
 
+export function getCachedValue<T = any>(key: string): T | undefined {
+  const cached = responseCache.get(key);
+  return cached ? cloneValue(cached.value) : undefined;
+}
+
+export function getCachedCart() {
+  return getCachedValue("cart");
+}
+
+export function getCachedCategories() {
+  return getCachedValue<any[]>("categories");
+}
+
+export function getCachedBanners() {
+  return getCachedValue<any[]>("banners");
+}
+
+export function getCachedOrders() {
+  return getCachedValue<any[]>("orders");
+}
+
+function productsCacheKey(params: { category?: string; search?: string; offers?: boolean } = {}) {
+  const q = new URLSearchParams();
+  if (params.category) q.set("category", params.category);
+  if (params.search) q.set("search", params.search);
+  if (params.offers) q.set("offers", "true");
+  return "products:" + q.toString();
+}
+
+export function getCachedProducts(params: { category?: string; search?: string; offers?: boolean } = {}) {
+  return getCachedValue<any[]>(productsCacheKey(params));
+}
+
 export function getCachedProduct(id: string) {
   return productCache.get(id) ? cloneValue(productCache.get(id)) : undefined;
 }
@@ -122,12 +155,8 @@ export const api = {
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
   products: (params: { category?: string; search?: string; offers?: boolean } = {}, force = false) => {
-    const q = new URLSearchParams();
-    if (params.category) q.set("category", params.category);
-    if (params.search) q.set("search", params.search);
-    if (params.offers) q.set("offers", "true");
-    const suffix = q.toString();
-    const key = "products:" + suffix;
+    const key = productsCacheKey(params);
+    const suffix = key.slice("products:".length);
     return cachedRequest(key, async () => {
       const products = await req("/products" + (suffix ? "?" + suffix : ""));
       if (Array.isArray(products)) products.forEach((product) => product?.id && productCache.set(product.id, cloneValue(product)));
