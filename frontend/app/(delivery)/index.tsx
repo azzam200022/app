@@ -156,7 +156,7 @@ export default function DeliveryHome() {
         <>
           <View style={styles.availableMeta}>
             <View style={styles.info}><Feather name="navigation" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary}>{item.distance_km != null ? String(item.distance_km) + " كم تقريباً" : "المسافة غير متاحة"}</T></View>
-            <T size={type.sm} weight="semi" color={colors.brandPrimary}>طلب متاح الآن</T>
+            <T size={type.sm} weight="semi" color={colors.brandPrimary}>طلب جاهز للاستلام</T>
           </View>
           <Button title={claiming === item.id ? "جارٍ استلام الطلب..." : "استلام الطلب"} icon="check" onPress={() => claimOrder(item.id)} disabled={claiming === item.id} testID={"claim-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
         </>
