@@ -151,6 +151,11 @@ export default function Home() {
 
   const header = (
     <View>
+      <Pressable testID="home-search-prompt" onPress={() => router.push("/search")} style={styles.searchPrompt}>
+        <Feather name="search" size={18} color={colors.muted} />
+        <T color={colors.muted} size={type.sm}>ابحث عن منتج أو تصنيف</T>
+      </Pressable>
+
       {/* Offers banner carousel */}
       {banners.length > 0 ? (
         <View style={styles.hero}>
@@ -286,6 +291,7 @@ const styles = StyleSheet.create({
   fullHeader: { overflow: "hidden" },
   topRow: { height: 40, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  searchPrompt: { height: 48, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
   compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
