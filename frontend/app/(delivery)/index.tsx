@@ -99,7 +99,7 @@ export default function DeliveryHome() {
   const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const done = orders.filter((o) => o.status === "delivered").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const collectedToday = done.filter((o) => isToday(o.created_at)).reduce((s, o) => s + (o.total || 0), 0);
+  const collectedToday = done.filter((o) => isToday(o.delivered_at || o.created_at)).reduce((s, o) => s + (o.total || 0), 0);
   const list = tab === "available" ? available : tab === "active" ? active : done;
 
   // Broadcast live location for active deliveries
