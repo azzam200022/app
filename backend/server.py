@@ -1575,13 +1575,31 @@ def approximate_distance_km(location):
 
 
 def delivery_order_view(order, delivery_state: str):
-    item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in order.get("items", []))
-    view = dict(order)
-    view["delivery_state"] = delivery_state
-    view["area"] = view.get("area") or infer_order_area(view.get("address", ""))
-    view["item_count"] = item_count
-    view["distance_km"] = approximate_distance_km(view.get("location"))
-    return view
+    items = order.get("items", [])
+    item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in items)
+    location = order.get("location")
+    return {
+        "id": order.get("id"),
+        "customer_name": order.get("customer_name", ""),
+        "phone": order.get("phone") or order.get("phone_number"),
+        "address": order.get("address", ""),
+        "location": location,
+        "area": order.get("area") or infer_order_area(order.get("address", "")),
+        "distance_km": approximate_distance_km(location),
+        "items": [
+            {key: item.get(key) for key in ("product_id", "name", "image_url", "price", "quantity", "line_total")}
+            for item in items
+        ],
+        "item_count": item_count,
+        "total": order.get("total", 0),
+        "status": order.get("status"),
+        "delivery_state": delivery_state,
+        "return_status": order.get("return_status"),
+        "returned_total": order.get("returned_total", 0),
+        "created_at": order.get("created_at"),
+        "delivered_at": order.get("delivered_at"),
+        "agent_phone": order.get("agent_phone"),
+    }
 
 
 @api.post("/orders")
