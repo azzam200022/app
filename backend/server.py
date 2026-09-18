@@ -242,6 +242,7 @@ class OrderIn(BaseModel):
     area: Optional[str] = None
     delivery_area_id: Optional[str] = None
     coupon_code: Optional[str] = None
+    client_request_id: Optional[str] = Field(None, min_length=8, max_length=100)
 
 
 class StatusUpdateIn(BaseModel):
@@ -1585,6 +1586,13 @@ def delivery_order_view(order, delivery_state: str):
 
 @api.post("/orders")
 async def create_order(body: OrderIn, user=Depends(require_user)):
+    if body.client_request_id:
+        existing = await db.orders.find_one(
+            {"user_id": user["user_id"], "client_request_id": body.client_request_id},
+            {"_id": 0},
+        )
+        if existing:
+            return existing
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
@@ -1634,6 +1642,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "coupon_discount_value": float(coupon.get("discount_value", coupon.get("discount_percent", 0)) or 0) if coupon else 0.0,
         "coupon_applies_to": coupon.get("applies_to", "subtotal") if coupon else None,
         "coupon_discount_percent": float(coupon["discount_percent"]) if coupon else 0.0,
+        "client_request_id": body.client_request_id,
         "total": total,
         "status": "pending",
         "payment": "cod",
@@ -1845,7 +1854,12 @@ async def admin_update_status(oid: str, body: StatusUpdateIn, user=Depends(requi
         return {"ok": True}
     if body.status not in ORDER_STATUS_TRANSITIONS.get(current_status, set()):
         raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
-    await db.orders.update_one({"id": oid}, {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()}}})
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "status": current_status},
+        {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حاول تحديث الصفحة")
     await notify_customer_status(oid, body.status)
     return {"ok": True}
 
@@ -1977,7 +1991,17 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
         raise HTTPException(status_code=403, detail="غير مصرح")
     if body.status not in ("out_for_delivery", "delivered"):
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
-    await db.orders.update_one({"id": oid}, {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()}}})
+    current_status = d.get("status")
+    if body.status == current_status:
+        return {"ok": True}
+    if body.status not in ORDER_STATUS_TRANSITIONS.get(current_status, set()):
+        raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "status": current_status},
+        {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حاول تحديث الصفحة")
     await notify_customer_status(oid, body.status)
     return {"ok": True}
 
