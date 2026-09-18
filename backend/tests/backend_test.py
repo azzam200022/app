@@ -349,8 +349,13 @@ class TestLifecycle:
         # Verify final state
         final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
         assert final["status"] == "delivered"
+        assert final["delivered_at"]
         statuses = [t["status"] for t in final["timeline"]]
         assert "delivered" in statuses and "out_for_delivery" in statuses
+
+        stale_location = s.post(f"{API}/delivery/orders/{oid}/location", headers=H(delivery_token),
+                                json={"lat": 33.3152, "lng": 44.3661}, timeout=15)
+        assert stale_location.status_code == 409
 
 
     def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
