@@ -247,6 +247,7 @@ class OrderIn(BaseModel):
 
 class StatusUpdateIn(BaseModel):
     status: str
+    reason: Optional[str] = Field(None, max_length=200)
 
 
 class AssignIn(BaseModel):
@@ -1532,6 +1533,7 @@ STATUS_LABEL = {
     "ready_for_delivery": "جاهز للتوصيل",
     "out_for_delivery": "في الطريق",
     "delivered": "تم التوصيل",
+    "delivery_failed": "تعذر التسليم",
     "cancelled": "ملغي",
 }
 ORDER_STATUS_TRANSITIONS = {
@@ -1539,8 +1541,9 @@ ORDER_STATUS_TRANSITIONS = {
     "confirmed": {"preparing", "cancelled"},
     "preparing": {"ready_for_delivery", "cancelled"},
     "ready_for_delivery": {"cancelled"},
-    "out_for_delivery": {"delivered"},
+    "out_for_delivery": {"delivered", "delivery_failed"},
     "delivered": set(),
+    "delivery_failed": set(),
     "cancelled": set(),
 }
 
@@ -1875,6 +1878,12 @@ async def admin_update_status(oid: str, body: StatusUpdateIn, user=Depends(requi
     status_update = {"status": body.status}
     if body.status == "delivered":
         status_update["delivered_at"] = now_utc().isoformat()
+    if body.status == "delivery_failed":
+        failure_reason = (body.reason or "").strip()
+        if not failure_reason:
+            raise HTTPException(status_code=400, detail="سبب تعذر التسليم مطلوب")
+        status_update["delivery_failed_reason"] = failure_reason
+        status_update["delivery_failed_at"] = now_utc().isoformat()
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": current_status},
         {"$set": status_update, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
@@ -2010,7 +2019,7 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
     d = await db.orders.find_one({"id": oid})
     if not d or (d.get("agent_id") != user["user_id"] and user["role"] != "manager"):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    if body.status not in ("out_for_delivery", "delivered"):
+    if body.status not in ("out_for_delivery", "delivered", "delivery_failed"):
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
     current_status = d.get("status")
     if body.status == current_status:
