@@ -28,6 +28,7 @@ export const ProductCard = React.memo(function ProductCard({
 }) {
   const router = useRouter();
   const [fav, setFav] = React.useState(!!product.is_favorite);
+  const [imageFailed, setImageFailed] = React.useState(false);
   const unavailable = product.available === false;
   const outLabel = product.stock_status === "coming_soon" ? "يتوفر قريباً" : "نفدت الكمية";
   const discount = product.old_price && product.old_price > product.price
@@ -56,7 +57,14 @@ export const ProductCard = React.memo(function ProductCard({
       style={[styles.card, width ? { width } : { flex: 1 }]}
     >
       <View style={styles.imgWrap}>
-        <Image source={{ uri: resolveImage(product.image_url) }} style={[styles.img, unavailable && { opacity: 0.4 }]} contentFit="cover" cachePolicy="memory-disk" transition={200} />
+        {imageFailed ? (
+          <View style={[styles.img, styles.imageFallback]}>
+            <Feather name="image" size={28} color={colors.muted} />
+            <T size={type.xs} color={colors.muted}>الصورة غير متاحة</T>
+          </View>
+        ) : (
+          <Image source={{ uri: resolveImage(product.image_url) }} style={[styles.img, unavailable && { opacity: 0.4 }]} contentFit="cover" cachePolicy="memory-disk" transition={200} onError={() => setImageFailed(true)} />
+        )}
         {unavailable && (
           <View style={styles.outOverlay}>
             <View style={styles.outPill}><T weight="bold" size={type.sm} color="#fff">{outLabel}</T></View>
@@ -132,10 +140,27 @@ export const ProductCard = React.memo(function ProductCard({
   );
 });
 
+export function ProductCardSkeleton({ width }: { width?: number }) {
+  return (
+    <View style={[styles.card, styles.skeletonCard, width ? { width } : { flex: 1 }]}>
+      <View style={[styles.imgWrap, styles.skeletonBlock]} />
+      <View style={styles.body}>
+        <View style={[styles.skeletonLine, styles.skeletonWide]} />
+        <View style={[styles.skeletonLine, styles.skeletonShort]} />
+        <View style={styles.skeletonFooter}>
+          <View style={[styles.skeletonLine, styles.skeletonPrice]} />
+          <View style={styles.skeletonAction} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: { backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, shadowColor: "#15302E", shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   imgWrap: { width: "100%", aspectRatio: 1, backgroundColor: colors.surfaceSecondary },
   img: { width: "100%", height: "100%" },
+  imageFallback: { alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: colors.surfaceSecondary },
   badgePos: { position: "absolute", top: spacing.sm, insetInlineStart: spacing.sm },
   favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center" },
   body: { padding: spacing.md, minHeight: 138 },
@@ -148,6 +173,14 @@ const styles = StyleSheet.create({
   quantityControls: { height: 40, minWidth: 94, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
   quantityBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   quantityText: { minWidth: 20, textAlign: "center" },
+  skeletonCard: { overflow: "hidden" },
+  skeletonBlock: { backgroundColor: colors.surfaceSecondary },
+  skeletonLine: { height: 12, borderRadius: 6, backgroundColor: colors.surfaceSecondary },
+  skeletonWide: { width: "82%" },
+  skeletonShort: { width: "52%", marginTop: spacing.sm },
+  skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg },
+  skeletonPrice: { width: "34%" },
+  skeletonAction: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   outOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });
