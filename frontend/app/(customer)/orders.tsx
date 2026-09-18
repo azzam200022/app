@@ -12,6 +12,7 @@ export const STATUS_COLOR: Record<string, string> = {
   pending: "#C5A059",
   confirmed: "#3A5A40",
   preparing: "#4A524C",
+  ready_for_delivery: "#8A5A00",
   out_for_delivery: "#285C4D",
   delivered: "#1F4529",
   cancelled: "#8B3A3A",
@@ -67,6 +68,7 @@ export default function Orders() {
                 <T weight="bold">طلب #{item.id.replace("ORD", "")}</T>
                 <StatusPill status={item.status} />
               </View>
+              {item.agent_name ? <View style={styles.agentRow}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}{item.agent_phone ? " • " + item.agent_phone : ""}</T></View> : null}
               <View style={styles.cardRow}>
                 <T color={colors.muted} size={type.sm}>{new Date(item.created_at).toLocaleDateString("ar-EG")}</T>
                 <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
@@ -93,6 +95,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.sm },
   cardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   cardRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
   trackRow: { flexDirection: "row-reverse", alignItems: "center", gap: 2 },
 });
