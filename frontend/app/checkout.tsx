@@ -32,7 +32,7 @@ export default function Checkout() {
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
-  const displayedTotal = (appliedCoupon?.total ?? cart.total) + deliveryFee;
+  const displayedTotal = appliedCoupon?.total ?? (cart.total + deliveryFee);
 
   const detectLocation = async () => {
     setLocating(true);
@@ -51,6 +51,7 @@ export default function Checkout() {
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const nextCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setCoords(nextCoords);
+      if (appliedCoupon) setAppliedCoupon(null);
       setQuoteLoading(true);
       try {
         const quote = await api.deliveryQuote(nextCoords.lat, nextCoords.lng);
@@ -70,7 +71,7 @@ export default function Checkout() {
     if (!code) return show("اكتب كود الخصم أولاً", "error");
     setCouponLoading(true);
     try {
-      const result = await api.validateCoupon(code);
+      const result = await api.validateCoupon(code, coords || undefined);
       setAppliedCoupon(result);
       setCouponCode(result.coupon_code);
       show("تم تطبيق كود الخصم ✓");
@@ -155,14 +156,16 @@ export default function Checkout() {
               {couponLoading ? <ActivityIndicator color="#fff" /> : <T weight="bold" color="#fff">تطبيق</T>}
             </Pressable>
           </View>
-          {appliedCoupon ? <T color={colors.success} size={type.sm} style={{ marginTop: -spacing.sm }}>خصم {appliedCoupon.discount_percent}% — وفرت {formatPrice(appliedCoupon.discount_amount)}</T> : null}
+          {appliedCoupon ? <T color={colors.success} size={type.sm} style={{ marginTop: -spacing.sm }}>
+            {appliedCoupon.applies_to === "delivery" ? "خصم على التوصيل" : "خصم على الفاتورة"} — وفرت {formatPrice(appliedCoupon.discount_amount)}
+          </T> : null}
 
           <View style={styles.summary}>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryFee > 0 ? colors.onSurface : colors.success}>{quoteLoading ? "جارٍ الحساب..." : deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"}</T></View>
             {deliveryQuote?.area_name ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
-            {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>الخصم</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
+            {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>{appliedCoupon.applies_to === "delivery" ? "خصم التوصيل" : "الخصم"}</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
             <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(displayedTotal)}</T></View>
           </View>
         </ScrollView>
