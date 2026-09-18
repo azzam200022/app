@@ -309,6 +309,10 @@ class FirestoreCollection:
             if operator == "$set":
                 for field, value in values.items():
                     _set_value(item, field, value)
+            elif operator == "$inc":
+                for field, value in values.items():
+                    current = _value(item, field) or 0
+                    _set_value(item, field, current + value)
             elif operator == "$push":
                 for field, value in values.items():
                     item.setdefault(field, []).append(deepcopy(value))
