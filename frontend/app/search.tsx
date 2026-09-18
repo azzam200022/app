@@ -70,6 +70,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   searchBar: { flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 48 },
-  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%" },
+  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%", borderWidth: 0, outlineStyle: "none", outlineWidth: 0 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
