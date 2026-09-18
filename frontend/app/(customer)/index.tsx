@@ -8,7 +8,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
-import { ProductCard } from "@/src/components/ProductCard";
+import { ProductCard, ProductCardSkeleton } from "@/src/components/ProductCard";
 import { CategoryCircles } from "@/src/components/CategoryCircles";
 import {
   api,
@@ -270,7 +270,7 @@ export default function Home() {
            onScroll={handleScroll}
            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
            renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} />}
-           ListEmptyComponent={loading ? <View style={{ padding: spacing["2xl"], alignItems: "center" }}><ActivityIndicator color={colors.brandPrimary} /></View> : <View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
+           ListEmptyComponent={loading ? <ProductGridSkeleton /> : <View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
            ListFooterComponent={productsLoading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginVertical: spacing.md }} /> : null}
          />
 
@@ -281,6 +281,15 @@ export default function Home() {
           </Pressable>
         </View>
       )}
+    </View>
+  );
+}
+
+function ProductGridSkeleton() {
+  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2;
+  return (
+    <View style={styles.loadingGrid}>
+      {[0, 1, 2, 3].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
     </View>
   );
 }
@@ -307,5 +316,6 @@ const styles = StyleSheet.create({
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.sm },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
+  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing["2xl"] },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
