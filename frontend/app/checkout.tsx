@@ -32,7 +32,13 @@ export default function Checkout() {
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
-  const displayedTotal = appliedCoupon?.total ?? (cart.total + deliveryFee);
+  const subtotal = Number(appliedCoupon?.subtotal ?? cart.total);
+  const displayedTotal = appliedCoupon?.total ?? (subtotal + deliveryFee);
+  const deliveryLabel = quoteLoading
+    ? "جارٍ الحساب..."
+    : deliveryQuote
+      ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
+      : "يُحسب بعد تحديد الموقع";
 
   const detectLocation = async () => {
     setLocating(true);
@@ -161,8 +167,10 @@ export default function Checkout() {
           </T> : null}
 
           <View style={styles.summary}>
+            <View style={styles.sumRow}><T color={colors.muted}>المجموع الفرعي</T><T weight="semi">{formatPrice(subtotal)}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
-            <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryFee > 0 ? colors.onSurface : colors.success}>{quoteLoading ? "جارٍ الحساب..." : deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"}</T></View>
+            <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
+            {!deliveryQuote && !quoteLoading ? <T color={colors.muted} size={type.xs} style={styles.summaryHint}>حدد موقعك لمعرفة رسوم التوصيل بدقة</T> : null}
             {deliveryQuote?.area_name ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>{appliedCoupon.applies_to === "delivery" ? "خصم التوصيل" : "الخصم"}</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
@@ -201,6 +209,7 @@ const styles = StyleSheet.create({
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   codIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   summary: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm },
+  summaryHint: { marginTop: spacing.xs, textAlign: "right" },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
   couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
