@@ -36,10 +36,41 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const categoryRequest = React.useRef(0);
   const scrollY = React.useRef(new Animated.Value(0)).current;
+  const listRef = React.useRef<FlatList<any>>(null);
+  const compactHeaderRef = React.useRef(false);
+  const scrollTopRef = React.useRef(false);
+  const [isCompactHeader, setIsCompactHeader] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const collapseDistance = 96;
+  const fullBarHeight = insets.top + spacing.xs + 40 + spacing.sm;
+  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, insets.top + 36], extrapolate: "clamp" });
+  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [40, 0], extrapolate: "clamp" });
+  const fullRowOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [1, 0.35, 0], extrapolate: "clamp" });
+  const compactSearchOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
+  const compactSearchScale = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [0.8, 1], extrapolate: "clamp" });
   const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
   const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
-  const barPadBottom = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.sm, 3], extrapolate: "clamp" });
-  const barPadTopExtra = scrollY.interpolate({ inputRange: [0, 70], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
+  const barPadBottom = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.sm, 0], extrapolate: "clamp" });
+  const barPadTopExtra = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
+  const handleScroll = useMemo(() => Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    {
+      useNativeDriver: false,
+      listener: (event: any) => {
+        const offset = event.nativeEvent.contentOffset.y;
+        const nextCompact = offset > 48;
+        const nextShowScrollTop = offset > 220;
+        if (nextCompact !== compactHeaderRef.current) {
+          compactHeaderRef.current = nextCompact;
+          setIsCompactHeader(nextCompact);
+        }
+        if (nextShowScrollTop !== scrollTopRef.current) {
+          scrollTopRef.current = nextShowScrollTop;
+          setShowScrollTop(nextShowScrollTop);
+        }
+      },
+    },
+  ), [scrollY]);
 
   const loadProducts = useCallback(async (cat: string, force = false) => {
     const requestId = ++categoryRequest.current;
@@ -193,51 +224,73 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
-      {/* Sticky collapsing header */}
-      <Animated.View style={[styles.topBar, { paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
-        <View style={styles.topRow}>
-          <Animated.View style={{ width: logoW, height: logoH }}>
-            <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
-          </Animated.View>
-          <View style={styles.topActions}>
-            <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
-              <Feather name="search" size={19} color={colors.onSurface} />
-            </Pressable>
-            <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
-              <Feather name="heart" size={19} color={colors.onSurface} />
-            </Pressable>
+      {/* Collapses to a small search control while scrolling */}
+      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
+        <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
+          <View style={styles.topRow}>
+            <Animated.View style={{ width: logoW, height: logoH }}>
+              <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
+            </Animated.View>
+            <View style={styles.topActions}>
+              <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
+                <Feather name="search" size={19} color={colors.onSurface} />
+              </Pressable>
+              <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
+                <Feather name="heart" size={19} color={colors.onSurface} />
+              </Pressable>
+            </View>
           </View>
-        </View>
+        </Animated.View>
+
+        <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { top: insets.top + 2, opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
+          <Pressable testID="compact-search-btn" onPress={() => router.push("/search")} style={styles.compactSearchBtn} accessibilityLabel="البحث">
+            <Feather name="search" size={17} color={colors.onSurface} />
+          </Pressable>
+        </Animated.View>
       </Animated.View>
 
       <Animated.FlatList
-          data={products}
-          keyExtractor={(i) => i.id}
-          numColumns={2}
-          ListHeaderComponent={header}
+           ref={listRef}
+           data={products}
+           keyExtractor={(i) => i.id}
+           numColumns={2}
+           ListHeaderComponent={header}
            columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-          contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
-          initialNumToRender={12}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          removeClippedSubviews={Platform.OS !== "web"}
-          scrollEventThrottle={16}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
+           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
+           initialNumToRender={12}
+           maxToRenderPerBatch={8}
+           windowSize={5}
+           removeClippedSubviews={Platform.OS !== "web"}
+           scrollEventThrottle={16}
+           onScroll={handleScroll}
+           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
            renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} />}
-          ListEmptyComponent={loading ? <View style={{ padding: spacing["2xl"], alignItems: "center" }}><ActivityIndicator color={colors.brandPrimary} /></View> : <View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
-          ListFooterComponent={productsLoading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginVertical: spacing.md }} /> : null}
-        />
+           ListEmptyComponent={loading ? <View style={{ padding: spacing["2xl"], alignItems: "center" }}><ActivityIndicator color={colors.brandPrimary} /></View> : <View style={{ padding: spacing["2xl"], alignItems: "center" }}><T color={colors.muted}>لا توجد منتجات في هذا التصنيف</T></View>}
+           ListFooterComponent={productsLoading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginVertical: spacing.md }} /> : null}
+         />
+
+      {showScrollTop && (
+        <View style={styles.scrollTop}>
+          <Pressable testID="scroll-top-btn" onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })} style={styles.scrollTopBtn} accessibilityLabel="العودة إلى بداية الصفحة">
+            <Feather name="arrow-up" size={21} color="#fff" />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  topRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, overflow: "hidden", zIndex: 10 },
+  fullHeader: { overflow: "hidden" },
+  topRow: { height: 40, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
+  compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
+  scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
   brandLogo: { width: 118, height: 34 },
   hero: { height: 168, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden" },
   heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 168 },
