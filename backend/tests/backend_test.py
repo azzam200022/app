@@ -213,7 +213,7 @@ class TestCartFavorites:
 
 
 # ---------------- Orders + lifecycle ----------------
-@pytest.fixture(scope="module")
+@pytest.fixture
 def placed_order(request):
     s = requests.Session()
     ctok = _login(s, **CUSTOMER)
@@ -270,10 +270,18 @@ class TestLifecycle:
         r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token),
                    json={"status": "preparing"}, timeout=15)
         assert r.status_code == 200
+        # The order only becomes eligible for delivery after preparation is completed.
+        r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token),
+                   json={"status": "ready_for_delivery"}, timeout=15)
+        assert r.status_code == 200
         # Fetch delivery agent id
         agents = s.get(f"{API}/admin/agents", headers=H(manager_token), timeout=15).json()
         assert len(agents) >= 1
         agent_id = next(a["user_id"] for a in agents if a["email"] == DELIVERY["email"])
+        # Save the courier phone so the customer receives both name and number.
+        r = s.put(f"{API}/admin/agents/{agent_id}", headers=H(manager_token),
+                  json={"phone": "07801112233"}, timeout=15)
+        assert r.status_code == 200
         # Assign
         r = s.post(f"{API}/admin/orders/{oid}/assign", headers=H(manager_token),
                    json={"agent_id": agent_id}, timeout=15)
@@ -285,6 +293,7 @@ class TestLifecycle:
         assert len(assigned) == 1
         assert assigned[0]["status"] == "out_for_delivery"
         assert assigned[0]["location"] == {"lat": 33.3152, "lng": 44.3661}
+        assert assigned[0]["agent_phone"] == "07801112233"
         # Mark delivered
         r = s.post(f"{API}/delivery/orders/{oid}/status", headers=H(delivery_token),
                    json={"status": "delivered"}, timeout=15)
@@ -298,10 +307,16 @@ class TestLifecycle:
 
     def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
-        for status in ("confirmed", "preparing"):
+        for status in ("confirmed", "preparing", "ready_for_delivery"):
             r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token), json={"status": status}, timeout=15)
             assert r.status_code == 200, r.text
 
+        available = s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15)
+        assert available.status_code == 200
+        assert not any(o["id"] == oid for o in available.json())
+
+        r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token), json={"status": "ready_for_delivery"}, timeout=15)
+        assert r.status_code == 200
         available = s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15)
         assert available.status_code == 200
         order = next(o for o in available.json() if o["id"] == oid)
