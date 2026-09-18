@@ -259,6 +259,37 @@ class TestOrders:
         assert r.status_code == 200
         assert any(x["id"] == placed_order["order"]["id"] for x in r.json())
 
+    def test_order_reserves_and_cancel_releases_stock_once(self, s, customer_token):
+        product = s.get(f"{API}/products", timeout=15).json()[0]
+        pid = product["id"]
+        stock_before = int(product.get("stock", 0) or 0)
+        if stock_before <= 0:
+            pytest.skip("test product has no stock")
+        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+        added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                       json={"product_id": pid, "quantity": 1}, timeout=15)
+        assert added.status_code == 200
+        created = s.post(
+            f"{API}/orders",
+            headers=H(customer_token),
+            json={"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
+                  "lat": 33.3152, "lng": 44.3661, "notes": "TEST stock reservation"},
+            timeout=15,
+        )
+        assert created.status_code == 200, created.text
+        oid = created.json()["id"]
+        after_create = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+        assert int(after_create.get("stock", 0)) == stock_before - 1
+        cancelled = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+        assert cancelled.status_code == 200, cancelled.text
+        after_cancel = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+        assert int(after_cancel.get("stock", 0)) == stock_before
+        repeated = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+        assert repeated.status_code == 400
+        after_repeat = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+        assert int(after_repeat.get("stock", 0)) == stock_before
+
+
     def test_get_order_by_id(self, placed_order):
         s = placed_order["session"]
         oid = placed_order["order"]["id"]
