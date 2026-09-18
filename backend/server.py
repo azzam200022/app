@@ -228,7 +228,8 @@ class BannerUpdate(BaseModel):
 
 class CartItemIn(BaseModel):
     product_id: str
-    quantity: int = 1
+    # Zero is allowed for set_cart_item so the client can clear a line item.
+    quantity: int = Field(1, ge=0, le=1000)
 
 
 class OrderIn(BaseModel):
@@ -1395,6 +1396,7 @@ def cart_from_items(items, products_by_id):
                 "price": product.get("price", 0),
                 "image_url": product.get("image_url", ""),
                 "quantity": quantity,
+                "stock": max(int(product.get("stock", 0) or 0), 0),
                 "line_total": line_total,
             }
         )
@@ -1426,16 +1428,24 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon"):
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
-    if (prod.get("stock", 0) or 0) <= 0:
+    available_stock = max(int(prod.get("stock", 0) or 0), 0)
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="يجب أن تكون الكمية أكبر من صفر")
+    if available_stock <= 0:
         raise HTTPException(status_code=400, detail="نفدت الكمية")
     items = list((cart or {}).get("items", []))
     found = False
     for it in items:
         if it["product_id"] == body.product_id:
-            it["quantity"] += body.quantity
+            current_quantity = max(int(it.get("quantity", 0) or 0), 0)
+            if current_quantity + body.quantity > available_stock:
+                raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
+            it["quantity"] = current_quantity + body.quantity
             found = True
             break
     if not found:
+        if body.quantity > available_stock:
+            raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
         items.append({"product_id": body.product_id, "quantity": body.quantity})
     items = [i for i in items if i["quantity"] > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
@@ -1445,7 +1455,19 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
 
 @api.put("/cart/items")
 async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
-    cart = await db.carts.find_one({"user_id": user["user_id"]})
+    cart_task = db.carts.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    product_task = db.products.find_one(
+        {"id": body.product_id, "deleted_at": None},
+        CART_PRODUCT_PROJECTION,
+    )
+    cart, prod = await asyncio.gather(cart_task, product_task)
+    if not prod:
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if prod.get("coming_soon") and body.quantity > 0:
+        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
+    available_stock = max(int(prod.get("stock", 0) or 0), 0)
+    if body.quantity > available_stock:
+        raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
     items = list((cart or {}).get("items", []))
     items = [i for i in items if i["product_id"] != body.product_id]
     if body.quantity > 0:
@@ -1530,6 +1552,10 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
+    for item in cart["items"]:
+        available_stock = max(int(item.get("stock", 0) or 0), 0)
+        if int(item.get("quantity", 0) or 0) > available_stock:
+            raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
     if body.lat is None or body.lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة")
     delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
