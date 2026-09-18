@@ -199,6 +199,23 @@ class TestCartFavorites:
         assert r3.status_code == 200
         assert all(i["product_id"] != pid for i in r3.json()["items"])
 
+    def test_rejects_cart_quantity_above_stock(self, s, customer_token):
+        product = s.get(f"{API}/products", timeout=15).json()[0]
+        pid = product["id"]
+        stock = int(product.get("stock", 0) or 0)
+        if stock <= 0:
+            pytest.skip("test product has no stock")
+        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+        too_many = stock + 1
+        added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                       json={"product_id": pid, "quantity": too_many}, timeout=15)
+        assert added.status_code == 400
+        updated = s.put(f"{API}/cart/items", headers=H(customer_token),
+                        json={"product_id": pid, "quantity": too_many}, timeout=15)
+        assert updated.status_code == 400
+        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+
+
     def test_favorites_toggle(self, s, customer_token):
         prods = s.get(f"{API}/products", timeout=15).json()
         pid = prods[0]["id"]
