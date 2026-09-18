@@ -188,7 +188,7 @@ export const api = {
   addToCart: async (product_id: string, quantity = 1) => { const result = await req("/cart/items", { method: "POST", body: JSON.stringify({ product_id, quantity }) }); setCachedCart(result); return result; },
   setCartItem: async (product_id: string, quantity: number) => { const result = await req("/cart/items", { method: "PUT", body: JSON.stringify({ product_id, quantity }) }); setCachedCart(result); return result; },
   removeCartItem: async (id: string) => { const result = await req("/cart/items/" + id, { method: "DELETE" }); setCachedCart(result); return result; },
-  validateCoupon: (code: string) => req("/coupons/validate", { method: "POST", body: JSON.stringify({ code }) }),
+  validateCoupon: (code: string, location?: { lat: number; lng: number }) => req("/coupons/validate", { method: "POST", body: JSON.stringify({ code, ...location }) }),
   createOrder: async (body: any) => { const result = await req("/orders", { method: "POST", body: JSON.stringify(body) }); setCachedCart({ items: [], total: 0, count: 0 }); return result; },
   myOrders: (force = false) => cachedRequest("orders", () => req("/orders"), CACHE_TTLS.orders, force),
   order: (id: string, force = false) => {
