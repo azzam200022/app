@@ -2017,9 +2017,12 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
         return {"ok": True}
     if body.status not in ORDER_STATUS_TRANSITIONS.get(current_status, set()):
         raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
+    status_update = {"status": body.status}
+    if body.status == "delivered":
+        status_update["delivered_at"] = now_utc().isoformat()
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": current_status},
-        {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
+        {"$set": status_update, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
     )
     if not updated:
         raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حاول تحديث الصفحة")
