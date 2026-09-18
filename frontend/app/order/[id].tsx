@@ -94,7 +94,7 @@ export default function OrderDetail() {
               );
             })
           )}
-          {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}</T></View>}
+          {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}{order.agent_phone ? " • " + order.agent_phone : ""}</T></View>}
         </View>
 
         {/* Items */}
