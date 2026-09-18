@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, TextInput } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,13 +16,30 @@ export default function Agents() {
   const { show } = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [phoneDrafts, setPhoneDrafts] = useState<Record<string, string>>({});
+  const [savingPhone, setSavingPhone] = useState<string | null>(null);
 
-  const load = useCallback(async () => { try { setUsers(await api.adminUsers()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); } }, [show]);
+  const load = useCallback(async () => {
+    try {
+      const data = await api.adminUsers();
+      setUsers(data);
+      setPhoneDrafts(Object.fromEntries(data.filter((u: any) => u.role === "delivery").map((u: any) => [u.user_id, u.phone || ""])));
+    } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+  }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const setRole = async (u: any, role: string) => {
     try { await api.adminSetRole(u.user_id, role); show(role === "delivery" ? "تم تعيينه مندوباً" : "تم التحويل إلى زبون"); setUsers((prev) => prev.map((x) => x.user_id === u.user_id ? { ...x, role } : x)); }
     catch (e: any) { show(e.message, "error"); }
+  };
+
+  const savePhone = async (u: any) => {
+    setSavingPhone(u.user_id);
+    try {
+      const updated = await api.adminUpdateAgent(u.user_id, { phone: (phoneDrafts[u.user_id] || "").trim() || null });
+      setUsers((prev) => prev.map((x) => x.user_id === u.user_id ? { ...x, phone: updated.phone } : x));
+      show("تم حفظ رقم المندوب");
+    } catch (e: any) { show(e.message, "error"); } finally { setSavingPhone(null); }
   };
 
   return (
@@ -41,6 +58,19 @@ export default function Agents() {
               <View style={{ flex: 1 }}>
                 <T weight="semi">{item.name}</T>
                 <T color={colors.muted} size={type.sm}>{item.email}</T>
+                {item.role === "delivery" && <View style={styles.phoneRow}>
+                  <TextInput
+                    value={phoneDrafts[item.user_id] || ""}
+                    onChangeText={(phone) => setPhoneDrafts((prev) => ({ ...prev, [item.user_id]: phone }))}
+                    placeholder="رقم هاتف المندوب"
+                    keyboardType="phone-pad"
+                    placeholderTextColor={colors.muted}
+                    style={styles.phoneInput}
+                  />
+                  <Pressable onPress={() => savePhone(item)} disabled={savingPhone === item.user_id} style={styles.savePhoneBtn}>
+                    <T size={11} weight="bold" color={colors.brandPrimary}>{savingPhone === item.user_id ? "..." : "حفظ"}</T>
+                  </Pressable>
+                </View>}
                 <View style={styles.roleBadge}><T size={11} weight="bold" color={colors.brandPrimary}>{ROLE_LABEL[item.role]}</T></View>
               </View>
               {item.role !== "manager" && (
@@ -69,5 +99,8 @@ const styles = StyleSheet.create({
   card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   roleBadge: { alignSelf: "flex-start", backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, marginTop: 4 },
+  phoneRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+  phoneInput: { flex: 1, minWidth: 120, height: 34, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, color: colors.onSurface, textAlign: "right", fontSize: 12 },
+  savePhoneBtn: { height: 34, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   roleBtn: { paddingHorizontal: spacing.md, height: 40, borderRadius: radius.sm, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
 });
