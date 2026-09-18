@@ -19,17 +19,28 @@ export default function Search() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState("");
   const timer = useRef<any>(null);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
+    setError("");
     if (!q.trim()) { setResults([]); setSearched(false); return; }
     timer.current = setTimeout(async () => {
       setLoading(true); setSearched(true);
-      try { setResults(await api.products({ search: q.trim() })); } catch {} finally { setLoading(false); }
+      try {
+        setResults(await api.products({ search: q.trim() }));
+      } catch (e: any) {
+        setResults([]);
+        const message = e?.message || "تعذر تحميل نتائج البحث";
+        setError(message);
+        show(message, "error");
+      } finally {
+        setLoading(false);
+      }
     }, 350);
     return () => timer.current && clearTimeout(timer.current);
-  }, [q]);
+  }, [q, show]);
 
   const onAdd = async (p: any) => { try { await add(p.id, 1); show("تمت الإضافة إلى السلة"); } catch (e: any) { show(e.message, "error"); } };
 
@@ -46,6 +57,8 @@ export default function Search() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
+      ) : error ? (
+        <View style={styles.center}><EmptyState icon="alert-circle" title="تعذر تحميل النتائج" subtitle={error} /></View>
       ) : !searched ? (
         <View style={styles.center}><EmptyState icon="search" title="ابحث في المتجر" subtitle="اكتب اسم المنتج الذي تريده" /></View>
       ) : results.length === 0 ? (
