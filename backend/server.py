@@ -1487,6 +1487,42 @@ async def remove_cart_item(pid: str, user=Depends(require_user)):
 
 
 # ---------------- Orders ----------------
+async def reserve_order_stock(items):
+    """Atomically reserve every item, rolling back partial reservations on failure."""
+    reserved = []
+    try:
+        for item in items:
+            quantity = max(int(item.get("quantity", 0) or 0), 0)
+            if quantity <= 0:
+                continue
+            product_id = item["product_id"]
+            updated = await db.products.find_one_and_update(
+                {"id": product_id, "deleted_at": None, "stock": {"$gte": quantity}},
+                {"$inc": {"stock": -quantity}},
+            )
+            if not updated:
+                raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
+            reserved.append({"product_id": product_id, "quantity": quantity})
+    except Exception:
+        try:
+            await release_order_stock(reserved)
+        except Exception as rollback_error:
+            logger.error("stock reservation rollback failed: %s", rollback_error)
+        raise
+    return reserved
+
+
+async def release_order_stock(items):
+    for item in items:
+        quantity = max(int(item.get("quantity", 0) or 0), 0)
+        if quantity <= 0:
+            continue
+        await db.products.find_one_and_update(
+            {"id": item["product_id"]},
+            {"$inc": {"stock": quantity}},
+        )
+
+
 STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"]
 STATUS_LABEL = {
     "pending": "قيد المراجعة",
@@ -1587,7 +1623,10 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "delivery_fee": round(delivery_fee, 2),
         "notes": body.notes or "",
         "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
-        "items": cart["items"],
+        "items": [
+            {key: value for key, value in item.items() if key != "stock"}
+            for item in cart["items"]
+        ],
         "subtotal": subtotal,
         "discount_amount": discount_amount,
         "coupon_code": coupon_code,
@@ -1604,7 +1643,14 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "timeline": [{"status": "pending", "at": now_utc().isoformat()}],
         "created_at": now_utc().isoformat(),
     }
-    await db.orders.insert_one(doc)
+    reserved_stock = await reserve_order_stock(doc["items"])
+    doc["stock_reserved"] = bool(reserved_stock)
+    doc["stock_released"] = False
+    try:
+        await db.orders.insert_one(doc)
+    except Exception:
+        await release_order_stock(reserved_stock)
+        raise HTTPException(status_code=503, detail="تعذر إنشاء الطلب؛ حاول مرة أخرى")
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
     try:
@@ -1637,7 +1683,24 @@ async def cancel_order(oid: str, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     if d["status"] not in ("pending", "confirmed"):
         raise HTTPException(status_code=400, detail="لا يمكن إلغاء الطلب في هذه المرحلة")
-    await db.orders.update_one({"id": oid}, {"$set": {"status": "cancelled"}, "$push": {"timeline": {"status": "cancelled", "at": now_utc().isoformat()}}})
+    cancelled = await db.orders.find_one_and_update(
+        {"id": oid, "user_id": user["user_id"], "status": {"$in": ["pending", "confirmed"]}},
+        {
+            "$set": {
+                "status": "cancelled",
+                "stock_release_pending": bool(d.get("stock_reserved") and not d.get("stock_released")),
+            },
+            "$push": {"timeline": {"status": "cancelled", "at": now_utc().isoformat()}},
+        },
+    )
+    if not cancelled:
+        raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حاول تحديث الصفحة")
+    if cancelled.get("stock_reserved") and not cancelled.get("stock_released"):
+        await release_order_stock(cancelled.get("items") or [])
+        await db.orders.update_one(
+            {"id": oid, "status": "cancelled"},
+            {"$set": {"stock_released": True, "stock_release_pending": False}},
+        )
     return {"ok": True}
 
 
