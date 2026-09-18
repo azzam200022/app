@@ -2034,9 +2034,11 @@ class LocationIn(BaseModel):
 
 @api.post("/delivery/orders/{oid}/location")
 async def delivery_location(oid: str, body: LocationIn, user=Depends(require_delivery)):
-    d = await db.orders.find_one({"id": oid}, {"_id": 0, "agent_id": 1})
+    d = await db.orders.find_one({"id": oid}, {"_id": 0, "agent_id": 1, "status": 1})
     if not d or (d.get("agent_id") != user["user_id"] and user["role"] != "manager"):
         raise HTTPException(status_code=403, detail="غير مصرح")
+    if d.get("status") != "out_for_delivery":
+        raise HTTPException(status_code=409, detail="لا يمكن تحديث موقع طلب غير نشط")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
     return {"ok": True}
 def init_storage():
