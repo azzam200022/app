@@ -263,19 +263,36 @@ class RoleIn(BaseModel):
 
 class CouponValidateIn(BaseModel):
     code: str = Field(..., min_length=3, max_length=32)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
 
 
 class CouponIn(BaseModel):
     code: str = Field(..., min_length=3, max_length=32)
-    discount_percent: float = Field(..., gt=0, le=100)
+    description: str = Field("", max_length=160)
+    discount_type: str = "percent"
+    discount_value: Optional[float] = Field(None, gt=0)
+    # Kept for backwards compatibility with the first coupon implementation.
+    discount_percent: Optional[float] = Field(None, gt=0, le=100)
+    applies_to: str = "subtotal"
     max_uses: Optional[int] = Field(None, ge=1)
+    max_uses_per_user: int = Field(1, ge=1)
+    minimum_subtotal: float = Field(0, ge=0)
+    starts_at: Optional[str] = None
     expires_at: Optional[str] = None
     is_active: bool = True
 
 
 class CouponUpdate(BaseModel):
+    description: Optional[str] = Field(None, max_length=160)
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = Field(None, gt=0)
     discount_percent: Optional[float] = Field(None, gt=0, le=100)
+    applies_to: Optional[str] = None
     max_uses: Optional[int] = Field(None, ge=1)
+    max_uses_per_user: Optional[int] = Field(None, ge=1)
+    minimum_subtotal: Optional[float] = Field(None, ge=0)
+    starts_at: Optional[str] = None
     expires_at: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -839,24 +856,16 @@ async def admin_coupons(user=Depends(require_manager)):
 @api.post("/admin/coupons")
 async def create_coupon(body: CouponIn, user=Depends(require_manager)):
     code = normalize_coupon_code(body.code)
-    if body.expires_at:
-        if coupon_expired({"expires_at": body.expires_at}):
-            raise HTTPException(status_code=400, detail="تاريخ انتهاء الكود يجب أن يكون في المستقبل")
-        try:
-            datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="تاريخ انتهاء غير صالح")
     if await db.coupons.find_one({"id": code}):
         raise HTTPException(status_code=409, detail="كود الخصم موجود مسبقاً")
+    settings = normalized_coupon_settings(body.model_dump(), require_value=True)
     doc = {
         "id": code,
         "code": code,
-        "discount_percent": float(body.discount_percent),
-        "max_uses": body.max_uses,
+        **settings,
         "usage_count": 0,
         "redeemed_by": [],
-        "expires_at": body.expires_at,
-        "is_active": body.is_active,
+        "usage_by_user": {},
         "created_at": now_utc().isoformat(),
     }
     await db.coupons.insert_one(doc)
@@ -866,16 +875,13 @@ async def create_coupon(body: CouponIn, user=Depends(require_manager)):
 @api.put("/admin/coupons/{code}")
 async def update_coupon(code: str, body: CouponUpdate, user=Depends(require_manager)):
     code = normalize_coupon_code(code)
-    updates = body.model_dump(exclude_none=True)
-    if "expires_at" in updates:
-        if coupon_expired({"expires_at": updates["expires_at"]}):
-            raise HTTPException(status_code=400, detail="تاريخ انتهاء الكود يجب أن يكون في المستقبل")
-        try:
-            datetime.fromisoformat(updates["expires_at"].replace("Z", "+00:00"))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="تاريخ انتهاء غير صالح")
-    if not updates:
+    current = await db.coupons.find_one({"id": code}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="كود الخصم غير موجود")
+    incoming = body.model_dump(exclude_none=True)
+    if not incoming:
         raise HTTPException(status_code=400, detail="لا يوجد تغيير")
+    updates = normalized_coupon_settings(incoming, current, require_value=True)
     result = await db.coupons.update_one({"id": code}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="كود الخصم غير موجود")
@@ -1155,8 +1161,70 @@ def normalize_coupon_code(value: Optional[str]) -> Optional[str]:
 def coupon_public_view(coupon):
     view = dict(coupon)
     view.pop("redeemed_by", None)
+    view.pop("usage_by_user", None)
     view.pop("_id", None)
+    max_uses = view.get("max_uses")
+    view["usage_remaining"] = (
+        max(0, int(max_uses) - int(view.get("usage_count", 0) or 0))
+        if max_uses is not None
+        else None
+    )
     return view
+
+
+def coupon_datetime(value, end_of_day=False):
+    if value in (None, ""):
+        return None
+    raw = str(value).strip()
+    if len(raw) == 10:
+        raw += "T23:59:59+00:00" if end_of_day else "T00:00:00+00:00"
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.isoformat()
+
+
+def normalized_coupon_settings(values, existing=None, require_value=True):
+    merged = dict(existing or {})
+    merged.update({key: value for key, value in values.items() if value is not None})
+    discount_type = str(merged.get("discount_type") or "percent").strip().lower()
+    applies_to = str(merged.get("applies_to") or "subtotal").strip().lower()
+    if discount_type not in ("percent", "fixed"):
+        raise HTTPException(status_code=400, detail="نوع الخصم يجب أن يكون نسبة أو مبلغاً ثابتاً")
+    if applies_to not in ("subtotal", "delivery"):
+        raise HTTPException(status_code=400, detail="مكان تطبيق الخصم غير صالح")
+
+    raw_value = merged.get("discount_value")
+    if raw_value is None:
+        raw_value = merged.get("discount_percent")
+    if raw_value is None and require_value:
+        raise HTTPException(status_code=400, detail="قيمة الخصم مطلوبة")
+    if raw_value is not None:
+        raw_value = round(float(raw_value), 2)
+        if raw_value <= 0 or (discount_type == "percent" and raw_value > 100):
+            raise HTTPException(status_code=400, detail="قيمة الخصم غير صالحة")
+
+    starts_at = coupon_datetime(merged.get("starts_at"))
+    expires_at = coupon_datetime(merged.get("expires_at"), end_of_day=True)
+    if starts_at and expires_at and datetime.fromisoformat(starts_at) >= datetime.fromisoformat(expires_at):
+        raise HTTPException(status_code=400, detail="تاريخ البداية يجب أن يسبق تاريخ الانتهاء")
+    if expires_at and datetime.fromisoformat(expires_at) <= now_utc():
+        raise HTTPException(status_code=400, detail="تاريخ انتهاء الكود يجب أن يكون في المستقبل")
+
+    return {
+        "description": str(merged.get("description") or "").strip(),
+        "discount_type": discount_type,
+        "discount_value": raw_value,
+        # Preserve this field for older clients and existing documents.
+        "discount_percent": raw_value if discount_type == "percent" else 0,
+        "applies_to": applies_to,
+        "max_uses": merged.get("max_uses"),
+        "max_uses_per_user": int(merged.get("max_uses_per_user", 1) or 1),
+        "minimum_subtotal": round(float(merged.get("minimum_subtotal", 0) or 0), 2),
+        "starts_at": starts_at,
+        "expires_at": expires_at,
+        "is_active": bool(merged.get("is_active", True)),
+    }
 
 
 def coupon_expired(coupon) -> bool:
@@ -1172,39 +1240,66 @@ def coupon_expired(coupon) -> bool:
         return True
 
 
+def coupon_not_started(coupon) -> bool:
+    starts_at = coupon.get("starts_at")
+    if not starts_at:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(starts_at).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed > now_utc()
+    except (TypeError, ValueError):
+        return True
+
+
 def ensure_coupon_available(coupon, user_id: str):
     if not coupon or not coupon.get("is_active", False):
         raise HTTPException(status_code=400, detail="كود الخصم غير موجود أو غير فعال")
+    if coupon_not_started(coupon):
+        raise HTTPException(status_code=400, detail="لم تبدأ صلاحية كود الخصم بعد")
     if coupon_expired(coupon):
         raise HTTPException(status_code=400, detail="انتهت صلاحية كود الخصم")
     redeemed_by = coupon.get("redeemed_by") or []
-    if user_id in redeemed_by:
-        raise HTTPException(status_code=409, detail="لا يمكنك استخدام كود الخصم نفسه أكثر من مرة")
+    usage_by_user = coupon.get("usage_by_user") or {}
+    user_uses = int(usage_by_user.get(user_id, 0) or 0)
+    max_uses_per_user = int(coupon.get("max_uses_per_user", 1) or 1)
+    if (not usage_by_user and user_id in redeemed_by) or user_uses >= max_uses_per_user:
+        raise HTTPException(status_code=409, detail="تجاوزت عدد مرات استخدام كود الخصم المسموحة لك")
     max_uses = coupon.get("max_uses")
     if max_uses is not None and int(coupon.get("usage_count", 0) or 0) >= int(max_uses):
         raise HTTPException(status_code=400, detail="اكتمل عدد مرات استخدام كود الخصم")
 
 
-def coupon_discount(subtotal: float, coupon) -> float:
-    percent = float(coupon.get("discount_percent", 0) or 0)
-    return round(min(max(subtotal * percent / 100, 0), subtotal), 2)
+def coupon_discount(amount: float, coupon) -> float:
+    discount_type = coupon.get("discount_type") or "percent"
+    value = coupon.get("discount_value")
+    if value is None:
+        value = coupon.get("discount_percent", 0)
+    raw_discount = float(value or 0)
+    discount = amount * raw_discount / 100 if discount_type == "percent" else raw_discount
+    return round(min(max(discount, 0), max(amount, 0)), 2)
 
 
 async def reserve_coupon(code: str, user_id: str):
     coupon = await db.coupons.find_one({"id": code})
     ensure_coupon_available(coupon, user_id)
     usage_count = int(coupon.get("usage_count", 0) or 0)
-    query = {
-        "id": code,
-        "is_active": True,
-        "usage_count": usage_count,
-        "redeemed_by": {"$nin": [user_id]},
-    }
+    usage_by_user = coupon.get("usage_by_user") or {}
+    user_uses = int(usage_by_user.get(user_id, 0) or 0)
+    max_uses_per_user = int(coupon.get("max_uses_per_user", 1) or 1)
+    query = {"id": code, "is_active": True, "usage_count": usage_count}
+    # A missing nested usage field does not match Firestore's numeric
+    # comparison, so the first use is claimed through the redeemed_by list.
+    if user_uses == 0:
+        query["redeemed_by"] = {"$nin": [user_id]}
+    else:
+        query[f"usage_by_user.{user_id}"] = {"$lt": max_uses_per_user}
     if coupon.get("expires_at"):
         query["expires_at"] = coupon["expires_at"]
     reserved = await db.coupons.find_one_and_update(
         query,
-        {"$set": {"usage_count": usage_count + 1}, "$push": {"redeemed_by": user_id}},
+        {"$set": {"usage_count": usage_count + 1, f"usage_by_user.{user_id}": user_uses + 1}, "$push": {"redeemed_by": user_id}},
     )
     if not reserved:
         raise HTTPException(status_code=409, detail="تعذر تطبيق كود الخصم؛ حاول مرة أخرى")
@@ -1219,13 +1314,28 @@ async def validate_coupon(body: CouponValidateIn, user=Depends(require_user)):
         raise HTTPException(status_code=400, detail="السلة فارغة")
     coupon = await db.coupons.find_one({"id": code})
     ensure_coupon_available(coupon, user["user_id"])
-    discount = coupon_discount(cart["total"], coupon)
+    subtotal = round(float(cart["total"]), 2)
+    if subtotal < float(coupon.get("minimum_subtotal", 0) or 0):
+        raise HTTPException(status_code=400, detail="قيمة السلة أقل من الحد الأدنى لهذا الكود")
+    delivery_fee = 0.0
+    delivery_area = None
+    if body.lat is not None and body.lng is not None:
+        delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
+        delivery_fee = float(delivery_area.get("fee", 0) if delivery_area else 0)
+    elif coupon.get("applies_to") == "delivery":
+        raise HTTPException(status_code=400, detail="حدد موقع التوصيل قبل استخدام هذا الكود")
+    discount_base = delivery_fee if coupon.get("applies_to") == "delivery" else subtotal
+    discount = coupon_discount(discount_base, coupon)
     return {
         "coupon_code": code,
-        "discount_percent": float(coupon["discount_percent"]),
-        "subtotal": cart["total"],
+        "discount_type": coupon.get("discount_type", "percent"),
+        "discount_value": float(coupon.get("discount_value", coupon.get("discount_percent", 0)) or 0),
+        "applies_to": coupon.get("applies_to", "subtotal"),
+        "discount_percent": float(coupon.get("discount_percent", 0) or 0),
+        "subtotal": subtotal,
+        "delivery_fee": round(delivery_fee, 2),
         "discount_amount": discount,
-        "total": round(cart["total"] - discount, 2),
+        "total": round(subtotal + delivery_fee - discount, 2),
     }
 
 
@@ -1391,13 +1501,18 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     if not delivery_area:
         raise HTTPException(status_code=400, detail="الموقع خارج نطاق التوصيل")
     delivery_fee = float(delivery_area["fee"])
+    subtotal = round(float(cart["total"]), 2)
     coupon_code = normalize_coupon_code(body.coupon_code)
     coupon = None
     discount_amount = 0.0
     if coupon_code:
+        candidate = await db.coupons.find_one({"id": coupon_code})
+        ensure_coupon_available(candidate, user["user_id"])
+        if subtotal < float(candidate.get("minimum_subtotal", 0) or 0):
+            raise HTTPException(status_code=400, detail="قيمة السلة أقل من الحد الأدنى لهذا الكود")
         coupon = await reserve_coupon(coupon_code, user["user_id"])
-        discount_amount = coupon_discount(cart["total"], coupon)
-    subtotal = round(float(cart["total"]), 2)
+        discount_base = delivery_fee if coupon.get("applies_to") == "delivery" else subtotal
+        discount_amount = coupon_discount(discount_base, coupon)
     total = round(subtotal - discount_amount + delivery_fee, 2)
     oid = "ORD" + uuid.uuid4().hex[:8].upper()
     doc = {
@@ -1415,6 +1530,9 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "subtotal": subtotal,
         "discount_amount": discount_amount,
         "coupon_code": coupon_code,
+        "coupon_discount_type": coupon.get("discount_type", "percent") if coupon else None,
+        "coupon_discount_value": float(coupon.get("discount_value", coupon.get("discount_percent", 0)) or 0) if coupon else 0.0,
+        "coupon_applies_to": coupon.get("applies_to", "subtotal") if coupon else None,
         "coupon_discount_percent": float(coupon["discount_percent"]) if coupon else 0.0,
         "total": total,
         "status": "pending",
@@ -1555,6 +1673,7 @@ async def admin_stats(user=Depends(require_manager)):
     total_orders = await db.orders.count_documents({})
     total_returns = await db.returns.count_documents({})
     total_banners = await db.banners.count_documents({"is_active": True})
+    total_coupons = await db.coupons.count_documents({})
     pending = await db.orders.count_documents({"status": {"$in": ["pending", "confirmed", "preparing"]}})
     delivered = await db.orders.count_documents({"status": "delivered"})
     agg = await db.orders.aggregate([{"$match": {"status": "delivered"}}, {"$group": {"_id": None, "sum": {"$sum": "$total"}}}]).to_list(1)
@@ -1566,6 +1685,7 @@ async def admin_stats(user=Depends(require_manager)):
         "delivered": delivered,
         "returns": total_returns,
         "banners": total_banners,
+        "coupons": total_coupons,
         "revenue": revenue,
     }
 
