@@ -34,7 +34,7 @@ export default function DeliveryAreas() {
   const openForm = (area?: DeliveryArea) => {
     setEditing(area || null);
     setName(area?.name || "");
-    setFee(area ? String(area.fee) : "0");
+    setFee(area ? String(area.fee) : "1000");
     setActive(area?.is_active ?? true);
     setCenterLat(area ? String(area.center_lat) : "");
     setCenterLng(area ? String(area.center_lng) : "");
