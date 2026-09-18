@@ -204,6 +204,7 @@ export const api = {
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
+  adminUpdateAgent: (id: string, body: any) => req("/admin/agents/" + id, { method: "PUT", body: JSON.stringify(body) }),
   adminUsers: () => req("/admin/users"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
   syncConfig: () => req("/admin/sync-config"),
@@ -260,6 +261,6 @@ export async function uploadInventoryPdf(uri: string, name: string, platformWeb:
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  pending: "قيد المراجعة", confirmed: "تم التأكيد", preparing: "قيد التجهيز", out_for_delivery: "في الطريق", delivered: "تم التوصيل", cancelled: "ملغي",
+  pending: "قيد المراجعة", confirmed: "تم التأكيد", preparing: "قيد التجهيز", ready_for_delivery: "جاهز للتوصيل", out_for_delivery: "في الطريق", delivered: "تم التوصيل", cancelled: "ملغي",
 };
-export const STATUS_FLOW = ["pending", "confirmed", "preparing", "out_for_delivery", "delivered"];
+export const STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"];
