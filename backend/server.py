@@ -246,6 +246,10 @@ class AssignIn(BaseModel):
     agent_id: str
 
 
+class AgentUpdateIn(BaseModel):
+    phone: Optional[str] = Field(None, max_length=30)
+
+
 class ReturnItemIn(BaseModel):
     product_id: str
     quantity: int = Field(..., ge=1)
@@ -334,6 +338,7 @@ async def get_user_by_token(authorization: Optional[str]):
             )
             firebase_uid = decoded.get("uid")
             email = (decoded.get("email") or "").lower()
+            firebase_phone = decoded.get("phone_number") or decoded.get("phone")
             forced_role = "manager" if email in MANAGER_EMAILS else None
             user = await db.users.find_one({"firebase_uid": firebase_uid}, {"_id": 0})
             if not user and email:
@@ -343,6 +348,8 @@ async def get_user_by_token(authorization: Optional[str]):
                         "firebase_uid": firebase_uid,
                         "picture": decoded.get("picture"),
                     }
+                    if firebase_phone:
+                        updates["phone"] = firebase_phone
                     if forced_role and user.get("role") != forced_role:
                         updates["role"] = forced_role
                     await db.users.update_one(
@@ -351,6 +358,8 @@ async def get_user_by_token(authorization: Optional[str]):
                     )
                     user["firebase_uid"] = firebase_uid
                     user["picture"] = decoded.get("picture")
+                    if firebase_phone:
+                        user["phone"] = firebase_phone
                     if forced_role:
                         user["role"] = forced_role
             if not user:
@@ -361,6 +370,7 @@ async def get_user_by_token(authorization: Optional[str]):
                     "email": email,
                     "role": forced_role or "customer",
                     "picture": decoded.get("picture"),
+                    "phone": firebase_phone,
                     "created_at": now_utc().isoformat(),
                 }
                 await db.users.insert_one(user.copy())
@@ -377,6 +387,7 @@ async def get_user_by_token(authorization: Optional[str]):
                     "email": verified_email,
                     "role": "manager",
                     "picture": decoded.get("picture"),
+                    "phone": decoded.get("phone_number") or decoded.get("phone"),
                 }
             pass
 
@@ -423,7 +434,7 @@ async def require_delivery(user=Depends(require_user)):
 
 
 def public_user(u):
-    return {k: u.get(k) for k in ("user_id", "name", "email", "role", "picture")}
+    return {k: u.get(k) for k in ("user_id", "name", "email", "role", "picture", "phone")}
 
 
 @api.post("/auth/register")
@@ -1440,18 +1451,28 @@ async def remove_cart_item(pid: str, user=Depends(require_user)):
 
 
 # ---------------- Orders ----------------
-STATUS_FLOW = ["pending", "confirmed", "preparing", "out_for_delivery", "delivered"]
+STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"]
 STATUS_LABEL = {
     "pending": "قيد المراجعة",
     "confirmed": "تم التأكيد",
     "preparing": "قيد التجهيز",
+    "ready_for_delivery": "جاهز للتوصيل",
     "out_for_delivery": "في الطريق",
     "delivered": "تم التوصيل",
     "cancelled": "ملغي",
 }
+ORDER_STATUS_TRANSITIONS = {
+    "pending": {"confirmed", "cancelled"},
+    "confirmed": {"preparing", "cancelled"},
+    "preparing": {"ready_for_delivery", "cancelled"},
+    "ready_for_delivery": {"cancelled"},
+    "out_for_delivery": {"delivered"},
+    "delivered": set(),
+    "cancelled": set(),
+}
 
 
-DELIVERY_AVAILABLE_STATUSES = ("pending", "confirmed", "preparing")
+DELIVERY_AVAILABLE_STATUSES = ("ready_for_delivery",)
 try:
     STORE_LAT = float(os.environ.get("STORE_LAT", "33.3152"))
     STORE_LNG = float(os.environ.get("STORE_LNG", "44.3661"))
@@ -1539,6 +1560,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "payment": "cod",
         "agent_id": None,
         "agent_name": None,
+        "agent_phone": None,
         "timeline": [{"status": "pending", "at": now_utc().isoformat()}],
         "created_at": now_utc().isoformat(),
     }
@@ -1712,6 +1734,14 @@ async def notify_customer_status(oid, status):
 async def admin_update_status(oid: str, body: StatusUpdateIn, user=Depends(require_manager)):
     if body.status not in STATUS_LABEL:
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
+    order = await db.orders.find_one({"id": oid}, {"_id": 0, "status": 1})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    current_status = order.get("status")
+    if body.status == current_status:
+        return {"ok": True}
+    if body.status not in ORDER_STATUS_TRANSITIONS.get(current_status, set()):
+        raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
     await db.orders.update_one({"id": oid}, {"$set": {"status": body.status}, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()}}})
     await notify_customer_status(oid, body.status)
     return {"ok": True}
@@ -1722,9 +1752,25 @@ async def admin_assign(oid: str, body: AssignIn, user=Depends(require_manager)):
     agent = await db.users.find_one({"user_id": body.agent_id, "role": "delivery"}, {"_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="المندوب غير موجود")
-    await db.orders.update_one({"id": oid}, {"$set": {"agent_id": agent["user_id"], "agent_name": agent["name"], "status": "out_for_delivery"}, "$push": {"timeline": {"status": "out_for_delivery", "at": now_utc().isoformat()}}})
+    assigned_at = now_utc().isoformat()
+    assigned = await db.orders.find_one_and_update(
+        {"id": oid, "agent_id": None, "status": "ready_for_delivery"},
+        {
+            "$set": {
+                "agent_id": agent["user_id"],
+                "agent_name": agent["name"],
+                "agent_phone": agent.get("phone") or agent.get("phone_number"),
+                "status": "out_for_delivery",
+                "claimed_at": assigned_at,
+            },
+            "$push": {"timeline": {"status": "out_for_delivery", "at": assigned_at}},
+        },
+    )
+    if not assigned:
+        raise HTTPException(status_code=409, detail="الطلب ليس جاهزاً أو تم استلامه من مندوب آخر")
+    assigned = await db.orders.find_one({"id": oid}, {"_id": 0}) or assigned
     await notify_customer_status(oid, "out_for_delivery")
-    return {"ok": True}
+    return delivery_order_view(assigned, "assigned")
 
 
 @api.get("/admin/users")
@@ -1737,6 +1783,17 @@ async def admin_users(user=Depends(require_manager)):
 async def admin_agents(user=Depends(require_manager)):
     docs = await db.users.find({"role": "delivery"}, {"_id": 0, "password_hash": 0}).to_list(200)
     return docs
+
+
+@api.put("/admin/agents/{user_id}")
+async def admin_update_agent(user_id: str, body: AgentUpdateIn, user=Depends(require_manager)):
+    agent = await db.users.find_one({"user_id": user_id, "role": "delivery"}, {"_id": 0, "password_hash": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="المندوب غير موجود")
+    phone = (body.phone or "").strip() or None
+    await db.users.update_one({"user_id": user_id}, {"$set": {"phone": phone}})
+    agent["phone"] = phone
+    return agent
 
 
 @api.get("/admin/sync-config")
@@ -1796,6 +1853,7 @@ async def delivery_claim(oid: str, user=Depends(require_delivery)):
             "$set": {
                 "agent_id": user["user_id"],
                 "agent_name": user["name"],
+                "agent_phone": user.get("phone") or user.get("phone_number"),
                 "status": "out_for_delivery",
                 "claimed_at": claimed_at,
             },
@@ -1804,6 +1862,7 @@ async def delivery_claim(oid: str, user=Depends(require_delivery)):
     )
     if not claimed:
         raise HTTPException(status_code=409, detail="تم استلام الطلب من مندوب آخر أو لم يعد متاحاً")
+    claimed = await db.orders.find_one({"id": oid}, {"_id": 0}) or claimed
     await notify_customer_status(oid, "out_for_delivery")
     return delivery_order_view(claimed, "assigned")
 
