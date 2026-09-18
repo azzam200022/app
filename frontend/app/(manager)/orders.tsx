@@ -12,7 +12,7 @@ import { useToast } from "@/src/context/ToastContext";
 import { printOrder, selectPrinter } from "@/src/lib/receipt";
 import { storage } from "@/src/utils/storage";
 
-const FILTERS = ["all", "pending", "confirmed", "preparing", "out_for_delivery", "delivered"];
+const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"];
 const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL };
 
 export default function ManagerOrders() {
@@ -133,7 +133,7 @@ export default function ManagerOrders() {
   const nextAction = (o: any) => {
     if (o.status === "pending") return { label: "تأكيد الطلب", icon: "check", onPress: () => setStatus(o.id, "confirmed") };
     if (o.status === "confirmed") return { label: "بدء التجهيز", icon: "package", onPress: () => setStatus(o.id, "preparing") };
-    if (o.status === "preparing") return { label: "تعيين مندوب توصيل", icon: "truck", onPress: () => openAssign(o) };
+    if (o.status === "preparing") return { label: "تم تجهيز الطلب", icon: "check-circle", onPress: () => setStatus(o.id, "ready_for_delivery") };
     if (o.status === "out_for_delivery") return { label: "تم التوصيل", icon: "check-circle", onPress: () => setStatus(o.id, "delivered") };
     return null;
   };
@@ -185,7 +185,7 @@ export default function ManagerOrders() {
                 </View>
                 <View style={styles.info}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name} • {item.phone}</T></View>
                 <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} numberOfLines={1} style={{ flex: 1 }}>{item.address}</T></View>
-                {item.agent_name ? <View style={styles.info}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}</T></View> : ["pending", "confirmed", "preparing"].includes(item.status) ? <View style={styles.info}><Feather name="users" size={14} color={colors.muted} /><T size={type.sm} color={colors.muted}>متاح للمندوبين للاستلام</T></View> : null}
+                {item.agent_name ? <View style={styles.info}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}</T></View> : item.status === "ready_for_delivery" ? <View style={styles.info}><Feather name="users" size={14} color={colors.brandPrimary} /><T size={type.sm} color={colors.brandPrimary}>بانتظار استلام مندوب</T></View> : null}
                 <View style={styles.cardBottom}>
                   <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
                   <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)}</T>
