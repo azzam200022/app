@@ -50,6 +50,8 @@ export const ProductCard = React.memo(function ProductCard({
   return (
     <Pressable
       testID={`product-card-${product.id}`}
+      accessibilityRole="button"
+      accessibilityLabel={`فتح ${product.name}`}
       onPress={() => router.push(`/product/${product.id}`)}
       style={[styles.card, width ? { width } : { flex: 1 }]}
     >
@@ -65,14 +67,14 @@ export const ProductCard = React.memo(function ProductCard({
             <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />
           </View>
         )}
-        <Pressable testID={`fav-${product.id}`} onPress={toggleFav} style={styles.favBtn} hitSlop={8}>
+        <Pressable testID={`fav-${product.id}`} accessibilityLabel={fav ? "إزالة من المفضلة" : "إضافة إلى المفضلة"} onPress={toggleFav} style={styles.favBtn} hitSlop={8}>
           <Feather name="heart" size={16} color={fav ? colors.error : colors.onSurfaceTertiary} style={fav ? { opacity: 1 } : {}} />
         </Pressable>
       </View>
       <View style={styles.body}>
         <T weight="semi" numberOfLines={2} style={styles.name}>{product.name}</T>
         <View style={styles.priceRow}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.priceBlock}>
             <T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
             {product.old_price ? (
               <T size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
@@ -88,6 +90,7 @@ export const ProductCard = React.memo(function ProductCard({
                   onDecrease?.(product);
                 }}
                 style={styles.quantityBtn}
+                accessibilityLabel="تقليل الكمية"
                 hitSlop={4}
               >
                 <Feather name="minus" size={16} color={colors.onSurface} />
@@ -101,6 +104,7 @@ export const ProductCard = React.memo(function ProductCard({
                   onIncrease?.(product);
                 }}
                 style={styles.quantityBtn}
+                accessibilityLabel="زيادة الكمية"
                 hitSlop={4}
               >
                 <Feather name="plus" size={16} color={colors.onSurface} />
@@ -109,6 +113,7 @@ export const ProductCard = React.memo(function ProductCard({
           ) : (
             <Pressable
               testID={`add-cart-${product.id}`}
+              accessibilityLabel={unavailable ? "المنتج غير متوفر" : `إضافة ${product.name} إلى السلة`}
               disabled={unavailable}
               onPress={(event) => {
                 event.stopPropagation();
@@ -128,14 +133,15 @@ export const ProductCard = React.memo(function ProductCard({
 });
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  card: { backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, shadowColor: "#15302E", shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   imgWrap: { width: "100%", aspectRatio: 1, backgroundColor: colors.surfaceSecondary },
   img: { width: "100%", height: "100%" },
   badgePos: { position: "absolute", top: spacing.sm, insetInlineStart: spacing.sm },
-  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.92)", alignItems: "center", justifyContent: "center" },
-  body: { padding: spacing.md },
+  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center" },
+  body: { padding: spacing.md, minHeight: 138 },
   name: { minHeight: 40, lineHeight: 20 },
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", marginTop: spacing.sm, gap: spacing.sm },
+  priceBlock: { flex: 1, minWidth: 0 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
