@@ -246,6 +246,23 @@ def placed_order(request):
 
 
 class TestOrders:
+    def test_repeated_order_request_returns_same_order(self, s, customer_token):
+        product = s.get(f"{API}/products", timeout=15).json()[0]
+        pid = product["id"]
+        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+        added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                       json={"product_id": pid, "quantity": 1}, timeout=15)
+        assert added.status_code == 200
+        payload = {"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
+                   "lat": 33.3152, "lng": 44.3661, "notes": "TEST idempotency",
+                   "client_request_id": f"test-request-{uuid.uuid4().hex}"}
+        first = s.post(f"{API}/orders", headers=H(customer_token), json=payload, timeout=15)
+        assert first.status_code == 200, first.text
+        second = s.post(f"{API}/orders", headers=H(customer_token), json=payload, timeout=15)
+        assert second.status_code == 200, second.text
+        assert second.json()["id"] == first.json()["id"]
+
+
     def test_order_stores_location(self, placed_order):
         o = placed_order["order"]
         assert o["status"] == "pending"
@@ -308,6 +325,13 @@ class TestOrders:
 
 
 class TestLifecycle:
+    def test_rejects_invalid_status_transition(self, s, manager_token, placed_order):
+        oid = placed_order["order"]["id"]
+        invalid = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token),
+                         json={"status": "delivered"}, timeout=15)
+        assert invalid.status_code == 400
+
+
     def test_full_lifecycle_and_delivery_sees_location(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
         # manager -> confirmed
