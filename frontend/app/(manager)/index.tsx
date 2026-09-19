@@ -25,14 +25,16 @@ export default function ManagerDashboard() {
   const { show } = useToast();
   const [stats, setStats] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [s, o] = await Promise.all([api.adminStats(), api.adminOrders()]);
+      const [s, o, products] = await Promise.all([api.adminStats(), api.adminOrders(), api.products({}, true)]);
       setStats(s);
       setOrders(o);
+      setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
       show(e.message, "error");
     } finally {
@@ -57,6 +59,22 @@ export default function ManagerDashboard() {
   const recent = orders.slice(0, 5);
   const maxStatusCount = Math.max(1, ...STATUS_ROWS.map((row) => counts[row.key] || 0));
 
+  const toggleComingSoon = async (product: any) => {
+    const next = !product.coming_soon;
+    try {
+      await api.updateProduct(product.id, { coming_soon: next });
+      setLowStockProducts((current) => current.map((item) => item.id === product.id ? {
+        ...item,
+        coming_soon: next,
+        available: Number(item.stock ?? 0) > 0 && !next,
+        stock_status: next ? "coming_soon" : (Number(item.stock ?? 0) <= 0 ? "out" : "in"),
+      } : item));
+      show(next ? "تم إيقاف بيع المنتج: يتوفر قريباً" : "تمت إعادة المنتج للبيع");
+    } catch (e: any) {
+      show(e.message, "error");
+    }
+  };
+
   const statCards = stats ? [
     { label: "إجمالي المنتجات", value: stats.products, icon: "shopping-cart", color: colors.brandPrimary },
     { label: "قيد المراجعة", value: counts.pending || 0, icon: "truck", color: "#3C9C91" },
@@ -66,6 +84,7 @@ export default function ManagerDashboard() {
 
   const quickActions = [
     { icon: "grid", label: "الفئات", onPress: () => router.push("/(manager)/products"), testID: "qa-categories" },
+    { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
     { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
     { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
     { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
@@ -127,6 +146,51 @@ export default function ManagerDashboard() {
           <View style={styles.quickGrid}>
             {quickActions.map((action) => <QuickAction key={action.testID} {...action} />)}
           </View>
+
+          <View style={styles.stockSectionTitle}>
+            <View style={styles.stockSectionHeading}>
+              <T weight="displayBold" size={type.lg}>تنبيه المخزون</T>
+              <Feather name="alert-triangle" size={18} color={colors.error} />
+            </View>
+            <Pressable testID="low-stock-manage" onPress={() => router.push("/(manager)/products")}>
+              <T color={colors.brandPrimary} weight="semi" size={type.sm}>إدارة المنتجات ‹</T>
+            </Pressable>
+          </View>
+          {lowStockProducts.length === 0 ? (
+            <View style={styles.stockEmpty}>
+              <Feather name="check-circle" size={20} color={colors.success} />
+              <T color={colors.muted} size={type.sm}>لا توجد منتجات كميتها 5 قطع أو أقل</T>
+            </View>
+          ) : (
+            <View style={styles.stockPanel} testID="low-stock-panel">
+              <View style={styles.stockSummary}>
+                <View style={styles.stockSummaryIcon}><Feather name="alert-circle" size={20} color={colors.error} /></View>
+                <View style={styles.stockSummaryCopy}>
+                  <T weight="bold" size={type.base}>منتجات على وشك النفاذ</T>
+                  <T color={colors.muted} size={type.sm}>تحتاج إلى مراجعة قبل نفادها</T>
+                </View>
+                <View style={styles.stockCount}><T weight="displayBold" color={colors.error} size={type.lg}>{lowStockProducts.length}</T></View>
+              </View>
+              {lowStockProducts.slice(0, 5).map((product) => (
+                <View key={product.id} style={styles.stockRow}>
+                  <View style={styles.stockRowIcon}><Feather name="package" size={17} color={colors.brandPrimary} /></View>
+                  <View style={styles.stockRowCopy}>
+                    <T weight="semi" numberOfLines={1}>{product.name}</T>
+                    <T color={Number(product.stock ?? 0) === 0 ? colors.error : colors.gold} size={type.sm}>المخزون: {product.stock ?? 0} قطع</T>
+                  </View>
+                  <Pressable testID={"dashboard-coming-" + product.id} onPress={() => toggleComingSoon(product)} style={[styles.stockAction, product.coming_soon && styles.stockActionActive]}>
+                    <Feather name={product.coming_soon ? "clock" : "slash"} size={13} color={product.coming_soon ? colors.gold : colors.brandPrimary} />
+                    <T size={10} weight="bold" color={product.coming_soon ? colors.gold : colors.brandPrimary}>{product.coming_soon ? "يتوفر قريباً" : "جعله يتوفر قريباً"}</T>
+                  </Pressable>
+                </View>
+              ))}
+              {lowStockProducts.length > 5 ? (
+                <Pressable testID="low-stock-view-all" onPress={() => router.push("/(manager)/products")} style={styles.stockMore}>
+                  <T color={colors.brandPrimary} weight="semi" size={type.sm}>عرض جميع المنتجات ({lowStockProducts.length}) ‹</T>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
 
           <View style={styles.insightsRow}>
             <View style={styles.insightCard}>
@@ -206,6 +270,20 @@ const styles = StyleSheet.create({
   printAction: { flexDirection: "row-reverse", alignItems: "center", gap: 2, backgroundColor: "#fff", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.lg, marginBottom: spacing.sm },
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
+  stockSectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, marginBottom: spacing.sm },
+  stockSectionHeading: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  stockPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: "#F2D39A", paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  stockSummary: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  stockSummaryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFF3D6", alignItems: "center", justifyContent: "center" },
+  stockSummaryCopy: { flex: 1, alignItems: "flex-end" },
+  stockCount: { minWidth: 38, height: 38, borderRadius: 19, backgroundColor: "#FDE8E7", alignItems: "center", justifyContent: "center" },
+  stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  stockRowIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  stockRowCopy: { flex: 1, alignItems: "flex-end" },
+  stockAction: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  stockActionActive: { backgroundColor: "#FBF1DE" },
+  stockMore: { alignItems: "center", paddingVertical: spacing.sm },
+  stockEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   qa: { width: "23.5%", minHeight: 82, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: spacing.xs },
   qaIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   qaBadge: { position: "absolute", top: -3, insetInlineEnd: -5, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
