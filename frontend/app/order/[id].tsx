@@ -42,6 +42,7 @@ export default function OrderDetail() {
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
 
   const cancelled = order.status === "cancelled";
+  const failed = order.status === "delivery_failed";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
 
   return (
@@ -74,6 +75,14 @@ export default function OrderDetail() {
           <T weight="displayBold" size={type.lg} style={{ marginBottom: spacing.md }}>حالة الطلب</T>
           {cancelled ? (
             <View style={styles.cancelRow}><Feather name="x-circle" size={20} color={colors.error} /><T weight="bold" color={colors.error}>تم إلغاء الطلب</T></View>
+          ) : failed ? (
+            <View style={styles.cancelRow}>
+              <Feather name="alert-triangle" size={20} color={colors.error} />
+              <View style={{ flex: 1 }}>
+                <T weight="bold" color={colors.error}>تعذر التسليم</T>
+                {order.delivery_failed_reason ? <T size={type.sm} color={colors.error} style={{ marginTop: spacing.xs }}>السبب: {order.delivery_failed_reason}</T> : null}
+              </View>
+            </View>
           ) : (
             STATUS_FLOW.map((st, i) => {
               const done = i <= currentIdx;
