@@ -14,6 +14,13 @@ import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 import { useEffect } from "react";
 
+const DELIVERY_FAILURE_REASONS = [
+  { value: "customer_unavailable", label: "العميل غير موجود" },
+  { value: "phone_unreachable", label: "الهاتف مغلق أو لا يجيب" },
+  { value: "invalid_address", label: "العنوان غير صحيح" },
+  { value: "customer_refused", label: "رفض العميل الاستلام" },
+];
+
 export default function DeliveryHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -28,6 +35,9 @@ export default function DeliveryHome() {
   const [returnFor, setReturnFor] = useState<any>(null);
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [failureFor, setFailureFor] = useState<any>(null);
+  const [failureReason, setFailureReason] = useState<string | null>(null);
+  const [failureSubmitting, setFailureSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     try { setOrders(await api.deliveryOrders()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); setRefreshing(false); }
@@ -36,6 +46,25 @@ export default function DeliveryHome() {
 
   const markDelivered = async (id: string) => {
     try { await api.deliverySetStatus(id, "delivered"); show("تم تسجيل التوصيل 🎉"); load(); } catch (e: any) { show(e.message, "error"); }
+  };
+
+  const submitFailure = async () => {
+    if (!failureFor || !failureReason) {
+      show("اختر سبب تعذر التسليم", "error");
+      return;
+    }
+    setFailureSubmitting(true);
+    try {
+      await api.deliverySetStatus(failureFor.id, "delivery_failed", failureReason);
+      show("تم تسجيل تعذر التسليم");
+      setFailureFor(null);
+      setFailureReason(null);
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setFailureSubmitting(false);
+    }
   };
 
   const claimOrder = async (id: string) => {
@@ -180,7 +209,13 @@ export default function DeliveryHome() {
         </Pressable>
       </View>
       {item.status === "out_for_delivery" && (
-        <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => markDelivered(item.id)} testID={`deliver-${item.id}`} style={{ marginTop: spacing.sm, minHeight: 46 }} />
+        <>
+          <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => markDelivered(item.id)} testID={"deliver-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
+          <Pressable testID={"failed-" + item.id} onPress={() => { setFailureFor(item); setFailureReason(null); }} style={styles.failBtn}>
+            <Feather name="alert-triangle" size={16} color={colors.error} />
+            <T size={type.sm} weight="bold" color={colors.error}>تعذر التسليم</T>
+          </Pressable>
+        </>
       )}
       {item.delivery_state !== "available" && (item.status === "out_for_delivery" || item.status === "delivered") && item.return_status !== "full" && (
         <Pressable testID={"return-" + item.id} onPress={() => openReturn(item)} style={styles.returnBtn}>
@@ -232,6 +267,25 @@ export default function DeliveryHome() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
           renderItem={renderCard} />
       )}
+
+      <Modal visible={!!failureFor} transparent animationType="slide" onRequestClose={() => { setFailureFor(null); setFailureReason(null); }}>
+        <Pressable style={styles.modalBg} onPress={() => { setFailureFor(null); setFailureReason(null); }}>
+          <Pressable style={[styles.modalCard, { alignItems: "stretch" }]} onPress={(e) => e.stopPropagation()}>
+            <T weight="displayBold" size={type.xl}>تعذر التسليم</T>
+            <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs }}>الطلب #{failureFor?.id?.replace("ORD", "")}</T>
+            <T weight="semi" style={{ marginTop: spacing.lg }}>اختر سبب التعذر</T>
+            <View style={{ gap: spacing.xs, marginTop: spacing.sm }}>
+              {DELIVERY_FAILURE_REASONS.map((reason) => (
+                <Pressable key={reason.value} onPress={() => setFailureReason(reason.value)} style={[styles.failureOption, failureReason === reason.value && styles.failureOptionActive]}>
+                  <T size={type.sm} weight="semi" color={failureReason === reason.value ? colors.brandPrimary : colors.onSurfaceSecondary}>{reason.label}</T>
+                </Pressable>
+              ))}
+            </View>
+            <Button title={failureSubmitting ? "جارٍ التسجيل..." : "تأكيد تعذر التسليم"} icon="alert-triangle" onPress={submitFailure} disabled={failureSubmitting} style={{ marginTop: spacing.lg, minHeight: 46 }} />
+            <Button title="إلغاء" variant="secondary" onPress={() => { setFailureFor(null); setFailureReason(null); }} disabled={failureSubmitting} style={{ marginTop: spacing.sm, minHeight: 44 }} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={!!returnFor} transparent animationType="slide" onRequestClose={() => setReturnFor(null)}>
         <Pressable style={styles.modalBg} onPress={() => setReturnFor(null)}>
@@ -318,6 +372,9 @@ const styles = StyleSheet.create({
   detailBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   navBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   returnBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.sm },
+  failBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.sm },
+  failureOption: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  failureOptionActive: { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary },
   returnSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, maxHeight: "86%" },
   grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: "center", marginBottom: spacing.md },
   returnHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
