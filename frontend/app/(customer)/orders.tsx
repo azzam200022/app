@@ -15,6 +15,7 @@ export const STATUS_COLOR: Record<string, string> = {
   ready_for_delivery: "#8A5A00",
   out_for_delivery: "#285C4D",
   delivered: "#1F4529",
+  delivery_failed: "#8B3A3A",
   cancelled: "#8B3A3A",
 };
 
@@ -69,6 +70,7 @@ export default function Orders() {
                 <StatusPill status={item.status} />
               </View>
               {item.agent_name ? <View style={styles.agentRow}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}{item.agent_phone ? " • " + item.agent_phone : ""}</T></View> : null}
+              {item.status === "delivery_failed" && item.delivery_failed_reason ? <View style={styles.agentRow}><Feather name="alert-triangle" size={14} color={colors.error} /><T size={type.sm} weight="semi" color={colors.error}>سبب التعذر: {item.delivery_failed_reason}</T></View> : null}
               <View style={styles.cardRow}>
                 <T color={colors.muted} size={type.sm}>{new Date(item.created_at).toLocaleDateString("ar-EG")}</T>
                 <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
