@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, Linking, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -27,6 +27,7 @@ export default function Checkout() {
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const orderRequestId = useRef("order-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
@@ -93,7 +94,7 @@ export default function Checkout() {
     if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
     setLoading(true);
     try {
-      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng });
+      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
       await reload();
       router.replace(`/order/${order.id}?new=1`);
     } catch (e: any) { show(e.message, "error"); }
