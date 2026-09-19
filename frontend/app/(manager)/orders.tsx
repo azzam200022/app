@@ -12,7 +12,7 @@ import { useToast } from "@/src/context/ToastContext";
 import { printOrder, selectPrinter } from "@/src/lib/receipt";
 import { storage } from "@/src/utils/storage";
 
-const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"];
+const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered", "delivery_failed"];
 const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL };
 
 export default function ManagerOrders() {
@@ -186,6 +186,7 @@ export default function ManagerOrders() {
                 <View style={styles.info}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name} • {item.phone}</T></View>
                 <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} numberOfLines={1} style={{ flex: 1 }}>{item.address}</T></View>
                 {item.agent_name ? <View style={styles.info}><Feather name="truck" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المندوب: {item.agent_name}</T></View> : item.status === "ready_for_delivery" ? <View style={styles.info}><Feather name="users" size={14} color={colors.brandPrimary} /><T size={type.sm} color={colors.brandPrimary}>بانتظار استلام مندوب</T></View> : null}
+                {item.status === "delivery_failed" && item.delivery_failed_reason ? <View style={styles.info}><Feather name="alert-triangle" size={14} color={colors.error} /><T size={type.sm} weight="semi" color={colors.error}>سبب التعذر: {item.delivery_failed_reason}</T></View> : null}
                 <View style={styles.cardBottom}>
                   <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
                   <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)}</T>
