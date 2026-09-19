@@ -358,6 +358,31 @@ class TestLifecycle:
         assert stale_location.status_code == 409
 
 
+    def test_delivery_failure_requires_reason_and_records_reason(self, s, manager_token, delivery_token, placed_order):
+        oid = placed_order["order"]["id"]
+        for status in ("confirmed", "preparing", "ready_for_delivery"):
+            r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token), json={"status": status}, timeout=15)
+            assert r.status_code == 200, r.text
+
+        agents = s.get(f"{API}/admin/agents", headers=H(manager_token), timeout=15).json()
+        agent_id = next(a["user_id"] for a in agents if a["email"] == DELIVERY["email"])
+        assigned = s.post(f"{API}/admin/orders/{oid}/assign", headers=H(manager_token), json={"agent_id": agent_id}, timeout=15)
+        assert assigned.status_code == 200, assigned.text
+
+        missing_reason = s.post(f"{API}/delivery/orders/{oid}/status", headers=H(delivery_token),
+                                json={"status": "delivery_failed"}, timeout=15)
+        assert missing_reason.status_code == 400
+
+        failed = s.post(f"{API}/delivery/orders/{oid}/status", headers=H(delivery_token),
+                        json={"status": "delivery_failed", "reason": "customer_unavailable"}, timeout=15)
+        assert failed.status_code == 200, failed.text
+
+        final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
+        assert final["status"] == "delivery_failed"
+        assert final["delivery_failed_reason"] == "customer_unavailable"
+        assert any(t["status"] == "delivery_failed" for t in final["timeline"])
+
+
     def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
         for status in ("confirmed", "preparing", "ready_for_delivery"):
