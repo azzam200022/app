@@ -176,6 +176,8 @@ export const api = {
   categories: (force = false) => cachedRequest("categories", () => req("/categories"), CACHE_TTLS.categories, force),
   createProduct: (body: any) => req("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: any) => req("/products/" + id, { method: "PUT", body: JSON.stringify(body) }),
+  subscribeAvailabilityAlert: (id: string) => req("/products/" + id + "/availability-alert", { method: "POST" }),
+  removeAvailabilityAlert: (id: string) => req("/products/" + id + "/availability-alert", { method: "DELETE" }),
   deleteProduct: (id: string) => req("/products/" + id, { method: "DELETE" }),
   lookup: (barcode: string) => req("/catalog/lookup/" + barcode),
   catalogSearch: (q: string) => req("/catalog/search?q=" + encodeURIComponent(q)),
