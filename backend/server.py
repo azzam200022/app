@@ -1751,6 +1751,73 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     return doc
 
 
+@api.post("/orders/{oid}/reorder")
+async def reorder_order(oid: str, user=Depends(require_user)):
+    order = await db.orders.find_one({"id": oid, "user_id": user["user_id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+
+    source_items = list(order.get("items") or [])
+    if not source_items:
+        raise HTTPException(status_code=400, detail="لا توجد منتجات في هذا الطلب")
+
+    current_cart = await db.carts.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    merged_items = []
+    positions = {}
+    for item in list((current_cart or {}).get("items", [])):
+        product_id = str(item.get("product_id") or "")
+        quantity = max(int(item.get("quantity", 0) or 0), 0)
+        if not product_id or quantity <= 0:
+            continue
+        if product_id in positions:
+            merged_items[positions[product_id]]["quantity"] += quantity
+        else:
+            positions[product_id] = len(merged_items)
+            merged_items.append({"product_id": product_id, "quantity": quantity})
+
+    products = await load_cart_products(source_items + merged_items)
+    added_items = []
+    unavailable_items = []
+    for item in source_items:
+        product_id = str(item.get("product_id") or "")
+        requested = max(int(item.get("quantity", 0) or 0), 0)
+        if not product_id or requested <= 0:
+            continue
+        product = products.get(product_id)
+        name = (product or {}).get("name") or item.get("name") or "منتج"
+        if not product:
+            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
+            continue
+        if product.get("coming_soon"):
+            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
+            continue
+        stock = max(int(product.get("stock", 0) or 0), 0)
+        current_quantity = merged_items[positions[product_id]]["quantity"] if product_id in positions else 0
+        capacity = max(stock - current_quantity, 0)
+        added_quantity = min(requested, capacity)
+        if product_id in positions:
+            merged_items[positions[product_id]]["quantity"] += added_quantity
+        elif added_quantity > 0:
+            positions[product_id] = len(merged_items)
+            merged_items.append({"product_id": product_id, "quantity": added_quantity})
+        if added_quantity > 0:
+            added_items.append({"product_id": product_id, "name": name, "quantity": added_quantity})
+        if added_quantity < requested:
+            reason = "نفدت الكمية" if stock <= 0 else "المتاح حالياً: " + str(capacity)
+            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
+
+    merged_items = [item for item in merged_items if item["quantity"] > 0]
+    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": merged_items}}, upsert=True)
+    final_products = await load_cart_products(merged_items, products)
+    return {
+        "cart": cart_from_items(merged_items, final_products),
+        "added_items": added_items,
+        "unavailable_items": unavailable_items,
+        "added_count": sum(item["quantity"] for item in added_items),
+        "unavailable_count": len(unavailable_items),
+    }
+
+
 @api.get("/orders")
 async def my_orders(user=Depends(require_user)):
     docs = await db.orders.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)

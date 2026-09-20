@@ -37,6 +37,7 @@ export default function Orders() {
   const [orders, setOrders] = useState<any[]>(cachedOrders || []);
   const [loading, setLoading] = useState(cachedOrders === undefined);
   const [refreshing, setRefreshing] = useState(false);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
 
   const load = useCallback(async (force = false) => {
     try {
@@ -47,6 +48,24 @@ export default function Orders() {
   }, [show]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  const reorder = useCallback(async (id: string) => {
+    if (reorderingId) return;
+    setReorderingId(id);
+    try {
+      const result = await api.reorderOrder(id);
+      const unavailable = Array.isArray(result.unavailable_items) ? result.unavailable_items : [];
+      const message = unavailable.length
+        ? "تمت إضافة " + (result.added_count || 0) + " قطعة إلى السلة، وتعذر إضافة " + unavailable.length + " منتج"
+        : "تمت إعادة الطلب وإضافة المنتجات إلى السلة";
+      show(message, unavailable.length ? "info" : "success");
+      router.push("/cart");
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setReorderingId(null);
+    }
+  }, [reorderingId, router, show]);
 
   return (
     <View style={styles.root}>
@@ -82,6 +101,15 @@ export default function Orders() {
                   <Feather name="chevron-left" size={16} color={colors.brandPrimary} />
                 </View>
               </View>
+              <Pressable
+                testID={"reorder-" + item.id}
+                onPress={(event) => { event.stopPropagation(); void reorder(item.id); }}
+                disabled={reorderingId !== null}
+                style={({ pressed }) => [styles.reorderButton, pressed && styles.reorderButtonPressed, reorderingId !== null && reorderingId !== item.id && styles.reorderButtonDisabled]}
+              >
+                {reorderingId === item.id ? <ActivityIndicator size="small" color={colors.brandPrimary} /> : <Feather name="refresh-cw" size={16} color={colors.brandPrimary} />}
+                <T color={colors.brandPrimary} weight="bold" size={type.sm}>{reorderingId === item.id ? "جارٍ تجهيز السلة..." : "إعادة الطلب"}</T>
+              </Pressable>
             </Pressable>
           )}
         />
@@ -100,6 +128,9 @@ const styles = StyleSheet.create({
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
   trackRow: { flexDirection: "row-reverse", alignItems: "center", gap: 2 },
+  reorderButton: { minHeight: 42, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingHorizontal: spacing.md },
+  reorderButtonPressed: { opacity: 0.72 },
+  reorderButtonDisabled: { opacity: 0.45 },
 });
 
 const pill = StyleSheet.create({

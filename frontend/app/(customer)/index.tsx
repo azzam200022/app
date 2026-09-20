@@ -29,6 +29,7 @@ export default function Home() {
   const [selected, setSelected] = useState("الكل");
   const [products, setProducts] = useState<any[]>(() => getCachedProducts() || []);
   const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 6) || []);
+  const [bestsellers, setBestsellers] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>(() => getCachedBanners() || []);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [loading, setLoading] = useState(() => getCachedProducts() === undefined);
@@ -91,8 +92,9 @@ export default function Home() {
       api.products({ offers: true }, force),
       api.products(selected === "الكل" ? {} : { category: selected }, force),
       api.banners(force),
+      api.bestsellers(),
     ]);
-    const [c, o, p, b] = results;
+    const [c, o, p, b, best] = results;
     if (c.status === "fulfilled") setCats(c.value);
     if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 6) : []);
     if (p.status === "fulfilled") setProducts(p.value);
@@ -100,7 +102,8 @@ export default function Home() {
       setBanners(Array.isArray(b.value) ? b.value : []);
       setBannerIndex(0);
     }
-    const failed = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+    if (best.status === "fulfilled") setBestsellers(Array.isArray(best.value) ? best.value.slice(0, 10) : []);
+    const failed = results.slice(0, 4).find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) show(failed.reason?.message || "تعذر تحميل بعض البيانات", "error");
     setLoading(false);
   }, [selected, show]);
@@ -199,6 +202,29 @@ export default function Home() {
         <T weight="displayBold" size={type.xl}>التصنيفات</T>
       </View>
       <CategoryCircles items={[{ name: "الكل" }, ...cats.map((c: any) => ({ name: c.name, image: c.image }))]} selected={selected} onSelect={onSelect} />
+
+      {/* Bestsellers row */}
+      {bestsellers.length > 0 && selected === "الكل" && (
+        <View>
+          <View style={styles.sectionHead}>
+            <View>
+              <T weight="displayBold" size={type.xl}>الأكثر شراءً</T>
+              <T color={colors.muted} size={type.sm}>اختيارات العملاء</T>
+            </View>
+          </View>
+          <FlatList
+            horizontal
+            inverted={Platform.OS !== "web"}
+            data={bestsellers}
+            keyExtractor={(i) => "bestseller-" + i.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            renderItem={({ item }) => (
+              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+            )}
+          />
+        </View>
+      )}
 
       {/* Offers row */}
       {offers.length > 0 && selected === "الكل" && (

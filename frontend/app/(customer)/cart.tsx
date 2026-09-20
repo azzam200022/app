@@ -93,8 +93,8 @@ const styles = StyleSheet.create({
   item: { flexDirection: "row-reverse", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   itemImg: { width: 84, height: 84, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   qtyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
-  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.pill, padding: 4 },
-  stepBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, minWidth: 120, height: 44, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, padding: 4, shadowColor: "#15302E", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  stepBtn: { width: 35, height: 35, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.md },
   summaryRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
 });

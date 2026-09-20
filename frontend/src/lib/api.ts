@@ -200,6 +200,7 @@ export const api = {
     return cachedRequest("order:" + id, () => req("/orders/" + id), CACHE_TTLS.orders, force);
   },
   cancelOrder: (id: string) => req("/orders/" + id + "/cancel", { method: "POST" }),
+  reorderOrder: async (id: string) => { const result = await req("/orders/" + id + "/reorder", { method: "POST" }); if (result?.cart) setCachedCart(result.cart); return result; },
   adminStats: () => req("/admin/stats"),
   adminOrders: (status?: string) => req("/admin/orders" + (status ? "?status=" + status : "")),
   adminReturns: () => req("/admin/returns"),
