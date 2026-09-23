@@ -225,7 +225,7 @@ export const api = {
   deleteBanner: (id: string) => req("/admin/banners/" + id, { method: "DELETE" }),
   deliveryOrders: () => req("/delivery/orders"),
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
-  deliverySetStatus: (id: string, status: string, reason?: string) => req("/delivery/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status, ...(reason ? { reason } : {}) }) }),
+  deliverySetStatus: (id: string, status: string, reason?: string, otp?: string) => req("/delivery/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status, ...(reason ? { reason } : {}), ...(otp ? { otp } : {}) }) }),
   deliverySetLocation: (id: string, lat: number, lng: number) => req("/delivery/orders/" + id + "/location", { method: "POST", body: JSON.stringify({ lat, lng }) }),
   deliveryCreateReturn: (id: string, body: any) => req("/delivery/orders/" + id + "/returns", { method: "POST", body: JSON.stringify(body) }),
 };
