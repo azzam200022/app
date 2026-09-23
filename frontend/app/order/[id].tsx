@@ -21,7 +21,7 @@ export default function OrderDetail() {
   const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
-  const isStaff = user?.role === "manager" || user?.role === "delivery";
+  const canPrint = user?.role === "manager";
 
   const load = async (force = false) => {
     try { setOrder(await api.order(id!, force)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
@@ -51,7 +51,7 @@ export default function OrderDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
         <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
-        {isStaff ? (
+        {canPrint ? (
           <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
             <Feather name="printer" size={20} color={colors.brandPrimary} />
           </Pressable>
