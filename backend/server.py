@@ -1667,19 +1667,22 @@ def approximate_distance_km(location):
         return None
 
 
-def delivery_order_view(order, delivery_state: str):
+def delivery_order_view(order, delivery_state: str, expose_customer_details: bool = True):
     items = order.get("items", [])
     item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in items)
-    location = order.get("location")
+    raw_location = order.get("location")
+    location = raw_location if expose_customer_details else None
+    area = order.get("area") or infer_order_area(order.get("address", ""))
     original_total, amount_due = order_amounts(order)
     return {
         "id": order.get("id"),
-        "customer_name": order.get("customer_name", ""),
-        "phone": order.get("phone") or order.get("phone_number"),
-        "address": order.get("address", ""),
+        # Do not expose customer contact details or exact location until the agent claims the order.
+        "customer_name": order.get("customer_name", "") if expose_customer_details else "زبون",
+        "phone": (order.get("phone") or order.get("phone_number")) if expose_customer_details else None,
+        "address": order.get("address", "") if expose_customer_details else area,
         "location": location,
-        "area": order.get("area") or infer_order_area(order.get("address", "")),
-        "distance_km": approximate_distance_km(location),
+        "area": area,
+        "distance_km": approximate_distance_km(raw_location),
         "items": [
             {key: item.get(key) for key in ("product_id", "name", "image_url", "price", "quantity", "line_total")}
             for item in items
@@ -1864,6 +1867,8 @@ async def get_order(oid: str, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     if user["role"] == "customer" and d["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="غير مصرح")
+    if user["role"] == "delivery" and d.get("agent_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="هذا الطلب غير مسند إليك")
     d = with_order_amounts(d)
     if user["role"] != "customer":
         d.pop("delivery_otp", None)
@@ -2216,7 +2221,11 @@ async def delivery_orders(user=Depends(require_delivery)):
     orders = available + assigned
     orders.sort(key=lambda order: order.get("created_at", ""), reverse=True)
     return [
-        delivery_order_view(order, "available" if order.get("agent_id") is None else "assigned")
+        delivery_order_view(
+            order,
+            "available" if order.get("agent_id") is None else "assigned",
+            expose_customer_details=(order.get("agent_id") is not None or user["role"] == "manager"),
+        )
         for order in orders
     ]
 

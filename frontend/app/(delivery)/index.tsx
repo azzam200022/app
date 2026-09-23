@@ -223,9 +223,14 @@ export default function DeliveryHome() {
         <StatusPill status={item.status} />
       </View>
       <View style={styles.info}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name}</T></View>
-      <Pressable style={styles.info} onPress={() => Linking.openURL(`tel:${item.phone}`)}><Feather name="phone" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>{item.phone}</T></Pressable>
-      {item.delivery_state === "available" && <View style={styles.info}><Feather name="map" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المنطقة: {item.area}</T></View>}
-      <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{item.address}</T></View>
+      {item.delivery_state === "available" ? (
+        <View style={styles.info}><Feather name="map" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>المنطقة: {item.area}</T></View>
+      ) : (
+        <>
+          {item.phone ? <Pressable style={styles.info} onPress={() => Linking.openURL(`tel:${item.phone}`)}><Feather name="phone" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>{item.phone}</T></Pressable> : null}
+          <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{item.address}</T></View>
+        </>
+      )
 
       {/* Items thumbnails */}
       <View style={styles.thumbs}>
@@ -260,16 +265,18 @@ export default function DeliveryHome() {
         </Pressable>
       ) : null}
 
-      <View style={styles.navRow}>
-        <Pressable testID={`details-${item.id}`} onPress={() => router.push("/order/" + item.id)} style={styles.detailBtn}>
-          <Feather name="file-text" size={16} color={colors.brandPrimary} />
-          <T size={type.sm} weight="bold" color={colors.brandPrimary}>عرض تفاصيل الطلب</T>
-        </Pressable>
-        <Pressable testID={`nav-${item.id}`} onPress={() => openDirections(item.location?.lat, item.location?.lng, item.address)} style={styles.navBtn}>
-          <Feather name="map" size={16} color={colors.brandPrimary} />
-          <T size={type.sm} weight="bold" color={colors.brandPrimary}>{item.location ? "التوصيل عبر الخرائط" : "بحث عن العنوان في الخرائط"}</T>
-        </Pressable>
-      </View>
+      {item.delivery_state !== "available" && (
+        <View style={styles.navRow}>
+          <Pressable testID={`details-${item.id}`} onPress={() => router.push("/order/" + item.id)} style={styles.detailBtn}>
+            <Feather name="file-text" size={16} color={colors.brandPrimary} />
+            <T size={type.sm} weight="bold" color={colors.brandPrimary}>عرض تفاصيل الطلب</T>
+          </Pressable>
+          <Pressable testID={`nav-${item.id}`} onPress={() => openDirections(item.location?.lat, item.location?.lng, item.address)} style={styles.navBtn}>
+            <Feather name="map" size={16} color={colors.brandPrimary} />
+            <T size={type.sm} weight="bold" color={colors.brandPrimary}>{item.location ? "التوصيل عبر الخرائط" : "بحث عن العنوان في الخرائط"}</T>
+          </Pressable>
+        </View>
+      )}
       {item.status === "out_for_delivery" && (
         <>
           <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => openProof(item)} testID={"deliver-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />

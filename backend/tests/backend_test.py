@@ -465,6 +465,11 @@ class TestLifecycle:
         assert closed["status"] == "returned"
         assert closed["amount_due"] == 0
 
+    def test_delivery_cannot_open_unassigned_order(self, s, delivery_token, placed_order):
+        oid = placed_order["order"]["id"]
+        r = s.get(f"{API}/orders/{oid}", headers=H(delivery_token), timeout=15)
+        assert r.status_code == 403
+
     def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
         for status in ("confirmed", "preparing", "ready_for_delivery"):
@@ -483,11 +488,16 @@ class TestLifecycle:
         assert order["delivery_state"] == "available"
         assert order["item_count"] == sum(item["quantity"] for item in order["items"])
         assert order["area"]
+        assert order["phone"] is None
+        assert order["location"] is None
+        assert order["address"] == order["area"]
 
         claimed = s.post(f"{API}/delivery/orders/{oid}/claim", headers=H(delivery_token), timeout=15)
         assert claimed.status_code == 200, claimed.text
         assert claimed.json()["delivery_state"] == "assigned"
         assert claimed.json()["status"] == "out_for_delivery"
+        assert claimed.json()["location"] == {"lat": 33.3152, "lng": 44.3661}
+        assert claimed.json()["phone"] == "07701234567"
 
         assigned = s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json()
         final = next(o for o in assigned if o["id"] == oid)
