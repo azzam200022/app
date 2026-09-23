@@ -99,6 +99,7 @@ export default function DeliveryHome() {
     const otp = proofOtp.trim();
     if (!/^\d{6}$/.test(otp)) {
       show("أدخل رمز التسليم المكوّن من 6 أرقام", "error");
+      proofLock.current = false;
       return;
     }
     setProofSubmitting(true);
@@ -264,7 +265,7 @@ export default function DeliveryHome() {
       </View>
       <View style={styles.amountDueCallout}>
         <Feather name="dollar-sign" size={17} color={colors.brandPrimary} />
-        <T weight="bold" color={colors.brandPrimary} style={{ flex: 1 }}>المبلغ المطلوب من العميل: {formatPrice(item.amount_due ?? item.total)}</T>
+        <T weight="bold" color={colors.brandPrimary} style={{ flex: 1 }}>المبلغ المطلوب من العميل: {formatPrice(item.amount_due ?? Math.max(Number(item.total || 0) - Number(item.returned_total || 0), 0))}</T>
       </View>
 
       {item.delivery_state === "available" && (
@@ -294,7 +295,7 @@ export default function DeliveryHome() {
           <T size={type.sm} weight="bold" color={colors.brandPrimary}>{item.location ? "التوصيل عبر الخرائط" : "بحث عن العنوان في الخرائط"}</T>
         </Pressable>
       </View>
-      {item.status === "out_for_delivery" && (
+      {item.status === "out_for_delivery" && item.return_status !== "full" && (
         <>
           <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => openProof(item)} testID={"deliver-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
           <Pressable testID={"failed-" + item.id} onPress={() => { setFailureFor(item); setFailureReason(null); }} style={styles.failBtn}>
@@ -302,6 +303,12 @@ export default function DeliveryHome() {
             <T size={type.sm} weight="bold" color={colors.error}>تعذر التسليم</T>
           </Pressable>
         </>
+      )}
+      {item.status === "out_for_delivery" && item.return_status === "full" && (
+        <View style={styles.fullReturnNotice}>
+          <Feather name="clock" size={16} color={colors.brandPrimary} />
+          <T size={type.sm} weight="bold" color={colors.brandPrimary} style={{ flex: 1 }}>تم تسجيل مرتجع كامل، وبانتظار اعتماد الإدارة</T>
+        </View>
       )}
       {item.status === "out_for_delivery" && item.return_status !== "full" && (
         <Pressable testID={"return-" + item.id} onPress={() => openReturn(item)} style={styles.returnBtn}>
@@ -328,9 +335,9 @@ export default function DeliveryHome() {
         <T color={colors.muted} size={type.sm}>{(item.items || []).length} منتجات</T>
         <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
       </View>
-      <View style={[styles.returnStatus, item.status === "approved" ? styles.returnStatusApproved : item.status === "rejected" ? styles.returnStatusRejected : styles.returnStatusPending]}>
-        <Feather name={item.status === "approved" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
-        <T size={type.sm} weight="bold" color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
+      <View style={[styles.returnStatus, item.status === "approved" || item.status === "accepted" ? styles.returnStatusApproved : item.status === "rejected" ? styles.returnStatusRejected : styles.returnStatusPending]}>
+        <Feather name={item.status === "approved" || item.status === "accepted" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" || item.status === "accepted" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
+        <T size={type.sm} weight="bold" color={item.status === "approved" || item.status === "accepted" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
       </View>
     </View>
   );
@@ -452,7 +459,7 @@ export default function DeliveryHome() {
             <T weight="displayBold" size={type.xl} style={{ marginTop: spacing.md }}>إثبات تسليم الطلب</T>
             <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs, textAlign: "center" }}>راجع المبلغ مع العميل ثم أدخل رمز العميل قبل إتمام التسليم</T>
             <T color={colors.brandPrimary} weight="bold" size={type.sm} style={{ marginTop: spacing.lg }}>الطلب #{proofFor?.id?.replace("ORD", "")}</T>
-            <View style={styles.proofAmount}><T color={colors.muted} size={type.sm}>المبلغ المطلوب من العميل</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(proofFor?.amount_due ?? proofFor?.total)}</T></View>
+            <View style={styles.proofAmount}><T color={colors.muted} size={type.sm}>المبلغ المطلوب من العميل</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(proofFor?.amount_due ?? Math.max(Number(proofFor?.total || 0) - Number(proofFor?.returned_total || 0), 0))}</T></View>
             <TextInput value={proofOtp} onChangeText={(value) => setProofOtp(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} autoFocus placeholder="000000" placeholderTextColor={colors.muted} style={styles.otpInput} accessibilityLabel="رمز التسليم" />
             <Button title={proofSubmitting ? "جارٍ تسجيل التسليم..." : "تأكيد نهائي واستلام المبلغ"} icon="shield" onPress={submitProof} disabled={proofSubmitting} style={{ marginTop: spacing.lg, minHeight: 46 }} />
             <Button title="إلغاء" variant="secondary" onPress={() => { setProofFor(null); setProofOtp(""); }} disabled={proofSubmitting} style={{ marginTop: spacing.sm, minHeight: 44 }} />
@@ -590,6 +597,7 @@ const styles = StyleSheet.create({
   returnStatusPending: { backgroundColor: colors.brandTertiary },
   returnStatusApproved: { backgroundColor: "#E8F5ED" },
   returnStatusRejected: { backgroundColor: "#FFF0F0" },
+  fullReturnNotice: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   accountCard: { backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
   accountHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   accountAvatar: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
