@@ -1599,6 +1599,7 @@ STATUS_LABEL = {
     "delivered": "تم التوصيل",
     "delivery_failed": "تعذر التسليم",
     "cancelled": "ملغي",
+    "returned": "مرتجع كامل",
 }
 ORDER_STATUS_TRANSITIONS = {
     "pending": {"confirmed", "cancelled"},
@@ -1609,10 +1610,35 @@ ORDER_STATUS_TRANSITIONS = {
     "delivered": set(),
     "delivery_failed": set(),
     "cancelled": set(),
+    "returned": set(),
 }
 
 
 DELIVERY_AVAILABLE_STATUSES = ("ready_for_delivery",)
+
+
+def order_amounts(order):
+    try:
+        original_total = round(float(order.get("total", 0) or 0), 2)
+    except (TypeError, ValueError):
+        original_total = 0.0
+    if order.get("return_status") == "full" or order.get("status") == "returned":
+        return original_total, 0.0
+    try:
+        returned_total = float(order.get("returned_total", 0) or 0)
+    except (TypeError, ValueError):
+        returned_total = 0.0
+    return original_total, round(max(original_total - returned_total, 0.0), 2)
+
+
+def with_order_amounts(order):
+    view = dict(order)
+    original_total, amount_due = order_amounts(order)
+    view["original_total"] = original_total
+    view["amount_due"] = amount_due
+    return view
+
+
 try:
     STORE_LAT = float(os.environ.get("STORE_LAT", "33.3152"))
     STORE_LNG = float(os.environ.get("STORE_LNG", "44.3661"))
@@ -1645,6 +1671,7 @@ def delivery_order_view(order, delivery_state: str):
     items = order.get("items", [])
     item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in items)
     location = order.get("location")
+    original_total, amount_due = order_amounts(order)
     return {
         "id": order.get("id"),
         "customer_name": order.get("customer_name", ""),
@@ -1658,7 +1685,9 @@ def delivery_order_view(order, delivery_state: str):
             for item in items
         ],
         "item_count": item_count,
-        "total": order.get("total", 0),
+        "total": original_total,
+        "original_total": original_total,
+        "amount_due": amount_due,
         "status": order.get("status"),
         "delivery_state": delivery_state,
         "return_status": order.get("return_status"),
@@ -1825,7 +1854,7 @@ async def reorder_order(oid: str, user=Depends(require_user)):
 @api.get("/orders")
 async def my_orders(user=Depends(require_user)):
     docs = await db.orders.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return docs
+    return [with_order_amounts(doc) for doc in docs]
 
 
 @api.get("/orders/{oid}")
@@ -1835,6 +1864,7 @@ async def get_order(oid: str, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     if user["role"] == "customer" and d["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="غير مصرح")
+    d = with_order_amounts(d)
     if user["role"] != "customer":
         d.pop("delivery_otp", None)
     return d
@@ -1935,13 +1965,16 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     # Claim the order while it is still out for delivery. The Firestore
     # transaction makes the status check atomic with the return bookkeeping,
     # so a return cannot race with delivery confirmation.
+    order_update = {
+        "return_status": "full" if is_full else "partial",
+        "returned_total": float(order.get("returned_total", 0) or 0) + total,
+    }
+    if is_full:
+        order_update.update({"status": "returned", "returned_at": created_at})
     updated_order = await db.orders.find_one_and_update(
         {"id": oid, "agent_id": user["user_id"], "status": "out_for_delivery"},
         {
-            "$set": {
-                "return_status": "full" if is_full else "partial",
-                "returned_total": float(order.get("returned_total", 0) or 0) + total,
-            },
+            "$set": order_update,
             "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
         },
     )
@@ -1950,6 +1983,8 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     await db.returns.insert_one(doc)
     try:
         await send_push(await manager_ids(), {"title": "مرتجع جديد ↩️", "message": f"تم تسجيل مرتجع للطلب {oid} بواسطة {doc['agent_name']}", "action_url": f"/returns/{return_id}"})
+        if is_full:
+            await notify_customer_status(oid, "returned")
     except Exception as e:
         logger.warning(f"return push failed: {e}")
     return doc
@@ -2125,7 +2160,7 @@ async def delivery_summary(
 
     orders = await db.orders.find(
         {"agent_id": user["user_id"], "status": "delivered"},
-        {"_id": 0, "id": 1, "total": 1, "delivery_fee": 1, "agent_fee": 1, "delivered_at": 1},
+        {"_id": 0, "id": 1, "total": 1, "returned_total": 1, "return_status": 1, "status": 1, "delivery_fee": 1, "agent_fee": 1, "delivered_at": 1},
     ).to_list(1000)
     invoices_total = 0.0
     earnings = 0.0
@@ -2144,7 +2179,7 @@ async def delivery_summary(
         if local_dt.date() != target_date:
             continue
         try:
-            invoices_total += float(order.get("total", 0) or 0)
+            invoices_total += order_amounts(order)[1]
         except (TypeError, ValueError):
             pass
         try:
@@ -2175,7 +2210,7 @@ async def delivery_orders(user=Depends(require_delivery)):
         {"_id": 0},
     ).sort("created_at", -1).to_list(200)
     assigned = await db.orders.find(
-        {"agent_id": user["user_id"], "status": {"$in": ["out_for_delivery", "delivered"]}},
+        {"agent_id": user["user_id"], "status": {"$in": ["out_for_delivery", "delivered", "returned"]}},
         {"_id": 0},
     ).sort("created_at", -1).to_list(200)
     orders = available + assigned
