@@ -14,6 +14,14 @@ const FILTERS = [
   { key: "partial", label: "مرتجع جزئي" },
 ];
 
+const RETURN_STATUS_LABEL: Record<string, string> = {
+  registered: "مسجل",
+  pending_review: "قيد مراجعة الإدارة",
+  approved: "مقبول",
+  accepted: "مقبول",
+  rejected: "مرفوض",
+};
+
 function formatDate(value: string) {
   try {
     return new Date(value).toLocaleString("ar-IQ", { dateStyle: "medium", timeStyle: "short" });
@@ -30,6 +38,7 @@ export default function ManagerReturns() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -43,6 +52,20 @@ export default function ManagerReturns() {
   }, [show]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const updateStatus = async (id: string, status: "approved" | "rejected") => {
+    if (updatingId) return;
+    setUpdatingId(id);
+    try {
+      await api.adminUpdateReturnStatus(id, status);
+      show(status === "approved" ? "تم قبول المرتجع" : "تم رفض المرتجع", "success");
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const visible = useMemo(
     () => filter === "all" ? returns : returns.filter((item) => item.return_type === filter),
@@ -105,6 +128,22 @@ export default function ManagerReturns() {
                 <View style={styles.info}><Feather name="clock" size={14} color={colors.muted} /><T size={11} color={colors.muted}>{formatDate(item.created_at)}</T></View>
                 <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
               </View>
+              <View style={[styles.statusPill, item.status === "approved" ? styles.statusApproved : item.status === "rejected" ? styles.statusRejected : styles.statusPending]}>
+                <Feather name={item.status === "approved" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
+                <T size={type.sm} weight="bold" color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
+              </View>
+              {item.status !== "approved" && item.status !== "rejected" ? (
+                <View style={styles.reviewActions}>
+                  <Pressable testID={"approve-return-" + item.id} onPress={() => updateStatus(item.id, "approved")} disabled={!!updatingId} style={[styles.reviewBtn, styles.approveBtn]}>
+                    <Feather name="check" size={15} color={colors.success} />
+                    <T size={type.sm} weight="bold" color={colors.success}>{updatingId === item.id ? "جارٍ..." : "قبول"}</T>
+                  </Pressable>
+                  <Pressable testID={"reject-return-" + item.id} onPress={() => updateStatus(item.id, "rejected")} disabled={!!updatingId} style={[styles.reviewBtn, styles.rejectBtn]}>
+                    <Feather name="x" size={15} color={colors.error} />
+                    <T size={type.sm} weight="bold" color={colors.error}>رفض</T>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
           )}
         />
@@ -134,4 +173,12 @@ const styles = StyleSheet.create({
   itemsBox: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, gap: spacing.xs },
   itemRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.sm },
+  statusPill: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, borderRadius: radius.pill, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginTop: spacing.xs },
+  statusPending: { backgroundColor: colors.brandTertiary },
+  statusApproved: { backgroundColor: "#E8F5ED" },
+  statusRejected: { backgroundColor: "#FFF0F0" },
+  reviewActions: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.xs },
+  reviewBtn: { flex: 1, minHeight: 42, borderRadius: radius.md, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, borderWidth: 1.5 },
+  approveBtn: { backgroundColor: "#F0FAF3", borderColor: colors.success },
+  rejectBtn: { backgroundColor: "#FFF8F8", borderColor: colors.error },
 });
