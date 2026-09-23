@@ -407,6 +407,60 @@ class TestLifecycle:
         assert any(t["status"] == "delivery_failed" for t in final["timeline"])
 
 
+    def test_partial_return_reduces_amount_and_full_return_closes_order(self, s, manager_token, delivery_token, placed_order):
+        oid = placed_order["order"]["id"]
+        order = placed_order["order"]
+        first_item = next((item for item in order["items"] if int(item.get("quantity", 0) or 0) >= 2), None)
+        if not first_item:
+            pytest.skip("test order needs an item with quantity >= 2")
+
+        for status in ("confirmed", "preparing", "ready_for_delivery"):
+            r = s.post(f"{API}/admin/orders/{oid}/status", headers=H(manager_token), json={"status": status}, timeout=15)
+            assert r.status_code == 200, r.text
+        agents = s.get(f"{API}/admin/agents", headers=H(manager_token), timeout=15).json()
+        agent_id = next(a["user_id"] for a in agents if a["email"] == DELIVERY["email"])
+        assigned = s.post(f"{API}/admin/orders/{oid}/assign", headers=H(manager_token), json={"agent_id": agent_id}, timeout=15)
+        assert assigned.status_code == 200, assigned.text
+
+        partial = s.post(
+            f"{API}/delivery/orders/{oid}/returns",
+            headers=H(delivery_token),
+            json={"items": [{"product_id": first_item["product_id"], "quantity": 1}]},
+            timeout=15,
+        )
+        assert partial.status_code == 200, partial.text
+        partial_doc = partial.json()
+        assert partial_doc["return_type"] == "partial"
+        expected_due = round(float(order["total"]) - float(partial_doc["total"]), 2)
+
+        customer_order = s.get(f"{API}/orders/{oid}", headers=H(placed_order["ctok"]), timeout=15).json()
+        assert customer_order["amount_due"] == expected_due
+        delivery_order = next(o for o in s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json() if o["id"] == oid)
+        assert delivery_order["amount_due"] == expected_due
+
+        remaining = []
+        for item in order["items"]:
+            quantity = int(item.get("quantity", 0) or 0) - (1 if item["product_id"] == first_item["product_id"] else 0)
+            if quantity > 0:
+                remaining.append({"product_id": item["product_id"], "quantity": quantity})
+        full = s.post(
+            f"{API}/delivery/orders/{oid}/returns",
+            headers=H(delivery_token),
+            json={"items": remaining},
+            timeout=15,
+        )
+        assert full.status_code == 200, full.text
+        assert full.json()["return_type"] == "full"
+
+        final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
+        assert final["status"] == "returned"
+        assert final["return_status"] == "full"
+        assert final["amount_due"] == 0
+        assert any(t["status"] == "returned" for t in final["timeline"])
+        closed = next(o for o in s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json() if o["id"] == oid)
+        assert closed["status"] == "returned"
+        assert closed["amount_due"] == 0
+
     def test_delivery_can_claim_available_order(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
         for status in ("confirmed", "preparing", "ready_for_delivery"):
