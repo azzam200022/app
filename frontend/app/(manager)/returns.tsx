@@ -128,9 +128,9 @@ export default function ManagerReturns() {
                 <View style={styles.info}><Feather name="clock" size={14} color={colors.muted} /><T size={11} color={colors.muted}>{formatDate(item.created_at)}</T></View>
                 <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
               </View>
-              <View style={[styles.statusPill, item.status === "approved" ? styles.statusApproved : item.status === "rejected" ? styles.statusRejected : styles.statusPending]}>
-                <Feather name={item.status === "approved" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
-                <T size={type.sm} weight="bold" color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
+              <View style={[styles.statusPill, item.status === "approved" || item.status === "accepted" ? styles.statusApproved : item.status === "rejected" ? styles.statusRejected : styles.statusPending]}>
+                <Feather name={item.status === "approved" || item.status === "accepted" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" || item.status === "accepted" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
+                <T size={type.sm} weight="bold" color={item.status === "approved" || item.status === "accepted" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
               </View>
               {item.status !== "approved" && item.status !== "rejected" ? (
                 <View style={styles.reviewActions}>
