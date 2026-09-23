@@ -43,6 +43,7 @@ export default function OrderDetail() {
 
   const cancelled = order.status === "cancelled";
   const failed = order.status === "delivery_failed";
+  const returned = order.status === "returned";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
 
   return (
@@ -83,6 +84,8 @@ export default function OrderDetail() {
                 {order.delivery_failed_reason ? <T size={type.sm} color={colors.error} style={{ marginTop: spacing.xs }}>السبب: {order.delivery_failed_reason}</T> : null}
               </View>
             </View>
+          ) : returned ? (
+            <View style={styles.cancelRow}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" color={colors.error}>تم إغلاق الطلب بسبب المرتجع الكامل</T></View>
           ) : (
             STATUS_FLOW.map((st, i) => {
               const done = i <= currentIdx;
@@ -106,7 +109,7 @@ export default function OrderDetail() {
           {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}{order.agent_phone ? " • " + order.agent_phone : ""}</T></View>}
         </View>
 
-        {user?.role === "customer" && order.delivery_otp && !["delivered", "cancelled"].includes(order.status) && (
+        {user?.role === "customer" && order.delivery_otp && !["delivered", "returned", "cancelled"].includes(order.status) && (
           <View style={styles.otpCard}>
             <View style={styles.otpHeader}><Feather name="shield" size={20} color={colors.brandPrimary} /><T weight="bold" color={colors.brandPrimary}>رمز استلام الطلب</T></View>
             <T size={type.sm} color={colors.onSurfaceTertiary} style={{ marginTop: spacing.xs }}>احتفظ بالرمز وأعطه للمندوب عند استلام طلبك</T>
@@ -138,8 +141,14 @@ export default function OrderDetail() {
           {order.notes ? <View style={styles.infoRow}><Feather name="message-square" size={16} color={colors.muted} /><T color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{order.notes}</T></View> : null}
           <View style={[styles.infoRow, { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs }]}>
             <T weight="bold">الإجمالي (دفع عند الاستلام)</T>
-            <T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(order.total)}</T>
+            <T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(order.amount_due ?? order.total)}</T>
           </View>
+          {Number(order.returned_total || 0) > 0 && (
+            <View style={styles.infoRow}>
+              <T color={colors.muted}>قيمة المرتجع</T>
+              <T color={colors.error}>{formatPrice(order.returned_total)}</T>
+            </View>
+          )}
         </View>
 
         {order.location ? (
