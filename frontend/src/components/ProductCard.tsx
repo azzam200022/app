@@ -81,11 +81,11 @@ export const ProductCard = React.memo(function ProductCard({
       </View>
       <View style={styles.body}>
         <T weight="semi" numberOfLines={2} style={styles.name}>{product.name}</T>
-        <View style={styles.priceRow}>
+        <View style={[styles.priceRow, quantity > 0 && styles.quantityPriceRow]}>
           <View style={styles.priceBlock}>
-            <T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
+            <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
             {product.old_price ? (
-              <T size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
+              <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
             ) : null}
           </View>
           {quantity > 0 && !unavailable ? (
@@ -166,11 +166,12 @@ const styles = StyleSheet.create({
   body: { padding: spacing.md, minHeight: 138 },
   name: { minHeight: 40, lineHeight: 20 },
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", marginTop: spacing.sm, gap: spacing.sm },
+  quantityPriceRow: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm },
   priceBlock: { flex: 1, minWidth: 0 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  quantityControls: { height: 44, minWidth: 120, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, shadowColor: "#15302E", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  quantityControls: { width: "100%", height: 44, minWidth: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, shadowColor: "#15302E", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   quantityBtn: { width: 35, height: 35, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   quantityText: { minWidth: 24, textAlign: "center", color: colors.onSurface },
   skeletonCard: { overflow: "hidden" },
