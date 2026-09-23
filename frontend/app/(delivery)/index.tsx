@@ -36,13 +36,28 @@ const DELIVERY_FAILURE_REASONS = [
   { value: "customer_refused", label: "رفض العميل الاستلام" },
 ];
 
+const RETURN_STATUS_LABEL: Record<string, string> = {
+  registered: "مسجل",
+  pending_review: "قيد مراجعة الإدارة",
+  approved: "مقبول",
+  accepted: "مقبول",
+  rejected: "مرفوض",
+};
+
 export default function DeliveryHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
   const { show } = useToast();
   const [orders, setOrders] = useState<any[]>([]);
-  const [dailySummary, setDailySummary] = useState<any>({ orders_count: 0, invoices_total: 0, earnings: 0 });
+  const [dailySummary, setDailySummary] = useState<any>({
+    orders_count: 0,
+    invoices_total: 0,
+    returns_total: 0,
+    cash_collected: 0,
+    earnings: 0,
+    amount_to_handover: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [section, setSection] = useState<"summary" | "orders" | "returns" | "account">("summary");
@@ -59,6 +74,7 @@ export default function DeliveryHome() {
   const [proofFor, setProofFor] = useState<any>(null);
   const [proofOtp, setProofOtp] = useState("");
   const [proofSubmitting, setProofSubmitting] = useState(false);
+  const [closeDayVisible, setCloseDayVisible] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +93,7 @@ export default function DeliveryHome() {
   const openProof = (order: any) => { setProofFor(order); setProofOtp(""); };
 
   const submitProof = async () => {
-    if (!proofFor) return;
+    if (!proofFor || proofSubmitting) return;
     const otp = proofOtp.trim();
     if (!/^\d{6}$/.test(otp)) {
       show("أدخل رمز التسليم المكوّن من 6 أرقام", "error");
@@ -185,11 +201,14 @@ export default function DeliveryHome() {
   const completedToday = done.filter((o) => isToday(o.delivered_at || o.updated_at || o.created_at));
   const failedToday = failed.filter((o) => isToday(o.updated_at || o.created_at));
   const collectedToday = completedToday.reduce((s, o) => s + (o.total || 0), 0);
+  const returnsToday = returnRecords.filter((item) => isToday(item.created_at));
   const dailyCompletedCount = Number(dailySummary?.orders_count ?? completedToday.length);
   const dailyInvoiceTotal = Number(dailySummary?.invoices_total ?? collectedToday);
+  const dailyReturnsTotal = Number(dailySummary?.returns_total ?? returnsToday.reduce((sum, item) => sum + Number(item.total || 0), 0));
+  const dailyCashCollected = Number(dailySummary?.cash_collected ?? Math.max(dailyInvoiceTotal - dailyReturnsTotal, 0));
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
+  const dailyAmountToHandover = Number(dailySummary?.amount_to_handover ?? Math.max(dailyCashCollected - dailyEarnings, 0));
   const list = orderTab === "available" ? available : orderTab === "active" ? active : done;
-  const returnsToday = returnRecords.filter((item) => isToday(item.created_at));
 
   // Broadcast live location for active deliveries
   const activeIds = active.map((o) => o.id).join(",");
@@ -239,6 +258,10 @@ export default function DeliveryHome() {
       <View style={styles.cardBottom}>
         <T color={colors.muted} size={type.sm}>{item.item_count ?? item.items.length} منتج</T>
         <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)} • نقداً</T>
+      </View>
+      <View style={styles.amountDueCallout}>
+        <Feather name="dollar-sign" size={17} color={colors.brandPrimary} />
+        <T weight="bold" color={colors.brandPrimary} style={{ flex: 1 }}>المبلغ المطلوب من العميل: {formatPrice(item.amount_due ?? item.total)}</T>
       </View>
 
       {item.delivery_state === "available" && (
@@ -302,6 +325,10 @@ export default function DeliveryHome() {
         <T color={colors.muted} size={type.sm}>{(item.items || []).length} منتجات</T>
         <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
       </View>
+      <View style={[styles.returnStatus, item.status === "approved" ? styles.returnStatusApproved : item.status === "rejected" ? styles.returnStatusRejected : styles.returnStatusPending]}>
+        <Feather name={item.status === "approved" ? "check-circle" : item.status === "rejected" ? "x-circle" : "clock"} size={15} color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary} />
+        <T size={type.sm} weight="bold" color={item.status === "approved" ? colors.success : item.status === "rejected" ? colors.error : colors.brandPrimary}>{RETURN_STATUS_LABEL[item.status] || "قيد مراجعة الإدارة"}</T>
+      </View>
     </View>
   );
 
@@ -334,9 +361,10 @@ export default function DeliveryHome() {
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{active.length}</T><T color={colors.muted} size={type.sm}>قيد التوصيل</T></View>
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{dailyCompletedCount}</T><T color={colors.muted} size={type.sm}>تمت اليوم</T></View>
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.error}>{failedToday.length}</T><T color={colors.muted} size={type.sm}>متعذرة اليوم</T></View>
-            <View style={styles.summaryWideRow}>
-              <View style={styles.summaryWideBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(dailyInvoiceTotal)}</T><T color={colors.muted} size={type.sm}>إجمالي الفواتير</T></View>
-              <View style={[styles.summaryWideBox, styles.earningsBox]}><T weight="displayBold" size={type.lg} color={colors.success}>{formatPrice(dailyEarnings)}</T><T color={colors.muted} size={type.sm}>أجرتك اليوم</T></View>
+            <View style={styles.summaryTripleRow}>
+              <View style={styles.summaryTripleBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(dailyInvoiceTotal)}</T><T color={colors.muted} size={11}>إجمالي الفواتير</T></View>
+              <View style={[styles.summaryTripleBox, styles.cashBox]}><T weight="displayBold" size={type.lg} color={colors.success}>{formatPrice(dailyCashCollected)}</T><T color={colors.muted} size={11}>النقد المحصل</T></View>
+              <View style={[styles.summaryTripleBox, styles.earningsBox]}><T weight="displayBold" size={type.lg} color={colors.success}>{formatPrice(dailyEarnings)}</T><T color={colors.muted} size={11}>أجر المندوب</T></View>
             </View>
           </View>
 
@@ -388,10 +416,15 @@ export default function DeliveryHome() {
           <View style={styles.accountCard}>
             <View style={styles.accountHeader}><View style={styles.accountAvatar}><Feather name="user" size={26} color={colors.brandPrimary} /></View><View style={{ flex: 1 }}><T weight="displayBold" size={type.xl}>{user?.name}</T><T color={colors.muted} size={type.sm}>حساب مندوب التوصيل</T></View></View>
             <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>فواتير اليوم</T><T weight="displayBold" size={type.xl}>{formatPrice(dailyInvoiceTotal)}</T></View><Feather name="file-text" size={22} color={colors.brandPrimary} /></View>
+            <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>النقد الذي حصلته</T><T weight="displayBold" size={type.xl} color={colors.gold}>{formatPrice(dailyCashCollected)}</T></View><Feather name="briefcase" size={22} color={colors.gold} /></View>
             <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>أجرتك اليوم</T><T weight="displayBold" size={type.xl} color={colors.success}>{formatPrice(dailyEarnings)}</T></View><Feather name="dollar-sign" size={22} color={colors.success} /></View>
             <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>الطلبات المسلّمة</T><T weight="displayBold" size={type.xl}>{dailyCompletedCount}</T></View><Feather name="check-circle" size={22} color={colors.brandPrimary} /></View>
           </View>
-          <View style={styles.accountNote}><Feather name="info" size={17} color={colors.brandPrimary} /><T color={colors.onSurfaceSecondary} size={type.sm} style={{ flex: 1 }}>الأجرة محسوبة من رسوم توصيل الطلبات التي تم تسليمها اليوم.</T></View>
+          <View style={styles.accountNote}><Feather name="info" size={17} color={colors.brandPrimary} /><T color={colors.onSurfaceSecondary} size={type.sm} style={{ flex: 1 }}>النقد المحصل = إجمالي الفواتير − قيمة المرتجعات. المبلغ المطلوب تسليمه يخصم أجرة المندوب.</T></View>
+          <Pressable testID="close-day" onPress={() => setCloseDayVisible(true)} style={styles.closeDayBtn}>
+            <Feather name="lock" size={18} color="#fff" />
+            <T weight="bold" color="#fff">إغلاق حساب اليوم</T>
+          </Pressable>
           <Pressable onPress={() => setConfirmLogout(true)} style={styles.accountLogout}><Feather name="log-out" size={18} color={colors.error} /><T weight="bold" color={colors.error}>تسجيل الخروج</T></Pressable>
         </ScrollView>
       )}
@@ -400,7 +433,11 @@ export default function DeliveryHome() {
         {DELIVERY_NAV.map((item) => (
           <Pressable key={item.key} testID={`nav-${item.key}`} onPress={() => setSection(item.key)} style={[styles.bottomNavItem, section === item.key && styles.bottomNavItemActive]}>
             <Feather name={item.icon as any} size={19} color={section === item.key ? colors.brandPrimary : colors.muted} />
-            <T size={11} weight={section === item.key ? "bold" : "semi"} color={section === item.key ? colors.brandPrimary : colors.muted}>{item.label}</T>
+            <View style={styles.navLabelRow}>
+              <T size={11} weight={section === item.key ? "bold" : "semi"} color={section === item.key ? colors.brandPrimary : colors.muted}>{item.label}</T>
+              {item.key === "orders" && active.length > 0 ? <View style={styles.navBadge}><T size={10} weight="bold" color="#fff">{active.length}</T></View> : null}
+              {item.key === "returns" && returnsToday.length > 0 ? <View style={[styles.navBadge, styles.navBadgeError]}><T size={10} weight="bold" color="#fff">{returnsToday.length}</T></View> : null}
+            </View>
           </Pressable>
         ))}
       </View>
@@ -410,10 +447,11 @@ export default function DeliveryHome() {
           <Pressable style={[styles.modalCard, { paddingBottom: insets.bottom + spacing.xl }]} onPress={(e) => e.stopPropagation()}>
             <View style={[styles.modalIcon, styles.proofIcon]}><Feather name="shield" size={26} color={colors.brandPrimary} /></View>
             <T weight="displayBold" size={type.xl} style={{ marginTop: spacing.md }}>إثبات تسليم الطلب</T>
-            <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs, textAlign: "center" }}>اطلب رمز التسليم من العميل وأدخله قبل تسليم الطلب</T>
+            <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs, textAlign: "center" }}>راجع المبلغ مع العميل ثم أدخل رمز العميل قبل إتمام التسليم</T>
             <T color={colors.brandPrimary} weight="bold" size={type.sm} style={{ marginTop: spacing.lg }}>الطلب #{proofFor?.id?.replace("ORD", "")}</T>
+            <View style={styles.proofAmount}><T color={colors.muted} size={type.sm}>المبلغ المطلوب من العميل</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(proofFor?.amount_due ?? proofFor?.total)}</T></View>
             <TextInput value={proofOtp} onChangeText={(value) => setProofOtp(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} autoFocus placeholder="000000" placeholderTextColor={colors.muted} style={styles.otpInput} accessibilityLabel="رمز التسليم" />
-            <Button title={proofSubmitting ? "جارٍ التحقق..." : "تحقق وتسجيل التسليم"} icon="shield" onPress={submitProof} disabled={proofSubmitting} style={{ marginTop: spacing.lg, minHeight: 46 }} />
+            <Button title={proofSubmitting ? "جارٍ تسجيل التسليم..." : "تأكيد نهائي واستلام المبلغ"} icon="shield" onPress={submitProof} disabled={proofSubmitting} style={{ marginTop: spacing.lg, minHeight: 46 }} />
             <Button title="إلغاء" variant="secondary" onPress={() => { setProofFor(null); setProofOtp(""); }} disabled={proofSubmitting} style={{ marginTop: spacing.sm, minHeight: 44 }} />
           </Pressable>
         </Pressable>
@@ -476,6 +514,24 @@ export default function DeliveryHome() {
         </Pressable>
       </Modal>
 
+      <Modal visible={closeDayVisible} transparent animationType="slide" onRequestClose={() => setCloseDayVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setCloseDayVisible(false)}>
+          <Pressable style={[styles.modalCard, { alignItems: "stretch" }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalIcon, styles.proofIcon, { alignSelf: "center" }]}><Feather name="clipboard" size={25} color={colors.brandPrimary} /></View>
+            <T weight="displayBold" size={type.xl} style={{ textAlign: "center", marginTop: spacing.md }}>ملخص إغلاق حساب اليوم</T>
+            <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.xs }}>راجع الأرقام قبل تسليم النقد للإدارة</T>
+            <View style={styles.closeSummary}>
+              <View style={styles.closeSummaryRow}><T color={colors.muted} size={type.sm}>الطلبات المسلّمة</T><T weight="bold">{dailyCompletedCount}</T></View>
+              <View style={styles.closeSummaryRow}><T color={colors.muted} size={type.sm}>إجمالي النقد</T><T weight="bold">{formatPrice(dailyCashCollected)}</T></View>
+              <View style={styles.closeSummaryRow}><T color={colors.muted} size={type.sm}>قيمة المرتجعات</T><T weight="bold" color={colors.error}>{formatPrice(dailyReturnsTotal)}</T></View>
+              <View style={styles.closeSummaryRow}><T color={colors.muted} size={type.sm}>الأجرة</T><T weight="bold" color={colors.success}>{formatPrice(dailyEarnings)}</T></View>
+              <View style={[styles.closeSummaryRow, styles.handoverRow]}><T weight="bold">المبلغ المطلوب تسليمه</T><T weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(dailyAmountToHandover)}</T></View>
+            </View>
+            <Button title="تمت المراجعة" icon="check" onPress={() => setCloseDayVisible(false)} style={{ marginTop: spacing.lg, minHeight: 46 }} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Logout confirmation */}
       <Modal visible={confirmLogout} transparent animationType="fade" onRequestClose={() => setConfirmLogout(false)}>
         <Pressable style={styles.modalBg} onPress={() => setConfirmLogout(false)}>
@@ -501,8 +557,9 @@ const styles = StyleSheet.create({
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
   summaryGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
   summaryBox: { width: "48%", minHeight: 58, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
-  summaryWideRow: { width: "100%", flexDirection: "row-reverse", justifyContent: "space-between", gap: spacing.sm },
-  summaryWideBox: { width: "48%", minHeight: 62, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(198,160,121,0.18)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(198,160,121,0.55)", paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
+  summaryTripleRow: { width: "100%", flexDirection: "row-reverse", justifyContent: "space-between", gap: spacing.xs },
+  summaryTripleBox: { flex: 1, minHeight: 66, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(198,160,121,0.18)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(198,160,121,0.55)", paddingVertical: spacing.sm, paddingHorizontal: 2 },
+  cashBox: { backgroundColor: "rgba(79,166,119,0.14)", borderColor: "rgba(191,232,208,0.55)" },
   earningsBox: { backgroundColor: "rgba(79,166,119,0.18)", borderColor: "rgba(191,232,208,0.55)" },
   content: { flex: 1 },
   sectionScroll: { flex: 1 },
@@ -517,17 +574,25 @@ const styles = StyleSheet.create({
   bottomNav: { flexDirection: "row-reverse", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs, paddingHorizontal: spacing.sm },
   bottomNavItem: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: radius.md, gap: 2 },
   bottomNavItemActive: { backgroundColor: colors.brandTertiary },
+  navLabelRow: { flexDirection: "row-reverse", alignItems: "center", gap: 4 },
+  navBadge: { minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandPrimary },
+  navBadgeError: { backgroundColor: colors.error },
   returnCard: { backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
   returnCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   returnBadge: { backgroundColor: "#FFF0F0", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   returnMeta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   returnReason: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.xs },
   returnCardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
+  returnStatus: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, borderRadius: radius.pill, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginTop: spacing.xs },
+  returnStatusPending: { backgroundColor: colors.brandTertiary },
+  returnStatusApproved: { backgroundColor: "#E8F5ED" },
+  returnStatusRejected: { backgroundColor: "#FFF0F0" },
   accountCard: { backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
   accountHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   accountAvatar: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
   accountMetricRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   accountNote: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
+  closeDayBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 50, borderRadius: radius.md, backgroundColor: colors.brandPrimary, marginTop: spacing.md },
   accountLogout: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 48, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.lg },
   tabs: { flexDirection: "row-reverse", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface },
   tab: { flex: 1, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
@@ -567,7 +632,12 @@ const styles = StyleSheet.create({
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, alignItems: "center" },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5E9E9", alignItems: "center", justifyContent: "center" },
   proofIcon: { backgroundColor: "#E7F0EC" },
+  amountDueCallout: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
+  proofAmount: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.brandTertiary, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: "100%", marginTop: spacing.md },
   otpInput: { width: "100%", height: 64, marginTop: spacing.md, borderWidth: 1.5, borderColor: colors.brandPrimary, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, color: colors.brandPrimary, fontSize: 28, fontWeight: "800", textAlign: "center", letterSpacing: 8 },
+  closeSummary: { marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.md },
+  closeSummaryRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  handoverRow: { borderBottomWidth: 0, paddingVertical: spacing.lg },
   modalBtns: { flexDirection: "row-reverse", gap: spacing.md, marginTop: spacing.xl, width: "100%" },
 });
 
