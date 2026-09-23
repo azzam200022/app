@@ -106,7 +106,15 @@ export default function OrderDetail() {
           {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}{order.agent_phone ? " • " + order.agent_phone : ""}</T></View>}
         </View>
 
-        {/* Items */}
+        {user?.role === "customer" && order.delivery_otp && !["delivered", "cancelled"].includes(order.status) && (
+          <View style={styles.otpCard}>
+            <View style={styles.otpHeader}><Feather name="shield" size={20} color={colors.brandPrimary} /><T weight="bold" color={colors.brandPrimary}>رمز استلام الطلب</T></View>
+            <T size={type.sm} color={colors.onSurfaceTertiary} style={{ marginTop: spacing.xs }}>احتفظ بالرمز وأعطه للمندوب عند استلام طلبك</T>
+            <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.otpValue}>{order.delivery_otp}</T>
+          </View>
+        )}
+
+        {/* Items */
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
           {order.items.map((it: any, idx: number) => (
@@ -179,6 +187,9 @@ const styles = StyleSheet.create({
   itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   itemImg: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   infoCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.lg, gap: spacing.md },
+  otpCard: { backgroundColor: "#E7F0EC", borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandTertiary, padding: spacing.lg, marginBottom: spacing.lg },
+  otpHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  otpValue: { textAlign: "center", letterSpacing: 8, marginTop: spacing.md },
   infoRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, justifyContent: "space-between" },
   mapCard: { marginTop: spacing.lg, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
   mapImg: { width: "100%", height: 150, backgroundColor: colors.surfaceSecondary },
