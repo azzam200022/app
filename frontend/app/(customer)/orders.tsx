@@ -17,6 +17,7 @@ export const STATUS_COLOR: Record<string, string> = {
   delivered: "#1F4529",
   delivery_failed: "#8B3A3A",
   cancelled: "#8B3A3A",
+  returned: "#8B3A3A",
 };
 
 export function StatusPill({ status }: { status: string }) {
@@ -95,7 +96,7 @@ export default function Orders() {
                 <T color={colors.muted} size={type.sm}>{item.items.length} منتج</T>
               </View>
               <View style={styles.cardBottom}>
-                <T weight="displayBold" color={colors.brandPrimary} size={type.lg}>{formatPrice(item.total)}</T>
+                <T weight="displayBold" color={colors.brandPrimary} size={type.lg}>{formatPrice(item.amount_due ?? item.total)}</T>
                 <View style={styles.trackRow}>
                   <T color={colors.brandPrimary} weight="semi" size={type.sm}>تتبّع الطلب</T>
                   <Feather name="chevron-left" size={16} color={colors.brandPrimary} />
