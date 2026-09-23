@@ -128,7 +128,10 @@ export default function DeliveryHome() {
   const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const done = orders.filter((o) => o.status === "delivered").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const collectedToday = done.filter((o) => isToday(o.delivered_at || o.created_at)).reduce((s, o) => s + (o.total || 0), 0);
+  const failed = orders.filter((o) => o.status === "delivery_failed").sort((a, b) => (a.updated_at || a.created_at) < (b.updated_at || b.created_at) ? 1 : -1);
+  const completedToday = done.filter((o) => isToday(o.delivered_at || o.updated_at || o.created_at));
+  const failedToday = failed.filter((o) => isToday(o.updated_at || o.created_at));
+  const collectedToday = completedToday.reduce((s, o) => s + (o.total || 0), 0);
   const list = tab === "available" ? available : tab === "active" ? active : done;
 
   // Broadcast live location for active deliveries
@@ -238,12 +241,12 @@ export default function DeliveryHome() {
             <Feather name="log-out" size={20} color="#fff" />
           </Pressable>
         </View>
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}><T weight="displayBold" size={type.xl} color="#fff">{active.length}</T><T color="rgba(255,255,255,0.75)" size={type.sm}>قيد التوصيل</T></View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}><T weight="displayBold" size={type.xl} color="#fff">{done.length}</T><T color="rgba(255,255,255,0.75)" size={type.sm}>تم توصيلها</T></View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(collectedToday)}</T><T color="rgba(255,255,255,0.75)" size={type.sm}>محصّل اليوم</T></View>
+        <View style={styles.summaryGrid}>
+          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{available.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>طلبات متاحة</T></View>
+          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{active.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>قيد التوصيل</T></View>
+          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{completedToday.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>تمت اليوم</T></View>
+          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#FFD4D4">{failedToday.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>متعذرة اليوم</T></View>
+          <View style={styles.summaryWideBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(collectedToday)}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>إجمالي النقد المحصّل اليوم</T></View>
         </View>
       </View>
 
@@ -348,9 +351,9 @@ const styles = StyleSheet.create({
   header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  statsRow: { flexDirection: "row-reverse", alignItems: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
-  statBox: { flex: 1, alignItems: "center" },
-  statDivider: { width: 1, height: 36, backgroundColor: "rgba(255,255,255,0.2)" },
+  summaryGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
+  summaryBox: { width: "48%", minHeight: 58, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
+  summaryWideBox: { width: "100%", minHeight: 62, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(198,160,121,0.18)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(198,160,121,0.55)", paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
   tabs: { flexDirection: "row-reverse", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface },
   tab: { flex: 1, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   tabActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
