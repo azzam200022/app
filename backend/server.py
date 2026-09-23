@@ -2161,6 +2161,13 @@ async def delivery_summary(
         "currency": "IQD",
     }
 
+@api.get("/delivery/returns")
+async def delivery_returns(user=Depends(require_delivery)):
+    return await db.returns.find(
+        {"agent_id": user["user_id"]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
 @api.get("/delivery/orders")
 async def delivery_orders(user=Depends(require_delivery)):
     available = await db.orders.find(

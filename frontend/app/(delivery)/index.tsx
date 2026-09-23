@@ -21,6 +21,14 @@ function getLocalDateKey(date = new Date()) {
   return year + "-" + month + "-" + day;
 }
 
+
+const DELIVERY_NAV = [
+  { key: "summary" as const, label: "الملخص", icon: "grid" },
+  { key: "orders" as const, label: "الطلبات", icon: "package" },
+  { key: "returns" as const, label: "المرتجعات", icon: "rotate-ccw" },
+  { key: "account" as const, label: "الحساب", icon: "credit-card" },
+];
+
 const DELIVERY_FAILURE_REASONS = [
   { value: "customer_unavailable", label: "العميل غير موجود" },
   { value: "phone_unreachable", label: "الهاتف مغلق أو لا يجيب" },
@@ -37,7 +45,9 @@ export default function DeliveryHome() {
   const [dailySummary, setDailySummary] = useState<any>({ orders_count: 0, invoices_total: 0, earnings: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<"available" | "active" | "done">("available");
+  const [section, setSection] = useState<"summary" | "orders" | "returns" | "account">("summary");
+  const [orderTab, setOrderTab] = useState<"available" | "active" | "done">("available");
+  const [returnRecords, setReturnRecords] = useState<any[]>([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
   const [returnFor, setReturnFor] = useState<any>(null);
@@ -52,12 +62,14 @@ export default function DeliveryHome() {
 
   const load = useCallback(async () => {
     try {
-      const [nextOrders, nextSummary] = await Promise.all([
+      const [nextOrders, nextSummary, nextReturns] = await Promise.all([
         api.deliveryOrders(),
         api.deliverySummary(getLocalDateKey(), new Date().getTimezoneOffset()),
+        api.deliveryReturns(),
       ]);
       setOrders(nextOrders);
       setDailySummary(nextSummary);
+      setReturnRecords(nextReturns || []);
     } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); setRefreshing(false); }
   }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -110,7 +122,7 @@ export default function DeliveryHome() {
     try {
       await api.deliveryClaim(id);
       show("تم استلام الطلب بنجاح");
-      setTab("active");
+      setOrderTab("active");
       await load();
     } catch (e: any) {
       show(e.message, "error");
@@ -176,7 +188,8 @@ export default function DeliveryHome() {
   const dailyCompletedCount = Number(dailySummary?.orders_count ?? completedToday.length);
   const dailyInvoiceTotal = Number(dailySummary?.invoices_total ?? collectedToday);
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
-  const list = tab === "available" ? available : tab === "active" ? active : done;
+  const list = orderTab === "available" ? available : orderTab === "active" ? active : done;
+  const returnsToday = returnRecords.filter((item) => isToday(item.created_at));
 
   // Broadcast live location for active deliveries
   const activeIds = active.map((o) => o.id).join(",");
@@ -273,6 +286,25 @@ export default function DeliveryHome() {
     </View>
   );
 
+  const renderReturnCard = ({ item }: any) => (
+    <View style={styles.returnCard} testID={`del-return-${item.id}`}>
+      <View style={styles.returnCardTop}>
+        <View>
+          <T weight="bold">مرتجع #{item.id.replace("RET", "")}</T>
+          <T color={colors.muted} size={type.sm}>الطلب #{item.order_id?.replace("ORD", "")}</T>
+        </View>
+        <View style={styles.returnBadge}><T size={type.sm} weight="bold" color={colors.error}>{item.return_type === "full" ? "مرتجع كامل" : "مرتجع جزئي"}</T></View>
+      </View>
+      <View style={styles.returnMeta}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name || "عميل"}</T></View>
+      <View style={styles.returnMeta}><Feather name="clock" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary}>{item.created_at ? new Date(item.created_at).toLocaleDateString("ar-IQ") : ""}</T></View>
+      {item.reason ? <View style={styles.returnReason}><T size={type.sm} color={colors.onSurfaceSecondary}>السبب: {item.reason}</T></View> : null}
+      <View style={styles.returnCardBottom}>
+        <T color={colors.muted} size={type.sm}>{(item.items || []).length} منتجات</T>
+        <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
@@ -285,38 +317,93 @@ export default function DeliveryHome() {
             <Feather name="log-out" size={20} color="#fff" />
           </Pressable>
         </View>
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{available.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>طلبات متاحة</T></View>
-          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{active.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>قيد التوصيل</T></View>
-          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#fff">{dailyCompletedCount}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>فواتير تمت اليوم</T></View>
-          <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color="#FFD4D4">{failedToday.length}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>متعذرة اليوم</T></View>
-          <View style={styles.summaryWideRow}>
-            <View style={styles.summaryWideBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(dailyInvoiceTotal)}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>إجمالي الفواتير اليوم</T></View>
-            <View style={[styles.summaryWideBox, styles.earningsBox]}><T weight="displayBold" size={type.lg} color="#BFE8D0">{formatPrice(dailyEarnings)}</T><T color="rgba(255,255,255,0.78)" size={type.sm}>أجرتك اليوم</T></View>
+        <T color="rgba(255,255,255,0.78)" size={type.sm} style={{ marginTop: spacing.md }}>{section === "summary" ? "ملخص اليوم" : section === "orders" ? "إدارة الطلبات" : section === "returns" ? "سجل المرتجعات" : "حساب المندوب"}</T>
+      </View>
+
+      {section === "summary" && (
+        <ScrollView style={styles.sectionScroll} contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.summaryIntro}>
+            <View style={styles.introIcon}><Feather name="activity" size={22} color={colors.brandPrimary} /></View>
+            <View style={{ flex: 1 }}>
+              <T weight="displayBold" size={type.lg}>نظرة سريعة على يومك</T>
+              <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs }}>تابع طلبك النشط وأجرتك من مكان واحد</T>
+            </View>
           </View>
-        </View>
-      </View>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{available.length}</T><T color={colors.muted} size={type.sm}>طلبات متاحة</T></View>
+            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{active.length}</T><T color={colors.muted} size={type.sm}>قيد التوصيل</T></View>
+            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{dailyCompletedCount}</T><T color={colors.muted} size={type.sm}>تمت اليوم</T></View>
+            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.error}>{failedToday.length}</T><T color={colors.muted} size={type.sm}>متعذرة اليوم</T></View>
+            <View style={styles.summaryWideRow}>
+              <View style={styles.summaryWideBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(dailyInvoiceTotal)}</T><T color={colors.muted} size={type.sm}>إجمالي الفواتير</T></View>
+              <View style={[styles.summaryWideBox, styles.earningsBox]}><T weight="displayBold" size={type.lg} color={colors.success}>{formatPrice(dailyEarnings)}</T><T color={colors.muted} size={type.sm}>أجرتك اليوم</T></View>
+            </View>
+          </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <Pressable testID="tab-available" onPress={() => setTab("available")} style={[styles.tab, tab === "available" && styles.tabActive]}>
-          <T weight="bold" color={tab === "available" ? "#fff" : colors.onSurfaceSecondary}>متاحة ({available.length})</T>
-        </Pressable>
-        <Pressable testID="tab-active" onPress={() => setTab("active")} style={[styles.tab, tab === "active" && styles.tabActive]}>
-          <T weight="bold" color={tab === "active" ? "#fff" : colors.onSurfaceSecondary}>نشطة ({active.length})</T>
-        </Pressable>
-        <Pressable testID="tab-done" onPress={() => setTab("done")} style={[styles.tab, tab === "done" && styles.tabActive]}>
-          <T weight="bold" color={tab === "done" ? "#fff" : colors.onSurfaceSecondary}>مكتملة ({done.length})</T>
-        </Pressable>
-      </View>
+          <View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>مهمتك الآن</T><T color={colors.brandPrimary} size={type.sm} weight="bold">{active.length ? "قيد التوصيل" : "لا توجد مهمة"}</T></View>
+          {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View> : active.length ? renderCard({ item: active[0] }) : (
+            <View style={styles.emptyPanel}>
+              <Feather name="check-circle" size={28} color={colors.brandPrimary} />
+              <T weight="bold" style={{ marginTop: spacing.sm }}>لا توجد مهمة نشطة</T>
+              <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.xs }}>انتقل إلى الطلبات لاستلام طلب جديد</T>
+              <Pressable onPress={() => setSection("orders")} style={styles.inlineAction}><T color={colors.brandPrimary} weight="bold" size={type.sm}>عرض الطلبات</T></Pressable>
+            </View>
+          )}
 
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : list.length === 0 ? (
-        <View style={styles.center}><EmptyState icon={tab === "active" ? "package" : "check-circle"} title={tab === "available" ? "لا توجد طلبات متاحة" : tab === "active" ? "لا توجد طلبات نشطة" : "لا توجد طلبات مكتملة"} subtitle={tab === "available" ? "ستظهر هنا الطلبات الجاهزة للاستلام" : tab === "active" ? "ستظهر الطلبات المسندة إليك هنا" : "الطلبات التي توصّلها ستظهر هنا"} /></View>
-      ) : (
-        <FlatList data={list} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + spacing.xl }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
-          renderItem={renderCard} />
+          <View style={styles.quickGrid}>
+            <Pressable onPress={() => setSection("orders")} style={styles.quickAction}><Feather name="package" size={20} color={colors.brandPrimary} /><T weight="bold" style={styles.quickActionTitle}>الطلبات</T><T color={colors.muted} size={type.sm}>متاحة ونشطة</T></Pressable>
+            <Pressable onPress={() => setSection("returns")} style={styles.quickAction}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" style={styles.quickActionTitle}>المرتجعات</T><T color={colors.muted} size={type.sm}>{returnsToday.length} اليوم</T></Pressable>
+            <Pressable onPress={() => setSection("account")} style={styles.quickAction}><Feather name="credit-card" size={20} color={colors.brandPrimary} /><T weight="bold" style={styles.quickActionTitle}>الحساب</T><T color={colors.muted} size={type.sm}>الأجرة والتسوية</T></Pressable>
+          </View>
+        </ScrollView>
       )}
+
+      {section === "orders" && (
+        <View style={styles.content}>
+          <View style={styles.tabs}>
+            <Pressable testID="tab-available" onPress={() => setOrderTab("available")} style={[styles.tab, orderTab === "available" && styles.tabActive]}><T weight="bold" color={orderTab === "available" ? "#fff" : colors.onSurfaceSecondary}>متاحة ({available.length})</T></Pressable>
+            <Pressable testID="tab-active" onPress={() => setOrderTab("active")} style={[styles.tab, orderTab === "active" && styles.tabActive]}><T weight="bold" color={orderTab === "active" ? "#fff" : colors.onSurfaceSecondary}>نشطة ({active.length})</T></Pressable>
+            <Pressable testID="tab-done" onPress={() => setOrderTab("done")} style={[styles.tab, orderTab === "done" && styles.tabActive]}><T weight="bold" color={orderTab === "done" ? "#fff" : colors.onSurfaceSecondary}>مكتملة ({done.length})</T></Pressable>
+          </View>
+          {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : list.length === 0 ? (
+            <View style={styles.center}><EmptyState icon={orderTab === "active" ? "package" : "check-circle"} title={orderTab === "available" ? "لا توجد طلبات متاحة" : orderTab === "active" ? "لا توجد طلبات نشطة" : "لا توجد طلبات مكتملة"} subtitle={orderTab === "available" ? "ستظهر هنا الطلبات الجاهزة للاستلام" : orderTab === "active" ? "ستظهر الطلبات المسندة إليك هنا" : "الطلبات التي توصّلها ستظهر هنا"} /></View>
+          ) : (
+            <FlatList data={list} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + 100 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />} renderItem={renderCard} />
+          )}
+        </View>
+      )}
+
+      {section === "returns" && (
+        <View style={styles.content}>
+          {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : returnRecords.length === 0 ? (
+            <View style={styles.center}><EmptyState icon="rotate-ccw" title="لا توجد مرتجعات" subtitle="ستظهر المرتجعات التي تسجلها هنا" /></View>
+          ) : (
+            <FlatList data={returnRecords} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + 100 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />} renderItem={renderReturnCard} />
+          )}
+        </View>
+      )}
+
+      {section === "account" && (
+        <ScrollView style={styles.sectionScroll} contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.accountCard}>
+            <View style={styles.accountHeader}><View style={styles.accountAvatar}><Feather name="user" size={26} color={colors.brandPrimary} /></View><View style={{ flex: 1 }}><T weight="displayBold" size={type.xl}>{user?.name}</T><T color={colors.muted} size={type.sm}>حساب مندوب التوصيل</T></View></View>
+            <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>فواتير اليوم</T><T weight="displayBold" size={type.xl}>{formatPrice(dailyInvoiceTotal)}</T></View><Feather name="file-text" size={22} color={colors.brandPrimary} /></View>
+            <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>أجرتك اليوم</T><T weight="displayBold" size={type.xl} color={colors.success}>{formatPrice(dailyEarnings)}</T></View><Feather name="dollar-sign" size={22} color={colors.success} /></View>
+            <View style={styles.accountMetricRow}><View><T color={colors.muted} size={type.sm}>الطلبات المسلّمة</T><T weight="displayBold" size={type.xl}>{dailyCompletedCount}</T></View><Feather name="check-circle" size={22} color={colors.brandPrimary} /></View>
+          </View>
+          <View style={styles.accountNote}><Feather name="info" size={17} color={colors.brandPrimary} /><T color={colors.onSurfaceSecondary} size={type.sm} style={{ flex: 1 }}>الأجرة محسوبة من رسوم توصيل الطلبات التي تم تسليمها اليوم.</T></View>
+          <Pressable onPress={() => setConfirmLogout(true)} style={styles.accountLogout}><Feather name="log-out" size={18} color={colors.error} /><T weight="bold" color={colors.error}>تسجيل الخروج</T></Pressable>
+        </ScrollView>
+      )}
+
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom + spacing.xs }]}>
+        {DELIVERY_NAV.map((item) => (
+          <Pressable key={item.key} testID={`nav-${item.key}`} onPress={() => setSection(item.key)} style={[styles.bottomNavItem, section === item.key && styles.bottomNavItemActive]}>
+            <Feather name={item.icon as any} size={19} color={section === item.key ? colors.brandPrimary : colors.muted} />
+            <T size={11} weight={section === item.key ? "bold" : "semi"} color={section === item.key ? colors.brandPrimary : colors.muted}>{item.label}</T>
+          </Pressable>
+        ))}
+      </View>
 
       <Modal visible={!!proofFor} transparent animationType="slide" onRequestClose={() => { setProofFor(null); setProofOtp(""); }}>
         <Pressable style={styles.modalBg} onPress={() => { setProofFor(null); setProofOtp(""); }}>
@@ -417,6 +504,31 @@ const styles = StyleSheet.create({
   summaryWideRow: { width: "100%", flexDirection: "row-reverse", justifyContent: "space-between", gap: spacing.sm },
   summaryWideBox: { width: "48%", minHeight: 62, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(198,160,121,0.18)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(198,160,121,0.55)", paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
   earningsBox: { backgroundColor: "rgba(79,166,119,0.18)", borderColor: "rgba(191,232,208,0.55)" },
+  content: { flex: 1 },
+  sectionScroll: { flex: 1 },
+  summaryIntro: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  introIcon: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
+  sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xl, marginBottom: spacing.sm },
+  emptyPanel: { alignItems: "center", justifyContent: "center", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, borderWidth: 1, borderColor: colors.border },
+  inlineAction: { marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.brandTertiary },
+  quickGrid: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.lg },
+  quickAction: { flex: 1, minHeight: 92, alignItems: "center", justifyContent: "center", backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm },
+  quickActionTitle: { marginTop: spacing.xs },
+  bottomNav: { flexDirection: "row-reverse", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs, paddingHorizontal: spacing.sm },
+  bottomNavItem: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: radius.md, gap: 2 },
+  bottomNavItemActive: { backgroundColor: colors.brandTertiary },
+  returnCard: { backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
+  returnCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
+  returnBadge: { backgroundColor: "#FFF0F0", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  returnMeta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  returnReason: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.xs },
+  returnCardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
+  accountCard: { backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  accountHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  accountAvatar: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
+  accountMetricRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  accountNote: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
+  accountLogout: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 48, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.lg },
   tabs: { flexDirection: "row-reverse", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface },
   tab: { flex: 1, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   tabActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },

@@ -224,6 +224,7 @@ export const api = {
   updateBanner: (id: string, body: any) => req("/admin/banners/" + id, { method: "PUT", body: JSON.stringify(body) }),
   deleteBanner: (id: string) => req("/admin/banners/" + id, { method: "DELETE" }),
   deliverySummary: (date: string, tzOffsetMinutes: number) => req("/delivery/summary?date=" + encodeURIComponent(date) + "&tz_offset_minutes=" + String(tzOffsetMinutes)),
+  deliveryReturns: () => req("/delivery/returns"),
   deliveryOrders: () => req("/delivery/orders"),
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
   deliverySetStatus: (id: string, status: string, reason?: string, otp?: string) => req("/delivery/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status, ...(reason ? { reason } : {}), ...(otp ? { otp } : {}) }) }),
