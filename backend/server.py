@@ -1875,8 +1875,8 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     order = await db.orders.find_one({"id": oid}, {"_id": 0})
     if not order or order.get("agent_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail="غير مصرح")
-    if order.get("status") not in ("out_for_delivery", "delivered"):
-        raise HTTPException(status_code=400, detail="لا يمكن تسجيل مرتجع قبل خروج الطلب للتوصيل")
+    if order.get("status") != "out_for_delivery":
+        raise HTTPException(status_code=400, detail="يجب تسجيل المرتجع قبل تأكيد التسليم")
 
     previous_returns = await db.returns.find({"order_id": oid}, {"_id": 0}).to_list(200)
     returned_by_product = {}
@@ -1932,9 +1932,11 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "status": "accepted",
         "created_at": created_at,
     }
-    await db.returns.insert_one(doc)
-    await db.orders.update_one(
-        {"id": oid},
+    # Claim the order while it is still out for delivery. The Firestore
+    # transaction makes the status check atomic with the return bookkeeping,
+    # so a return cannot race with delivery confirmation.
+    updated_order = await db.orders.find_one_and_update(
+        {"id": oid, "agent_id": user["user_id"], "status": "out_for_delivery"},
         {
             "$set": {
                 "return_status": "full" if is_full else "partial",
@@ -1943,6 +1945,9 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
             "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
         },
     )
+    if not updated_order:
+        raise HTTPException(status_code=409, detail="لا يمكن تسجيل المرتجع بعد تأكيد التسليم")
+    await db.returns.insert_one(doc)
     try:
         await send_push(await manager_ids(), {"title": "مرتجع جديد ↩️", "message": f"تم تسجيل مرتجع للطلب {oid} بواسطة {doc['agent_name']}", "action_url": f"/returns/{return_id}"})
     except Exception as e:
@@ -2106,6 +2111,56 @@ async def admin_set_role(body: RoleIn, user=Depends(require_manager)):
 
 
 # ---------------- Delivery ops ----------------
+@api.get("/delivery/summary")
+async def delivery_summary(
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz_offset_minutes: int = Query(0, ge=-840, le=840),
+    user=Depends(require_delivery),
+):
+    target_date_text = date or now_utc().date().isoformat()
+    try:
+        target_date = datetime.strptime(target_date_text, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="التاريخ غير صالح")
+
+    orders = await db.orders.find(
+        {"agent_id": user["user_id"], "status": "delivered"},
+        {"_id": 0, "id": 1, "total": 1, "delivery_fee": 1, "agent_fee": 1, "delivered_at": 1},
+    ).to_list(1000)
+    invoices_total = 0.0
+    earnings = 0.0
+    delivered_orders = 0
+    for order in orders:
+        delivered_at = order.get("delivered_at")
+        if not delivered_at:
+            continue
+        try:
+            delivered_dt = datetime.fromisoformat(str(delivered_at).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if delivered_dt.tzinfo is None:
+            delivered_dt = delivered_dt.replace(tzinfo=timezone.utc)
+        local_dt = delivered_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes)))
+        if local_dt.date() != target_date:
+            continue
+        try:
+            invoices_total += float(order.get("total", 0) or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            earnings += float(order.get("agent_fee", order.get("delivery_fee", 0)) or 0)
+        except (TypeError, ValueError):
+            pass
+        delivered_orders += 1
+
+    return {
+        "date": target_date.isoformat(),
+        "orders_count": delivered_orders,
+        "invoices_total": round(invoices_total, 2),
+        "earnings": round(earnings, 2),
+        "currency": "IQD",
+    }
+
 @api.get("/delivery/orders")
 async def delivery_orders(user=Depends(require_delivery)):
     available = await db.orders.find(
