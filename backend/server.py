@@ -1,5 +1,7 @@
 import os
 import re
+import hmac
+import secrets
 import uuid
 import json
 import io
@@ -248,6 +250,7 @@ class OrderIn(BaseModel):
 class StatusUpdateIn(BaseModel):
     status: str
     reason: Optional[str] = Field(None, max_length=200)
+    otp: Optional[str] = None
 
 
 class AssignIn(BaseModel):
@@ -1728,6 +1731,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "total": total,
         "status": "pending",
         "payment": "cod",
+        "delivery_otp": f"{secrets.randbelow(1000000):06d}",
         "agent_id": None,
         "agent_name": None,
         "agent_phone": None,
@@ -1831,6 +1835,8 @@ async def get_order(oid: str, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     if user["role"] == "customer" and d["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="غير مصرح")
+    if user["role"] != "customer":
+        d.pop("delivery_otp", None)
     return d
 
 
@@ -1978,7 +1984,10 @@ async def admin_orders(status: Optional[str] = None, user=Depends(require_manage
     q = {}
     if status and status != "all":
         q["status"] = status
-    return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
+    docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
+    for doc in docs:
+        doc.pop("delivery_otp", None)
+    return docs
 
 
 async def notify_customer_status(oid, status):
@@ -2156,6 +2165,11 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
         raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
     status_update = {"status": body.status}
     if body.status == "delivered":
+        if d.get("delivery_otp"):
+            entered_otp = (body.otp or "").strip()
+            expected_otp = str(d.get("delivery_otp"))
+            if len(entered_otp) != 6 or not entered_otp.isdigit() or not hmac.compare_digest(entered_otp, expected_otp):
+                raise HTTPException(status_code=400, detail="رمز التسليم غير صحيح")
         status_update["delivered_at"] = now_utc().isoformat()
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": current_status},
