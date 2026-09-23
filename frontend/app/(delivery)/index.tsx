@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal, ScrollView, TextInput } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -74,6 +74,7 @@ export default function DeliveryHome() {
   const [proofFor, setProofFor] = useState<any>(null);
   const [proofOtp, setProofOtp] = useState("");
   const [proofSubmitting, setProofSubmitting] = useState(false);
+  const proofLock = useRef(false);
   const [closeDayVisible, setCloseDayVisible] = useState(false);
 
   const load = useCallback(async () => {
@@ -90,10 +91,11 @@ export default function DeliveryHome() {
   }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const openProof = (order: any) => { setProofFor(order); setProofOtp(""); };
+  const openProof = (order: any) => { proofLock.current = false; setProofFor(order); setProofOtp(""); };
 
   const submitProof = async () => {
-    if (!proofFor || proofSubmitting) return;
+    if (!proofFor || proofSubmitting || proofLock.current) return;
+    proofLock.current = true;
     const otp = proofOtp.trim();
     if (!/^\d{6}$/.test(otp)) {
       show("أدخل رمز التسليم المكوّن من 6 أرقام", "error");
@@ -109,6 +111,7 @@ export default function DeliveryHome() {
     } catch (e: any) {
       show(e.message, "error");
     } finally {
+      proofLock.current = false;
       setProofSubmitting(false);
     }
   };
