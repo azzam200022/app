@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal, ScrollView } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Linking, Modal, ScrollView, TextInput } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -38,14 +38,36 @@ export default function DeliveryHome() {
   const [failureFor, setFailureFor] = useState<any>(null);
   const [failureReason, setFailureReason] = useState<string | null>(null);
   const [failureSubmitting, setFailureSubmitting] = useState(false);
+  const [proofFor, setProofFor] = useState<any>(null);
+  const [proofOtp, setProofOtp] = useState("");
+  const [proofSubmitting, setProofSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     try { setOrders(await api.deliveryOrders()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); setRefreshing(false); }
   }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const markDelivered = async (id: string) => {
-    try { await api.deliverySetStatus(id, "delivered"); show("تم تسجيل التوصيل 🎉"); load(); } catch (e: any) { show(e.message, "error"); }
+  const openProof = (order: any) => { setProofFor(order); setProofOtp(""); };
+
+  const submitProof = async () => {
+    if (!proofFor) return;
+    const otp = proofOtp.trim();
+    if (!/^\d{6}$/.test(otp)) {
+      show("أدخل رمز التسليم المكوّن من 6 أرقام", "error");
+      return;
+    }
+    setProofSubmitting(true);
+    try {
+      await api.deliverySetStatus(proofFor.id, "delivered", undefined, otp);
+      show("تم التحقق وتسجيل التوصيل 🎉");
+      setProofFor(null);
+      setProofOtp("");
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setProofSubmitting(false);
+    }
   };
 
   const submitFailure = async () => {
@@ -213,7 +235,7 @@ export default function DeliveryHome() {
       </View>
       {item.status === "out_for_delivery" && (
         <>
-          <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => markDelivered(item.id)} testID={"deliver-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
+          <Button title="تأكيد التوصيل واستلام المبلغ" icon="check-circle" onPress={() => openProof(item)} testID={"deliver-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
           <Pressable testID={"failed-" + item.id} onPress={() => { setFailureFor(item); setFailureReason(null); }} style={styles.failBtn}>
             <Feather name="alert-triangle" size={16} color={colors.error} />
             <T size={type.sm} weight="bold" color={colors.error}>تعذر التسليم</T>
@@ -270,6 +292,20 @@ export default function DeliveryHome() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brandPrimary} />}
           renderItem={renderCard} />
       )}
+
+      <Modal visible={!!proofFor} transparent animationType="slide" onRequestClose={() => { setProofFor(null); setProofOtp(""); }}>
+        <Pressable style={styles.modalBg} onPress={() => { setProofFor(null); setProofOtp(""); }}>
+          <Pressable style={[styles.modalCard, { paddingBottom: insets.bottom + spacing.xl }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalIcon, styles.proofIcon]}><Feather name="shield" size={26} color={colors.brandPrimary} /></View>
+            <T weight="displayBold" size={type.xl} style={{ marginTop: spacing.md }}>إثبات تسليم الطلب</T>
+            <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs, textAlign: "center" }}>اطلب رمز التسليم من العميل وأدخله قبل تسليم الطلب</T>
+            <T color={colors.brandPrimary} weight="bold" size={type.sm} style={{ marginTop: spacing.lg }}>الطلب #{proofFor?.id?.replace("ORD", "")}</T>
+            <TextInput value={proofOtp} onChangeText={(value) => setProofOtp(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} autoFocus placeholder="000000" placeholderTextColor={colors.muted} style={styles.otpInput} accessibilityLabel="رمز التسليم" />
+            <Button title={proofSubmitting ? "جارٍ التحقق..." : "تحقق وتسجيل التسليم"} icon="shield" onPress={submitProof} disabled={proofSubmitting} style={{ marginTop: spacing.lg, minHeight: 46 }} />
+            <Button title="إلغاء" variant="secondary" onPress={() => { setProofFor(null); setProofOtp(""); }} disabled={proofSubmitting} style={{ marginTop: spacing.sm, minHeight: 44 }} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={!!failureFor} transparent animationType="slide" onRequestClose={() => { setFailureFor(null); setFailureReason(null); }}>
         <Pressable style={styles.modalBg} onPress={() => { setFailureFor(null); setFailureReason(null); }}>
