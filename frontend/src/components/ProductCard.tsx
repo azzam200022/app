@@ -82,8 +82,10 @@ export const ProductCard = React.memo(function ProductCard({
       <View style={styles.body}>
         <T weight="semi" numberOfLines={2} style={styles.name}>{product.name}</T>
         <View style={[styles.priceRow, quantity > 0 && styles.quantityPriceRow]}>
-          <View style={styles.priceBlock}>
-            <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
+          <View style={[styles.priceBlock, quantity > 0 && styles.quantityPriceBlock]}>
+            <View style={styles.priceHighlight}>
+              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
+            </View>
             {product.old_price ? (
               <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
             ) : null}
@@ -164,10 +166,12 @@ const styles = StyleSheet.create({
   badgePos: { position: "absolute", top: spacing.sm, insetInlineStart: spacing.sm },
   favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center" },
   body: { padding: spacing.md, minHeight: 138 },
-  name: { minHeight: 40, lineHeight: 20 },
+  name: { minHeight: 40, lineHeight: 20, color: colors.onSurface },
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", marginTop: spacing.sm, gap: spacing.sm },
   quantityPriceRow: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm },
   priceBlock: { flex: 1, minWidth: 0 },
+  quantityPriceBlock: { minHeight: 50 },
+  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.brandSecondary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
