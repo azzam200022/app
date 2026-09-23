@@ -204,6 +204,7 @@ export const api = {
   adminStats: () => req("/admin/stats"),
   adminOrders: (status?: string) => req("/admin/orders" + (status ? "?status=" + status : "")),
   adminReturns: () => req("/admin/returns"),
+  adminUpdateReturnStatus: (id: string, status: string) => req("/admin/returns/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
