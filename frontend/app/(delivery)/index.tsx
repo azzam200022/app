@@ -427,6 +427,8 @@ const styles = StyleSheet.create({
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, alignItems: "center" },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5E9E9", alignItems: "center", justifyContent: "center" },
+  proofIcon: { backgroundColor: "#E7F0EC" },
+  otpInput: { width: "100%", height: 64, marginTop: spacing.md, borderWidth: 1.5, borderColor: colors.brandPrimary, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, color: colors.brandPrimary, fontSize: 28, fontWeight: "800", textAlign: "center", letterSpacing: 8 },
   modalBtns: { flexDirection: "row-reverse", gap: spacing.md, marginTop: spacing.xl, width: "100%" },
 });
 
