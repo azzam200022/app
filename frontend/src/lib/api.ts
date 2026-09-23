@@ -266,6 +266,6 @@ export async function uploadInventoryPdf(uri: string, name: string, platformWeb:
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  pending: "قيد المراجعة", confirmed: "تم التأكيد", preparing: "قيد التجهيز", ready_for_delivery: "جاهز للتوصيل", out_for_delivery: "في الطريق", delivered: "تم التوصيل", delivery_failed: "تعذر التسليم", cancelled: "ملغي",
+  pending: "قيد المراجعة", confirmed: "تم التأكيد", preparing: "قيد التجهيز", ready_for_delivery: "جاهز للتوصيل", out_for_delivery: "في الطريق", delivered: "تم التوصيل", delivery_failed: "تعذر التسليم", cancelled: "ملغي", returned: "مرتجع كامل", 
 };
 export const STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"];
