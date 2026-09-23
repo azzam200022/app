@@ -180,7 +180,7 @@ export default function DeliveryHome() {
   const isToday = (iso: string) => { const d = new Date(iso); const n = new Date(); return d.toDateString() === n.toDateString(); };
   const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const done = orders.filter((o) => o.status === "delivered" || o.status === "returned").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const done = orders.filter((o) => o.status === "delivered" || o.status === "returned" || o.status === "delivery_failed").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const failed = orders.filter((o) => o.status === "delivery_failed").sort((a, b) => (a.updated_at || a.created_at) < (b.updated_at || b.created_at) ? 1 : -1);
   const completedToday = done.filter((o) => isToday(o.delivered_at || o.updated_at || o.created_at));
   const failedToday = failed.filter((o) => isToday(o.updated_at || o.created_at));
