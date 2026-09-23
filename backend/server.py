@@ -271,6 +271,10 @@ class ReturnIn(BaseModel):
     reason: Optional[str] = ""
 
 
+class ReturnStatusUpdateIn(BaseModel):
+    status: str
+
+
 class RoleIn(BaseModel):
     user_id: str
     role: str
@@ -1663,6 +1667,7 @@ def delivery_order_view(order, delivery_state: str):
         "delivery_state": delivery_state,
         "return_status": order.get("return_status"),
         "returned_total": order.get("returned_total", 0),
+        "amount_due": order.get("total", 0),
         "created_at": order.get("created_at"),
         "delivered_at": order.get("delivered_at"),
         "agent_phone": order.get("agent_phone"),
@@ -1929,7 +1934,7 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "total": total,
         "return_type": "full" if is_full else "partial",
         "reason": body.reason or "",
-        "status": "accepted",
+        "status": "pending_review",
         "created_at": created_at,
     }
     # Claim the order while it is still out for delivery. The Firestore
@@ -1959,6 +1964,49 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
 @api.get("/admin/returns")
 async def admin_returns(user=Depends(require_manager)):
     return await db.returns.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+RETURN_STATUS_LABEL = {
+    "registered": "مسجل",
+    "pending_review": "قيد مراجعة الإدارة",
+    "approved": "مقبول",
+    "rejected": "مرفوض",
+}
+
+
+@api.post("/admin/returns/{return_id}/status")
+async def admin_update_return_status(
+    return_id: str,
+    body: ReturnStatusUpdateIn,
+    user=Depends(require_manager),
+):
+    if body.status not in ("pending_review", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="حالة المرتجع غير صالحة")
+    record = await db.returns.find_one({"id": return_id}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="المرتجع غير موجود")
+    if record.get("status") == body.status:
+        return record
+    updated = await db.returns.find_one_and_update(
+        {"id": return_id, "status": {"$in": ["registered", "pending_review", "approved", "rejected"]}},
+        {
+            "$set": {
+                "status": body.status,
+                "status_updated_at": now_utc().isoformat(),
+                "status_updated_by": user.get("user_id"),
+            },
+            "$push": {
+                "timeline": {
+                    "status": body.status,
+                    "at": now_utc().isoformat(),
+                    "by": user.get("user_id"),
+                }
+            },
+        },
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="تم تحديث حالة المرتجع من مدير آخر")
+    return await db.returns.find_one({"id": return_id}, {"_id": 0}) or updated
 
 
 @api.get("/admin/stats")
@@ -2127,8 +2175,13 @@ async def delivery_summary(
         {"agent_id": user["user_id"], "status": "delivered"},
         {"_id": 0, "id": 1, "total": 1, "delivery_fee": 1, "agent_fee": 1, "delivered_at": 1},
     ).to_list(1000)
+    returns = await db.returns.find(
+        {"agent_id": user["user_id"]},
+        {"_id": 0, "total": 1, "created_at": 1},
+    ).to_list(1000)
     invoices_total = 0.0
     earnings = 0.0
+    returns_total = 0.0
     delivered_orders = 0
     for order in orders:
         delivered_at = order.get("delivered_at")
@@ -2153,11 +2206,35 @@ async def delivery_summary(
             pass
         delivered_orders += 1
 
+    returns_count = 0
+    for record in returns:
+        created_at = record.get("created_at")
+        try:
+            created_dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if created_dt.tzinfo is None:
+            created_dt = created_dt.replace(tzinfo=timezone.utc)
+        local_dt = created_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes)))
+        if local_dt.date() != target_date:
+            continue
+        returns_count += 1
+        try:
+            returns_total += float(record.get("total", 0) or 0)
+        except (TypeError, ValueError):
+            pass
+
+    cash_collected = max(invoices_total - returns_total, 0.0)
+    amount_to_handover = max(cash_collected - earnings, 0.0)
     return {
         "date": target_date.isoformat(),
         "orders_count": delivered_orders,
         "invoices_total": round(invoices_total, 2),
+        "returns_count": returns_count,
+        "returns_total": round(returns_total, 2),
+        "cash_collected": round(cash_collected, 2),
         "earnings": round(earnings, 2),
+        "amount_to_handover": round(amount_to_handover, 2),
         "currency": "IQD",
     }
 
