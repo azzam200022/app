@@ -181,15 +181,17 @@ export default function DeliveryHome() {
   const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const done = orders.filter((o) => o.status === "delivered" || o.status === "returned" || o.status === "delivery_failed").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const failed = orders.filter((o) => o.status === "delivery_failed").sort((a, b) => (a.updated_at || a.created_at) < (b.updated_at || b.created_at) ? 1 : -1);
-  const completedToday = done.filter((o) => isToday(o.delivered_at || o.updated_at || o.created_at));
-  const failedToday = failed.filter((o) => isToday(o.updated_at || o.created_at));
+  const failed = orders.filter((o) => o.status === "delivery_failed").sort((a, b) => (b.delivery_failed_at || b.updated_at || b.created_at) < (a.delivery_failed_at || a.updated_at || a.created_at) ? 1 : -1);
+  const completedToday = orders.filter((o) => o.status === "delivered" && isToday(o.delivered_at || o.updated_at || o.created_at));
+  const failedToday = failed.filter((o) => isToday(o.delivery_failed_at || o.updated_at || o.created_at));
+  const returnsToday = returnRecords.filter((item) => isToday(item.created_at));
   const collectedToday = completedToday.reduce((s, o) => s + Number(o.amount_due ?? o.total ?? 0), 0);
   const dailyCompletedCount = Number(dailySummary?.orders_count ?? completedToday.length);
+  const dailyFailedCount = Number(dailySummary?.failed_count ?? failedToday.length);
+  const dailyReturnsCount = Number(dailySummary?.returns_count ?? returnsToday.length);
   const dailyInvoiceTotal = Number(dailySummary?.invoices_total ?? collectedToday);
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
   const list = orderTab === "available" ? available : orderTab === "active" ? active : done;
-  const returnsToday = returnRecords.filter((item) => isToday(item.created_at));
 
   // Broadcast live location for active deliveries
   const activeIds = active.map((o) => o.id).join(",");
@@ -343,7 +345,7 @@ export default function DeliveryHome() {
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{available.length}</T><T color={colors.muted} size={type.sm}>طلبات متاحة</T></View>
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{active.length}</T><T color={colors.muted} size={type.sm}>قيد التوصيل</T></View>
             <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{dailyCompletedCount}</T><T color={colors.muted} size={type.sm}>تمت اليوم</T></View>
-            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.error}>{failedToday.length}</T><T color={colors.muted} size={type.sm}>متعذرة اليوم</T></View>
+            <View style={styles.summaryBox}><T weight="displayBold" size={type.xl} color={colors.error}>{dailyFailedCount}</T><T color={colors.muted} size={type.sm}>متعذرة اليوم</T></View>
             <View style={styles.summaryWideRow}>
               <View style={styles.summaryWideBox}><T weight="displayBold" size={type.lg} color={colors.gold}>{formatPrice(dailyInvoiceTotal)}</T><T color={colors.muted} size={type.sm}>إجمالي الفواتير</T></View>
               <View style={[styles.summaryWideBox, styles.earningsBox]}><T weight="displayBold" size={type.lg} color={colors.success}>{formatPrice(dailyEarnings)}</T><T color={colors.muted} size={type.sm}>أجرتك اليوم</T></View>
@@ -362,7 +364,7 @@ export default function DeliveryHome() {
 
           <View style={styles.quickGrid}>
             <Pressable onPress={() => setSection("orders")} style={styles.quickAction}><Feather name="package" size={20} color={colors.brandPrimary} /><T weight="bold" style={styles.quickActionTitle}>الطلبات</T><T color={colors.muted} size={type.sm}>متاحة ونشطة</T></Pressable>
-            <Pressable onPress={() => setSection("returns")} style={styles.quickAction}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" style={styles.quickActionTitle}>المرتجعات</T><T color={colors.muted} size={type.sm}>{returnsToday.length} اليوم</T></Pressable>
+            <Pressable onPress={() => setSection("returns")} style={styles.quickAction}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" style={styles.quickActionTitle}>المرتجعات</T><T color={colors.muted} size={type.sm}>{dailyReturnsCount} اليوم</T></Pressable>
             <Pressable onPress={() => setSection("account")} style={styles.quickAction}><Feather name="credit-card" size={20} color={colors.brandPrimary} /><T weight="bold" style={styles.quickActionTitle}>الحساب</T><T color={colors.muted} size={type.sm}>الأجرة والتسوية</T></Pressable>
           </View>
         </ScrollView>

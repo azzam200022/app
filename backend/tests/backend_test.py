@@ -408,6 +408,7 @@ class TestLifecycle:
         failed_delivery = next(o for o in s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json() if o["id"] == oid)
         assert failed_delivery["status"] == "delivery_failed"
         assert failed_delivery["amount_due"] == 0
+        assert failed_delivery["delivery_failed_at"]
         assert any(t["status"] == "delivery_failed" for t in final["timeline"])
 
 

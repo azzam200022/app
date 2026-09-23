@@ -1696,7 +1696,11 @@ def delivery_order_view(order, delivery_state: str, expose_customer_details: boo
         "return_status": order.get("return_status"),
         "returned_total": order.get("returned_total", 0),
         "created_at": order.get("created_at"),
+        "claimed_at": order.get("claimed_at"),
         "delivered_at": order.get("delivered_at"),
+        "delivery_failed_at": order.get("delivery_failed_at"),
+        "returned_at": order.get("returned_at"),
+        "updated_at": order.get("updated_at"),
         "agent_phone": order.get("agent_phone"),
     }
 
@@ -2163,25 +2167,34 @@ async def delivery_summary(
     except ValueError:
         raise HTTPException(status_code=400, detail="التاريخ غير صالح")
 
+    def is_target_local_date(value):
+        if not value:
+            return False
+        try:
+            event_dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return False
+        if event_dt.tzinfo is None:
+            event_dt = event_dt.replace(tzinfo=timezone.utc)
+        return event_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes))).date() == target_date
+
     orders = await db.orders.find(
         {"agent_id": user["user_id"], "status": "delivered"},
         {"_id": 0, "id": 1, "total": 1, "returned_total": 1, "return_status": 1, "status": 1, "delivery_fee": 1, "agent_fee": 1, "delivered_at": 1},
+    ).to_list(1000)
+    failed_orders = await db.orders.find(
+        {"agent_id": user["user_id"], "status": "delivery_failed"},
+        {"_id": 0, "delivery_failed_at": 1},
+    ).to_list(1000)
+    return_docs = await db.returns.find(
+        {"agent_id": user["user_id"]},
+        {"_id": 0, "created_at": 1},
     ).to_list(1000)
     invoices_total = 0.0
     earnings = 0.0
     delivered_orders = 0
     for order in orders:
-        delivered_at = order.get("delivered_at")
-        if not delivered_at:
-            continue
-        try:
-            delivered_dt = datetime.fromisoformat(str(delivered_at).replace("Z", "+00:00"))
-        except (TypeError, ValueError):
-            continue
-        if delivered_dt.tzinfo is None:
-            delivered_dt = delivered_dt.replace(tzinfo=timezone.utc)
-        local_dt = delivered_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes)))
-        if local_dt.date() != target_date:
+        if not is_target_local_date(order.get("delivered_at")):
             continue
         try:
             invoices_total += order_amounts(order)[1]
@@ -2193,9 +2206,14 @@ async def delivery_summary(
             pass
         delivered_orders += 1
 
+    failed_orders_count = sum(1 for order in failed_orders if is_target_local_date(order.get("delivery_failed_at")))
+    returns_count = sum(1 for item in return_docs if is_target_local_date(item.get("created_at")))
+
     return {
         "date": target_date.isoformat(),
         "orders_count": delivered_orders,
+        "failed_count": failed_orders_count,
+        "returns_count": returns_count,
         "invoices_total": round(invoices_total, 2),
         "earnings": round(earnings, 2),
         "currency": "IQD",
