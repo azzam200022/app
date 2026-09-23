@@ -180,11 +180,11 @@ export default function DeliveryHome() {
   const isToday = (iso: string) => { const d = new Date(iso); const n = new Date(); return d.toDateString() === n.toDateString(); };
   const available = orders.filter((o) => o.delivery_state === "available").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const active = orders.filter((o) => o.delivery_state !== "available" && o.status === "out_for_delivery").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const done = orders.filter((o) => o.status === "delivered").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const done = orders.filter((o) => o.status === "delivered" || o.status === "returned").sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const failed = orders.filter((o) => o.status === "delivery_failed").sort((a, b) => (a.updated_at || a.created_at) < (b.updated_at || b.created_at) ? 1 : -1);
   const completedToday = done.filter((o) => isToday(o.delivered_at || o.updated_at || o.created_at));
   const failedToday = failed.filter((o) => isToday(o.updated_at || o.created_at));
-  const collectedToday = completedToday.reduce((s, o) => s + (o.total || 0), 0);
+  const collectedToday = completedToday.reduce((s, o) => s + Number(o.amount_due ?? o.total ?? 0), 0);
   const dailyCompletedCount = Number(dailySummary?.orders_count ?? completedToday.length);
   const dailyInvoiceTotal = Number(dailySummary?.invoices_total ?? collectedToday);
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
@@ -214,7 +214,9 @@ export default function DeliveryHome() {
 
   const doLogout = async () => { setConfirmLogout(false); await logout(); router.replace("/login"); };
 
-  const renderCard = ({ item }: any) => (
+  const renderCard = ({ item }: any) => {
+    const amountDue = Number(item.amount_due ?? item.total ?? 0);
+    return (
     <View style={styles.card} testID={`del-order-${item.id}`}>
       <View style={styles.cardTop}>
         <T weight="bold">#{item.id.replace("ORD", "")}</T>
@@ -238,7 +240,7 @@ export default function DeliveryHome() {
 
       <View style={styles.cardBottom}>
         <T color={colors.muted} size={type.sm}>{item.item_count ?? item.items.length} منتج</T>
-        <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.total)} • نقداً</T>
+        <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(amountDue)} • نقداً</T>
       </View>
 
       {item.delivery_state === "available" && (
@@ -284,7 +286,8 @@ export default function DeliveryHome() {
         </Pressable>
       )}
     </View>
-  );
+    );
+  };
 
   const renderReturnCard = ({ item }: any) => (
     <View style={styles.returnCard} testID={`del-return-${item.id}`}>
@@ -405,8 +408,8 @@ export default function DeliveryHome() {
         ))}
       </View>
 
-      <Modal visible={!!proofFor} transparent animationType="slide" onRequestClose={() => { setProofFor(null); setProofOtp(""); }}>
-        <Pressable style={styles.modalBg} onPress={() => { setProofFor(null); setProofOtp(""); }}>
+      <Modal visible={!!proofFor} transparent animationType="slide" onRequestClose={() => {}}>
+        <Pressable style={styles.modalBg} onPress={() => {}}>
           <Pressable style={[styles.modalCard, { paddingBottom: insets.bottom + spacing.xl }]} onPress={(e) => e.stopPropagation()}>
             <View style={[styles.modalIcon, styles.proofIcon]}><Feather name="shield" size={26} color={colors.brandPrimary} /></View>
             <T weight="displayBold" size={type.xl} style={{ marginTop: spacing.md }}>إثبات تسليم الطلب</T>
