@@ -1649,6 +1649,14 @@ def delivery_order_view(order, delivery_state: str):
     items = order.get("items", [])
     item_count = sum(max(int(item.get("quantity", 1) or 1), 0) for item in items)
     location = order.get("location")
+    try:
+        order_total = float(order.get("total", 0) or 0)
+    except (TypeError, ValueError):
+        order_total = 0.0
+    try:
+        returned_total = float(order.get("returned_total", 0) or 0)
+    except (TypeError, ValueError):
+        returned_total = 0.0
     return {
         "id": order.get("id"),
         "customer_name": order.get("customer_name", ""),
@@ -1666,8 +1674,8 @@ def delivery_order_view(order, delivery_state: str):
         "status": order.get("status"),
         "delivery_state": delivery_state,
         "return_status": order.get("return_status"),
-        "returned_total": order.get("returned_total", 0),
-        "amount_due": order.get("total", 0),
+        "returned_total": returned_total,
+        "amount_due": max(order_total - returned_total, 0),
         "created_at": order.get("created_at"),
         "delivered_at": order.get("delivered_at"),
         "agent_phone": order.get("agent_phone"),
@@ -1740,6 +1748,8 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "agent_id": None,
         "agent_name": None,
         "agent_phone": None,
+        "return_status": None,
+        "returned_total": 0.0,
         "timeline": [{"status": "pending", "at": now_utc().isoformat()}],
         "created_at": now_utc().isoformat(),
     }
@@ -1938,17 +1948,18 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "created_at": created_at,
     }
     # Claim the order while it is still out for delivery. The Firestore
-    # transaction makes the status check atomic with the return bookkeeping,
-    # so a return cannot race with delivery confirmation.
+    # transaction makes the status check and returned-total increment atomic,
+    # so concurrent return submissions cannot overwrite each other's amount.
+    return_update = {
+        "$set": {
+            "return_status": "full" if is_full else "partial",
+        },
+        "$inc": {"returned_total": total},
+        "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
+    }
     updated_order = await db.orders.find_one_and_update(
         {"id": oid, "agent_id": user["user_id"], "status": "out_for_delivery"},
-        {
-            "$set": {
-                "return_status": "full" if is_full else "partial",
-                "returned_total": float(order.get("returned_total", 0) or 0) + total,
-            },
-            "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
-        },
+        return_update,
     )
     if not updated_order:
         raise HTTPException(status_code=409, detail="لا يمكن تسجيل المرتجع بعد تأكيد التسليم")
@@ -1970,8 +1981,34 @@ RETURN_STATUS_LABEL = {
     "registered": "مسجل",
     "pending_review": "قيد مراجعة الإدارة",
     "approved": "مقبول",
+    "accepted": "مقبول",
     "rejected": "مرفوض",
 }
+
+
+async def refresh_order_return_totals(order_id: str):
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        return
+    records = await db.returns.find({"order_id": order_id}, {"_id": 0}).to_list(200)
+    active_records = [record for record in records if record.get("status") != "rejected"]
+    returned_by_product = {}
+    returned_total = 0.0
+    for record in active_records:
+        returned_total += float(record.get("total", 0) or 0)
+        for item in record.get("items", []):
+            product_id = str(item.get("product_id"))
+            returned_by_product[product_id] = returned_by_product.get(product_id, 0) + int(item.get("quantity", 0) or 0)
+    order_items = order.get("items", [])
+    is_full = bool(order_items) and all(
+        returned_by_product.get(str(item.get("product_id")), 0) >= int(item.get("quantity", 0) or 0)
+        for item in order_items
+    )
+    return_status = "full" if is_full else "partial" if returned_total > 0 else None
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {"returned_total": round(returned_total, 2), "return_status": return_status}},
+    )
 
 
 @api.post("/admin/returns/{return_id}/status")
@@ -1985,10 +2022,13 @@ async def admin_update_return_status(
     record = await db.returns.find_one({"id": return_id}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="المرتجع غير موجود")
-    if record.get("status") == body.status:
+    current_status = record.get("status") or "registered"
+    if current_status == body.status:
         return record
+    if current_status in ("approved", "accepted", "rejected"):
+        raise HTTPException(status_code=409, detail="لا يمكن تعديل مرتجع بعد اعتماد القرار النهائي")
     updated = await db.returns.find_one_and_update(
-        {"id": return_id, "status": {"$in": ["registered", "pending_review", "approved", "rejected"]}},
+        {"id": return_id, "status": current_status},
         {
             "$set": {
                 "status": body.status,
@@ -2006,6 +2046,23 @@ async def admin_update_return_status(
     )
     if not updated:
         raise HTTPException(status_code=409, detail="تم تحديث حالة المرتجع من مدير آخر")
+    await refresh_order_return_totals(record.get("order_id"))
+    if body.status == "approved" and record.get("return_type") == "full":
+        order_id = record.get("order_id")
+        closed_at = now_utc().isoformat()
+        closed = await db.orders.find_one_and_update(
+            {"id": order_id, "status": "out_for_delivery"},
+            {
+                "$set": {
+                    "status": "delivery_failed",
+                    "delivery_failed_reason": "full_return",
+                    "delivery_failed_at": closed_at,
+                },
+                "$push": {"timeline": {"status": "delivery_failed", "at": closed_at, "reason": "full_return"}},
+            },
+        )
+        if closed:
+            await notify_customer_status(order_id, "delivery_failed")
     return await db.returns.find_one({"id": return_id}, {"_id": 0}) or updated
 
 
@@ -2177,7 +2234,7 @@ async def delivery_summary(
     ).to_list(1000)
     returns = await db.returns.find(
         {"agent_id": user["user_id"]},
-        {"_id": 0, "total": 1, "created_at": 1},
+        {"_id": 0, "total": 1, "created_at": 1, "status": 1},
     ).to_list(1000)
     invoices_total = 0.0
     earnings = 0.0
@@ -2219,6 +2276,8 @@ async def delivery_summary(
         if local_dt.date() != target_date:
             continue
         returns_count += 1
+        if record.get("status") == "rejected":
+            continue
         try:
             returns_total += float(record.get("total", 0) or 0)
         except (TypeError, ValueError):
