@@ -1622,7 +1622,7 @@ def order_amounts(order):
         original_total = round(float(order.get("total", 0) or 0), 2)
     except (TypeError, ValueError):
         original_total = 0.0
-    if order.get("return_status") == "full" or order.get("status") == "returned":
+    if order.get("return_status") == "full" or order.get("status") in {"returned", "delivery_failed", "cancelled"}:
         return original_total, 0.0
     try:
         returned_total = float(order.get("returned_total", 0) or 0)
@@ -2210,7 +2210,7 @@ async def delivery_orders(user=Depends(require_delivery)):
         {"_id": 0},
     ).sort("created_at", -1).to_list(200)
     assigned = await db.orders.find(
-        {"agent_id": user["user_id"], "status": {"$in": ["out_for_delivery", "delivered", "returned"]}},
+        {"agent_id": user["user_id"], "status": {"$in": ["out_for_delivery", "delivered", "returned", "delivery_failed"]}},
         {"_id": 0},
     ).sort("created_at", -1).to_list(200)
     orders = available + assigned
