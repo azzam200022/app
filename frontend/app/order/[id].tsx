@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +21,8 @@ export default function OrderDetail() {
   const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const canPrint = user?.role === "manager";
 
   const load = async (force = false) => {
@@ -35,8 +37,18 @@ export default function OrderDetail() {
     return () => clearInterval(iv);
   }, [order?.status, id]);
 
-  const cancel = async () => {
-    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); }
+  const confirmCancel = async () => {
+    setCancelLoading(true);
+    try {
+      await api.cancelOrder(id!);
+      setCancelConfirmOpen(false);
+      show("تم إلغاء الطلب");
+      void load(true);
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setCancelLoading(false);
+    }
   };
 
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
@@ -167,9 +179,26 @@ export default function OrderDetail() {
         ) : null}
 
         {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
-          <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
+          <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={() => setCancelConfirmOpen(true)} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
       </ScrollView>
+      <Modal
+        visible={cancelConfirmOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!cancelLoading) setCancelConfirmOpen(false); }}
+      >
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <T weight="displayBold" size={type.lg}>تأكيد إلغاء الطلب</T>
+            <T color={colors.muted}>هل تريد إلغاء هذا الطلب؟ لن يمكن التراجع عن الإلغاء.</T>
+            <View style={styles.confirmActions}>
+              <Button title="العودة" variant="outline" onPress={() => setCancelConfirmOpen(false)} disabled={cancelLoading} style={{ flex: 1 }} />
+              <Button title="نعم، ألغِ الطلب" icon="x" onPress={confirmCancel} loading={cancelLoading} testID="od-confirm-cancel" style={{ flex: 1, backgroundColor: colors.error }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -205,4 +234,7 @@ const styles = StyleSheet.create({
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md },
   liveBadge: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.error, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff" },
+  confirmBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
+  confirmCard: { width: "100%", maxWidth: 420, backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, gap: spacing.md },
+  confirmActions: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.sm },
 });
