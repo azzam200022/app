@@ -117,7 +117,7 @@ export default function OrderDetail() {
           </View>
         )}
 
-        {/* Items */
+        {/* Items */}
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
           {order.items.map((it: any, idx: number) => (
