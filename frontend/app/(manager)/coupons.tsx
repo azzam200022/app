@@ -159,7 +159,7 @@ export default function ManagerCoupons() {
               <T color={colors.muted} size={type.xs}>
                 {item.starts_at ? `يبدأ ${dateOnly(item.starts_at)}` : "يبدأ فوراً"}{item.expires_at ? ` • ينتهي ${dateOnly(item.expires_at)}` : " • بلا انتهاء"}
               </T>
-              {(item.minimum_subtotal || 0) > 0 && <T color={colors.muted} size={type.xs}>حد أدنى للفاتورة: {formatPrice(item.minimum_subtotal)}</T>}
+              {(item.minimum_subtotal || 0) > 0 && <T color={colors.muted} size={type.xs}>حد أدنى للفاتورة: {formatPrice(item.minimum_subtotal || 0)}</T>}
               <View style={styles.actions}>
                 <Pressable testID={"edit-coupon-" + item.id} onPress={() => openForm(item)} style={styles.action}><Feather name="edit-2" size={16} color={colors.brandPrimary} /><T color={colors.brandPrimary}>تعديل</T></Pressable>
                 <Pressable testID={"delete-coupon-" + item.id} onPress={() => remove(item)} style={[styles.action, styles.delete]}><Feather name="trash-2" size={16} color={colors.error} /><T color={colors.error}>حذف</T></Pressable>
