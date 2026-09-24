@@ -2310,6 +2310,40 @@ class LocationIn(BaseModel):
     lng: float
 
 
+@api.post("/delivery/orders/{oid}/retry")
+async def delivery_retry(oid: str, user=Depends(require_delivery)):
+    order = await db.orders.find_one({"id": oid}, {"_id": 0, "id": 1, "agent_id": 1, "status": 1})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if order.get("agent_id") != user["user_id"] and user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if order.get("status") != "delivery_failed":
+        raise HTTPException(status_code=400, detail="يمكن إعادة جدولة الطلبات المتعذرة فقط")
+
+    rescheduled_at = now_utc().isoformat()
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "agent_id": order.get("agent_id"), "status": "delivery_failed"},
+        {
+            "$set": {
+                "status": "ready_for_delivery",
+                "agent_id": None,
+                "agent_name": None,
+                "agent_phone": None,
+                "claimed_at": None,
+                "rescheduled_at": rescheduled_at,
+                "rescheduled_by": user["user_id"],
+            },
+            "$inc": {"delivery_retry_count": 1},
+            "$push": {"timeline": {"status": "ready_for_delivery", "at": rescheduled_at, "reason": "delivery_retry"}},
+        },
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="تمت معالجة إعادة الجدولة؛ حدّث القائمة وحاول مرة أخرى")
+    retried = await db.orders.find_one({"id": oid}, {"_id": 0})
+    await notify_customer_status(oid, "ready_for_delivery")
+    return delivery_order_view(retried or updated, "available", expose_customer_details=False)
+
+
 @api.post("/delivery/orders/{oid}/location")
 async def delivery_location(oid: str, body: LocationIn, user=Depends(require_delivery)):
     d = await db.orders.find_one({"id": oid}, {"_id": 0, "agent_id": 1, "status": 1})

@@ -411,6 +411,14 @@ class TestLifecycle:
         assert failed_delivery["delivery_failed_at"]
         assert any(t["status"] == "delivery_failed" for t in final["timeline"])
 
+        retried = s.post(f"{API}/delivery/orders/{oid}/retry", headers=H(delivery_token), timeout=15)
+        assert retried.status_code == 200, retried.text
+        assert retried.json()["status"] == "ready_for_delivery"
+        assert retried.json()["delivery_state"] == "available"
+        assert retried.json()["location"] is None
+        second_retry = s.post(f"{API}/delivery/orders/{oid}/retry", headers=H(delivery_token), timeout=15)
+        assert second_retry.status_code == 403
+
 
     def test_partial_return_reduces_amount_and_full_return_closes_order(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]

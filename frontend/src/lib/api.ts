@@ -227,6 +227,7 @@ export const api = {
   deliveryReturns: () => req("/delivery/returns"),
   deliveryOrders: () => req("/delivery/orders"),
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
+  deliveryRetry: (id: string) => req("/delivery/orders/" + id + "/retry", { method: "POST" }),
   deliverySetStatus: (id: string, status: string, reason?: string, otp?: string) => req("/delivery/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status, ...(reason ? { reason } : {}), ...(otp ? { otp } : {}) }) }),
   deliverySetLocation: (id: string, lat: number, lng: number) => req("/delivery/orders/" + id + "/location", { method: "POST", body: JSON.stringify({ lat, lng }) }),
   deliveryCreateReturn: (id: string, body: any) => req("/delivery/orders/" + id + "/returns", { method: "POST", body: JSON.stringify(body) }),

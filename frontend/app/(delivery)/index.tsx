@@ -50,6 +50,7 @@ export default function DeliveryHome() {
   const [returnRecords, setReturnRecords] = useState<any[]>([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const [returnFor, setReturnFor] = useState<any>(null);
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [returnSubmitting, setReturnSubmitting] = useState(false);
@@ -129,6 +130,22 @@ export default function DeliveryHome() {
       await load();
     } finally {
       setClaiming(null);
+    }
+  };
+
+  const retryOrder = async (id: string) => {
+    if (retrying) return;
+    setRetrying(id);
+    try {
+      await api.deliveryRetry(id);
+      show("تمت إعادة جدولة الطلب وإعادته إلى الطلبات المتاحة");
+      setOrderTab("available");
+      await load();
+    } catch (e: any) {
+      show(e.message, "error");
+      await load();
+    } finally {
+      setRetrying(null);
     }
   };
 
@@ -293,6 +310,9 @@ export default function DeliveryHome() {
           <Feather name="rotate-ccw" size={16} color={colors.error} />
           <T size={type.sm} weight="bold" color={colors.error}>تسجيل مرتجع</T>
         </Pressable>
+      )}
+      {item.status === "delivery_failed" && (
+        <Button title={retrying === item.id ? "جارٍ إعادة الجدولة..." : "إعادة جدولة الطلب"} icon="rotate-ccw" onPress={() => retryOrder(item.id)} disabled={retrying === item.id} testID={"retry-" + item.id} style={{ marginTop: spacing.sm, minHeight: 46 }} />
       )}
     </View>
     );
