@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, type } from "@/src/lib/theme";
-import { T, EmptyState } from "@/src/components/ui";
+import { T, EmptyState, Button } from "@/src/components/ui";
 import { ProductCard } from "@/src/components/ProductCard";
 import { api } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
@@ -17,8 +17,22 @@ export default function Offers() {
   const { show } = useToast();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => { (async () => { try { setItems(await api.products({ offers: true })); } catch {} finally { setLoading(false); } })(); }, []);
+  const loadOffers = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setItems(await api.products({ offers: true }));
+    } catch (e: any) {
+      setItems([]);
+      setError(e?.message || "تعذر تحميل العروض");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadOffers(); }, [loadOffers]);
   const onAdd = async (p: any) => { try { await add(p.id, 1); show("تمت الإضافة إلى السلة"); } catch (e: any) { show(e.message, "error"); } };
 
   return (
@@ -28,7 +42,12 @@ export default function Offers() {
         <T weight="displayBold" size={type.xl}>العروض والخصومات</T>
         <View style={{ width: 40 }} />
       </View>
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : items.length === 0 ? (
+      {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : error ? (
+        <View style={styles.center}>
+          <EmptyState icon="alert-circle" title="تعذر تحميل العروض" subtitle={error} />
+          <Button title="إعادة المحاولة" icon="refresh-cw" onPress={loadOffers} testID="offers-retry" style={{ marginTop: spacing.md }} />
+        </View>
+      ) : items.length === 0 ? (
         <View style={styles.center}><EmptyState icon="tag" title="لا توجد عروض حالياً" /></View>
       ) : (
         <FlatList data={items} keyExtractor={(i) => i.id} numColumns={2}
