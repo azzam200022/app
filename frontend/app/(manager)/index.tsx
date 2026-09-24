@@ -213,7 +213,7 @@ export default function ManagerDashboard() {
               <View style={styles.bars}>
                 {STATUS_ROWS.map((row) => {
                   const height = Math.max(12, Math.round(((counts[row.key] || 0) / maxStatusCount) * 100));
-                  return <View key={row.key} style={styles.barTrack}><View style={[styles.bar, { height: height + "%", backgroundColor: row.color }]} /></View>;
+                  return <View key={row.key} style={styles.barTrack}><View style={[styles.bar, { height: (height + "%") as any, backgroundColor: row.color }]} /></View>;
                 })}
               </View>
             </View>
