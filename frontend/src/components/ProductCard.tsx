@@ -186,6 +186,6 @@ const styles = StyleSheet.create({
   skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg },
   skeletonPrice: { width: "34%" },
   skeletonAction: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
-  outOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
+  outOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });
