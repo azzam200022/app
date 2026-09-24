@@ -23,23 +23,37 @@ export default function Search() {
   const timer = useRef<any>(null);
 
   useEffect(() => {
+    let active = true;
     if (timer.current) clearTimeout(timer.current);
     setError("");
-    if (!q.trim()) { setResults([]); setSearched(false); return; }
+    const query = q.trim();
+    if (!query) {
+      setResults([]);
+      setSearched(false);
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    setLoading(true);
     timer.current = setTimeout(async () => {
-      setLoading(true); setSearched(true);
+      setSearched(true);
       try {
-        setResults(await api.products({ search: q.trim() }));
+        const nextResults = await api.products({ search: query });
+        if (active) setResults(nextResults);
       } catch (e: any) {
+        if (!active) return;
         setResults([]);
         const message = e?.message || "تعذر تحميل نتائج البحث";
         setError(message);
         show(message, "error");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }, 350);
-    return () => timer.current && clearTimeout(timer.current);
+    return () => {
+      active = false;
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [q, show]);
 
   const onAdd = async (p: any) => { try { await add(p.id, 1); show("تمت الإضافة إلى السلة"); } catch (e: any) { show(e.message, "error"); } };
@@ -51,7 +65,7 @@ export default function Search() {
         <View style={styles.searchBar}>
           <Feather name="search" size={18} color={colors.muted} />
           <TextInput testID="search-input" style={styles.input} placeholder="ابحث عن منتج..." placeholderTextColor={colors.muted} value={q} onChangeText={setQ} autoFocus textAlign="right" />
-          {q ? <Pressable onPress={() => setQ("")} hitSlop={8}><Feather name="x" size={18} color={colors.muted} /></Pressable> : null}
+          {q ? <Pressable testID="search-clear" accessibilityRole="button" accessibilityLabel="مسح البحث" onPress={() => setQ("")} hitSlop={8}><Feather name="x" size={18} color={colors.muted} /></Pressable> : null}
         </View>
       </View>
 
