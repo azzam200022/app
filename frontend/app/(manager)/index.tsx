@@ -234,7 +234,7 @@ export default function ManagerDashboard() {
             </Pressable>
           ))}
 
-          <View style={styles.tip}><Feather name="bulb" size={17} color={colors.gold} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>تأكد من توفر المندوبين قبل إضافة الطلبات الجديدة للتوصيل.</T></View>
+          <View style={styles.tip}><Feather name="info" size={17} color={colors.gold} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>تأكد من توفر المندوبين قبل إضافة الطلبات الجديدة للتوصيل.</T></View>
         </ScrollView>
       )}
     </View>
