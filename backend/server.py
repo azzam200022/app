@@ -2012,6 +2012,8 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     }
     if is_full:
         order_update.update({"status": "returned", "returned_at": created_at})
+        if should_restore_stock:
+            order_update["stock_released"] = True
     updated_order = await db.orders.find_one_and_update(
         {"id": oid, "agent_id": user["user_id"], "status": "out_for_delivery"},
         {
@@ -2019,8 +2021,6 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
             "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
         },
     )
-    if is_full and should_restore_stock:
-        order_update["stock_released"] = True
     if not updated_order:
         raise HTTPException(status_code=409, detail="لا يمكن تسجيل المرتجع بعد تأكيد التسليم")
     if should_restore_stock:
