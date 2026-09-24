@@ -77,6 +77,14 @@ export default function DeliveryHome() {
   }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Refresh available orders while the courier screen remains open.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try { setOrders(await api.deliveryOrders()); } catch {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const openProof = (order: any) => { setProofFor(order); setProofOtp(""); };
 
   const submitProof = async () => {
@@ -276,7 +284,7 @@ export default function DeliveryHome() {
           {item.phone ? <Pressable style={styles.info} onPress={() => Linking.openURL(`tel:${item.phone}`)}><Feather name="phone" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>{item.phone}</T></Pressable> : null}
           <View style={styles.info}><Feather name="map-pin" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>{item.address}</T></View>
         </>
-      )
+      )}
 
       {/* Items thumbnails */}
       <View style={styles.thumbs}>
