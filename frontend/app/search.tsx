@@ -21,25 +21,41 @@ export default function Search() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const timer = useRef<any>(null);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
+    const requestId = ++requestVersion.current;
     if (timer.current) clearTimeout(timer.current);
     setError("");
-    if (!q.trim()) { setResults([]); setSearched(false); return; }
+    if (!q.trim()) {
+      setResults([]);
+      setSearched(false);
+      setLoading(false);
+      return () => {
+        if (requestVersion.current === requestId) requestVersion.current += 1;
+      };
+    }
     timer.current = setTimeout(async () => {
-      setLoading(true); setSearched(true);
+      setLoading(true);
+      setSearched(true);
       try {
-        setResults(await api.products({ search: q.trim() }));
+        const nextResults = await api.products({ search: q.trim() });
+        if (requestVersion.current !== requestId) return;
+        setResults(nextResults);
       } catch (e: any) {
+        if (requestVersion.current !== requestId) return;
         setResults([]);
         const message = e?.message || "تعذر تحميل نتائج البحث";
         setError(message);
         show(message, "error");
       } finally {
-        setLoading(false);
+        if (requestVersion.current === requestId) setLoading(false);
       }
     }, 350);
-    return () => timer.current && clearTimeout(timer.current);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (requestVersion.current === requestId) requestVersion.current += 1;
+    };
   }, [q, show]);
 
   const onAdd = async (p: any) => { try { await add(p.id, 1); show("تمت الإضافة إلى السلة"); } catch (e: any) { show(e.message, "error"); } };
