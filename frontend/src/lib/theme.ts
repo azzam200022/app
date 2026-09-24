@@ -38,6 +38,7 @@ export const font = {
 };
 
 export const type = {
+  xs: 10,
   sm: 12,
   base: 14,
   lg: 16,
