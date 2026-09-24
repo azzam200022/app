@@ -1589,6 +1589,36 @@ async def release_order_stock(items):
         )
 
 
+async def remaining_stock_items(order):
+    """Return only units that have not already been restored by a partial return."""
+    items = list(order.get("items") or [])
+    if not items or not order.get("stock_reserved") or order.get("stock_released"):
+        return []
+    returned_docs = await db.returns.find({"order_id": order.get("id")}, {"_id": 0, "items": 1}).to_list(200)
+    returned_by_product = {}
+    for returned in returned_docs:
+        for item in returned.get("items", []):
+            product_id = str(item.get("product_id"))
+            returned_by_product[product_id] = returned_by_product.get(product_id, 0) + int(item.get("quantity", 0) or 0)
+    remaining = []
+    for item in items:
+        product_id = str(item.get("product_id"))
+        quantity = max(int(item.get("quantity", 0) or 0) - returned_by_product.get(product_id, 0), 0)
+        if quantity:
+            remaining.append({"product_id": product_id, "quantity": quantity})
+    return remaining
+
+
+async def settle_failed_delivery_stock(order):
+    if not order.get("stock_reserved") or order.get("stock_released"):
+        return
+    await release_order_stock(await remaining_stock_items(order))
+    await db.orders.update_one(
+        {"id": order.get("id"), "status": "delivery_failed", "stock_release_pending": True, "stock_released": {"$ne": True}},
+        {"$set": {"stock_released": True, "stock_release_pending": False}},
+    )
+
+
 STATUS_FLOW = ["pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered"]
 STATUS_LABEL = {
     "pending": "قيد المراجعة",
@@ -1970,7 +2000,9 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "reason": body.reason or "",
         "status": "accepted",
         "created_at": created_at,
+        "stock_released": False,
     }
+    should_restore_stock = bool(order.get("stock_reserved") and not order.get("stock_released"))
     # Claim the order while it is still out for delivery. The Firestore
     # transaction makes the status check atomic with the return bookkeeping,
     # so a return cannot race with delivery confirmation.
@@ -1987,8 +2019,13 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
             "$push": {"timeline": {"status": "returned", "at": created_at, "return_id": return_id}},
         },
     )
+    if is_full and should_restore_stock:
+        order_update["stock_released"] = True
     if not updated_order:
         raise HTTPException(status_code=409, detail="لا يمكن تسجيل المرتجع بعد تأكيد التسليم")
+    if should_restore_stock:
+        await release_order_stock(return_items)
+    doc["stock_released"] = True
     await db.returns.insert_one(doc)
     try:
         await send_push(await manager_ids(), {"title": "مرتجع جديد ↩️", "message": f"تم تسجيل مرتجع للطلب {oid} بواسطة {doc['agent_name']}", "action_url": f"/returns/{return_id}"})
@@ -2284,6 +2321,8 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
     current_status = d.get("status")
     if body.status == current_status:
+        if body.status == "delivery_failed" and d.get("stock_release_pending") and not d.get("stock_released"):
+            await settle_failed_delivery_stock(d)
         return {"ok": True}
     if body.status not in ORDER_STATUS_TRANSITIONS.get(current_status, set()):
         raise HTTPException(status_code=400, detail=f"لا يمكن نقل الطلب من {STATUS_LABEL.get(current_status, current_status)} إلى {STATUS_LABEL[body.status]}")
@@ -2295,12 +2334,16 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
             if len(entered_otp) != 6 or not entered_otp.isdigit() or not hmac.compare_digest(entered_otp, expected_otp):
                 raise HTTPException(status_code=400, detail="رمز التسليم غير صحيح")
         status_update["delivered_at"] = now_utc().isoformat()
+    if body.status == "delivery_failed" and d.get("stock_reserved") and not d.get("stock_released"):
+        status_update["stock_release_pending"] = True
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": current_status},
         {"$set": status_update, "$push": {"timeline": {"status": body.status, "at": now_utc().isoformat()} }},
     )
     if not updated:
         raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حاول تحديث الصفحة")
+    if body.status == "delivery_failed" and status_update.get("stock_release_pending"):
+        await settle_failed_delivery_stock(updated)
     await notify_customer_status(oid, body.status)
     return {"ok": True}
 

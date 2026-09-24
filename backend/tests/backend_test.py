@@ -401,9 +401,14 @@ class TestLifecycle:
                                 json={"status": "delivery_failed"}, timeout=15)
         assert missing_reason.status_code == 400
 
+        product_id = placed_order["order"]["items"][0]["product_id"]
+        quantity = int(placed_order["order"]["items"][0]["quantity"])
+        stock_before_failure = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
         failed = s.post(f"{API}/delivery/orders/{oid}/status", headers=H(delivery_token),
                         json={"status": "delivery_failed", "reason": "customer_unavailable"}, timeout=15)
         assert failed.status_code == 200, failed.text
+        stock_after_failure = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
+        assert stock_after_failure == stock_before_failure + quantity
 
         final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
         assert final["status"] == "delivery_failed"
@@ -420,6 +425,8 @@ class TestLifecycle:
         assert retried.json()["status"] == "ready_for_delivery"
         assert retried.json()["delivery_state"] == "available"
         assert retried.json()["location"] is None
+        stock_after_retry = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
+        assert stock_after_retry == stock_after_failure
         second_retry = s.post(f"{API}/delivery/orders/{oid}/retry", headers=H(delivery_token), timeout=15)
         assert second_retry.status_code == 403
 
@@ -439,6 +446,8 @@ class TestLifecycle:
         assigned = s.post(f"{API}/admin/orders/{oid}/assign", headers=H(manager_token), json={"agent_id": agent_id}, timeout=15)
         assert assigned.status_code == 200, assigned.text
 
+        product_id = first_item["product_id"]
+        stock_before_partial = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
         partial = s.post(
             f"{API}/delivery/orders/{oid}/returns",
             headers=H(delivery_token),
@@ -448,6 +457,8 @@ class TestLifecycle:
         assert partial.status_code == 200, partial.text
         partial_doc = partial.json()
         assert partial_doc["return_type"] == "partial"
+        stock_after_partial = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
+        assert stock_after_partial == stock_before_partial + 1
         expected_due = round(float(order["total"]) - float(partial_doc["total"]), 2)
 
         customer_order = s.get(f"{API}/orders/{oid}", headers=H(placed_order["ctok"]), timeout=15).json()
