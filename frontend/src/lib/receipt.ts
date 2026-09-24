@@ -37,6 +37,8 @@ function escapeHtml(value: unknown): string {
 
 export function buildReceiptHTML(order: any, logoSrc = ""): string {
   const date = new Date(order.created_at).toLocaleString("ar-IQ");
+  const total = Number(order.total || 0);
+  const amountDue = Number(order.amount_due ?? total);
   const rows = order.items
     .map(
       (it: any, i: number) => `
@@ -75,7 +77,7 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
     <div class="head">
       ${logoSrc ? `<img src="${logoSrc}" style="width:150px;height:auto;margin:0 auto 6px;display:block;" />` : ""}
       <h1 class="brand">بن سليم سوبرماركت</h1>
-      <p class="sub">إيصال طلب — الدفع عند الاستلام</p>
+      <p class="sub">فاتورة الطلب — الدفع عند الاستلام</p>
     </div>
     <div class="meta"><span>رقم الطلب: <b>#${order.id.replace("ORD", "")}</b></span><span class="status">${STATUS_LABEL[order.status] || order.status}</span></div>
     <div class="meta"><span>التاريخ: <b>${date}</b></span></div>
@@ -85,14 +87,13 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
       <div><b>العنوان:</b> ${escapeHtml(order.address)}</div>
       ${order.area ? `<div><b>المنطقة:</b> ${escapeHtml(order.area)}</div>` : ""}
       ${order.notes ? `<div><b>ملاحظات:</b> ${escapeHtml(order.notes)}</div>` : ""}
-      ${order.agent_name ? `<div><b>المندوب:</b> ${escapeHtml(order.agent_name)}</div>` : ""}
     </div>
     <table>
       <thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="total"><span>الإجمالي الكلي</span><span class="t">${money(order.total)}</span></div>
-    <div class="cod">💵 المبلغ المطلوب تحصيله: ${money(order.total)}</div>
+    <div class="total"><span>مجموع المبلغ</span><span class="t">${money(total)}</span></div>
+    ${amountDue !== total ? `<div class="cod">💵 المبلغ المطلوب تحصيله: ${money(amountDue)}</div>` : ""}
     <div class="foot">شكراً لتسوقك من بن سليم سوبرماركت 🌿<br/>${order.id}</div>
   </body></html>`;
 }
