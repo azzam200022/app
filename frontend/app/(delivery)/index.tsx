@@ -51,6 +51,8 @@ export default function DeliveryHome() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [locationWarning, setLocationWarning] = useState<string | null>(null);
+  const [locationRetryKey, setLocationRetryKey] = useState(0);
   const [returnFor, setReturnFor] = useState<any>(null);
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [returnSubmitting, setReturnSubmitting] = useState(false);
@@ -210,26 +212,51 @@ export default function DeliveryHome() {
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
   const list = orderTab === "available" ? available : orderTab === "active" ? active : done;
 
-  // Broadcast live location for active deliveries
+  // Broadcast live location for active deliveries.
   const activeIds = active.map((o) => o.id).join(",");
   useEffect(() => {
-    if (!activeIds) return;
     let cancelled = false;
+    if (!activeIds) {
+      setLocationWarning(null);
+      return () => { cancelled = true; };
+    }
+
     const send = async () => {
       try {
+        if (!(await Location.hasServicesEnabledAsync())) {
+          setLocationWarning("فعّل خدمة الموقع من إعدادات الهاتف لمتابعة التوصيل المباشر");
+          return;
+        }
         let perm = await Location.getForegroundPermissionsAsync();
-        if (!perm.granted) { perm = await Location.requestForegroundPermissionsAsync(); if (!perm.granted) return; }
+        if (!perm.granted) {
+          perm = perm.canAskAgain ? await Location.requestForegroundPermissionsAsync() : perm;
+          if (!perm.granted) {
+            setLocationWarning(perm.canAskAgain ? "اسمح للتطبيق باستخدام موقعك لتفعيل التتبع المباشر" : "افتح إعدادات الهاتف واسمح للتطبيق باستخدام الموقع");
+            return;
+          }
+        }
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        let sent = 0;
+        let failed = 0;
         for (const id of activeIds.split(",")) {
           if (cancelled) break;
-          try { await api.deliverySetLocation(id, pos.coords.latitude, pos.coords.longitude); } catch {}
+          try {
+            await api.deliverySetLocation(id, pos.coords.latitude, pos.coords.longitude);
+            sent += 1;
+          } catch {
+            failed += 1;
+          }
         }
-      } catch {}
+        if (failed > 0 && sent === 0) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
+        else if (sent > 0) setLocationWarning(null);
+      } catch {
+        if (!cancelled) setLocationWarning("تعذر قراءة موقعك الحالي؛ تحقق من تفعيل GPS وحاول مرة أخرى");
+      }
     };
     send();
     const iv = setInterval(send, 20000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [activeIds]);
+  }, [activeIds, locationRetryKey]);
 
   const doLogout = async () => { setConfirmLogout(false); await logout(); router.replace("/login"); };
 
@@ -351,6 +378,18 @@ export default function DeliveryHome() {
         </View>
         <T color="rgba(255,255,255,0.78)" size={type.sm} style={{ marginTop: spacing.md }}>{section === "summary" ? "ملخص اليوم" : section === "orders" ? "إدارة الطلبات" : section === "returns" ? "سجل المرتجعات" : "حساب المندوب"}</T>
       </View>
+
+      {locationWarning && (
+        <View style={styles.locationWarning} testID="location-warning">
+          <Feather name="map-pin" size={18} color={colors.error} />
+          <View style={{ flex: 1 }}>
+            <T size={type.sm} weight="semi" color={colors.onSurfaceSecondary}>{locationWarning}</T>
+            <Pressable onPress={() => setLocationRetryKey((value) => value + 1)} testID="retry-location" style={{ marginTop: spacing.xs }}>
+              <T size={type.sm} weight="bold" color={colors.brandPrimary}>إعادة المحاولة</T>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {section === "summary" && (
         <ScrollView style={styles.sectionScroll} contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }} showsVerticalScrollIndicator={false}>
@@ -529,6 +568,7 @@ export default function DeliveryHome() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  locationWarning: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.md, padding: spacing.md, backgroundColor: "#fff4f2", borderRadius: radius.md, borderWidth: 1, borderColor: "#f4c6c1" },
   headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
   summaryGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },

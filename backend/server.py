@@ -2306,8 +2306,8 @@ async def delivery_update(oid: str, body: StatusUpdateIn, user=Depends(require_d
 
 
 class LocationIn(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
 
 
 @api.post("/delivery/orders/{oid}/retry")

@@ -381,6 +381,10 @@ class TestLifecycle:
                                 json={"lat": 33.3152, "lng": 44.3661}, timeout=15)
         assert stale_location.status_code == 409
 
+        invalid_location = s.post(f"{API}/delivery/orders/{oid}/location", headers=H(delivery_token),
+                                  json={"lat": 91, "lng": 181}, timeout=15)
+        assert invalid_location.status_code == 422
+
 
     def test_delivery_failure_requires_reason_and_records_reason(self, s, manager_token, delivery_token, placed_order):
         oid = placed_order["order"]["id"]
