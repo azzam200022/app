@@ -1105,6 +1105,29 @@ async def list_products(
     return [clean_product(d, fav) for d in docs]
 
 
+@api.get("/products/barcode/{barcode}")
+async def product_by_barcode(barcode: str, authorization: Optional[str] = Header(None)):
+    normalized_barcode = barcode.strip()
+    if not normalized_barcode or len(normalized_barcode) > 64:
+        raise HTTPException(status_code=400, detail="رقم الباركود غير صالح")
+    product_task = db.products.find_one(
+        {"barcode": normalized_barcode, "deleted_at": None, "is_published": True},
+        PRODUCT_LIST_PROJECTION,
+    )
+    user_task = get_user_by_token(authorization)
+    product, user = await asyncio.gather(product_task, user_task)
+    if not product:
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    favorites = set()
+    if user:
+        favs = await db.favorites.find(
+            {"user_id": user["user_id"]},
+            {"_id": 0, "product_id": 1},
+        ).to_list(1000)
+        favorites = {favorite["product_id"] for favorite in favs}
+    return clean_product(product, favorites)
+
+
 @api.get("/products/bestsellers")
 async def bestsellers(authorization: Optional[str] = Header(None)):
     pipeline = [
@@ -1146,7 +1169,10 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
             fav = {pid}
         alert = await db.product_availability_alerts.find_one({"user_id": user["user_id"], "product_id": pid})
         availability_alerted = bool(alert)
-    return clean_product(d, fav, availability_alerted)
+    const product_view = clean_product(d, fav, availability_alerted)
+    if not user or user.get("role") != "manager":
+        product_view.pop("barcode", None)
+    return product_view
 
 
 @api.post("/products/{pid}/availability-alert", status_code=201)
