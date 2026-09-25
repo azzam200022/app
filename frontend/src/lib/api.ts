@@ -85,15 +85,16 @@ export function getCachedOrders() {
   return getCachedValue<any[]>("orders");
 }
 
-function productsCacheKey(params: { category?: string; search?: string; offers?: boolean } = {}) {
+function productsCacheKey(params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}) {
   const q = new URLSearchParams();
   if (params.category) q.set("category", params.category);
+  if (params.branch_id) q.set("branch_id", params.branch_id);
   if (params.search) q.set("search", params.search);
   if (params.offers) q.set("offers", "true");
   return "products:" + q.toString();
 }
 
-export function getCachedProducts(params: { category?: string; search?: string; offers?: boolean } = {}) {
+export function getCachedProducts(params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}) {
   return getCachedValue<any[]>(productsCacheKey(params));
 }
 
@@ -154,7 +155,7 @@ export const api = {
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
-  products: (params: { category?: string; search?: string; offers?: boolean } = {}, force = false) => {
+  products: (params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}, force = false) => {
     const key = productsCacheKey(params);
     const suffix = key.slice("products:".length);
     return cachedRequest(key, async () => {
@@ -174,6 +175,12 @@ export const api = {
   },
   bestsellers: () => req("/products/bestsellers"),
   categories: (force = false) => cachedRequest("categories", () => req("/categories"), CACHE_TTLS.categories, force),
+  categoryBranches: (category: string, force = false) => cachedRequest(
+    "category-branches:" + category,
+    () => req("/categories/" + encodeURIComponent(category) + "/branches"),
+    CACHE_TTLS.categories,
+    force,
+  ),
   createProduct: (body: any) => req("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: any) => req("/products/" + id, { method: "PUT", body: JSON.stringify(body) }),
   subscribeAvailabilityAlert: (id: string) => req("/products/" + id + "/availability-alert", { method: "POST" }),
@@ -223,6 +230,10 @@ export const api = {
   createBanner: (body: any) => req("/admin/banners", { method: "POST", body: JSON.stringify(body) }),
   updateBanner: (id: string, body: any) => req("/admin/banners/" + id, { method: "PUT", body: JSON.stringify(body) }),
   deleteBanner: (id: string) => req("/admin/banners/" + id, { method: "DELETE" }),
+  adminBranches: (category?: string) => req("/admin/category-branches" + (category ? "?category=" + encodeURIComponent(category) : "")),
+  createBranch: (body: any) => req("/admin/category-branches", { method: "POST", body: JSON.stringify(body) }),
+  updateBranch: (id: string, body: any) => req("/admin/category-branches/" + id, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBranch: (id: string) => req("/admin/category-branches/" + id, { method: "DELETE" }),
   deliverySummary: (date: string, tzOffsetMinutes: number) => req("/delivery/summary?date=" + encodeURIComponent(date) + "&tz_offset_minutes=" + String(tzOffsetMinutes)),
   deliveryReturns: () => req("/delivery/returns"),
   deliveryOrders: () => req("/delivery/orders"),
