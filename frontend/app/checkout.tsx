@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, Linking, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -12,6 +12,20 @@ import { staticMapUrl } from "@/src/lib/maps";
 import { useCart } from "@/src/context/CartContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
+
+function mapTapToCoordinates(center: { lat: number; lng: number }, x: number, y: number, width: number, height: number) {
+  const worldSize = 256 * 2 ** 16;
+  const sinLat = Math.sin((center.lat * Math.PI) / 180);
+  const centerX = ((center.lng + 180) / 360) * worldSize;
+  const centerY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * worldSize;
+  const pixelX = centerX + (x / width - 0.5) * 600;
+  const pixelY = centerY + (y / height - 0.5) * 260;
+  const wrappedX = ((pixelX % worldSize) + worldSize) % worldSize;
+  const clampedY = Math.max(0, Math.min(worldSize, pixelY));
+  const lng = (wrappedX / worldSize) * 360 - 180;
+  const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * clampedY) / worldSize)) * 180) / Math.PI;
+  return { lat, lng };
+}
 
 export default function Checkout() {
   const insets = useSafeAreaInsets();
@@ -29,7 +43,10 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const orderRequestId = useRef("order-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationSource, setLocationSource] = useState<"gps" | "address" | null>(null);
   const [locating, setLocating] = useState(false);
+  const [addressLocating, setAddressLocating] = useState(false);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
@@ -37,9 +54,31 @@ export default function Checkout() {
   const displayedTotal = appliedCoupon?.total ?? (subtotal + deliveryFee);
   const deliveryLabel = quoteLoading
     ? "جارٍ الحساب..."
-    : deliveryQuote
-      ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
-      : "يُحسب بعد تحديد الموقع";
+    : deliveryQuote?.area_id === "default_delivery"
+      ? "خارج نطاق التوصيل"
+      : deliveryQuote
+        ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
+        : "يُحسب بعد تحديد الموقع";
+
+  const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual") => {
+    setCoords(nextCoords);
+    setLocationSource(source);
+    setDeliveryQuote(null);
+    if (appliedCoupon) setAppliedCoupon(null);
+    setQuoteLoading(true);
+    try {
+      const quote = await api.deliveryQuote(nextCoords.lat, nextCoords.lng);
+      setDeliveryQuote(quote);
+      if (quote.area_id === "default_delivery") {
+        show("موقعك خارج نطاق التوصيل الحالي. جرّب عنواناً آخر.", "error");
+      } else {
+        show(source === "address" ? "تم تحديد الموقع من العنوان؛ راجع الخريطة واضغط لتعديل الدبوس" : source === "manual" ? "تم تحديث موقع التسليم وحساب الرسوم ✓" : "تم تحديد الموقع وحساب رسوم التوصيل ✓");
+      }
+    } catch (e: any) {
+      setDeliveryQuote(null);
+      show(e.message, "error");
+    } finally { setQuoteLoading(false); }
+  };
 
   const detectLocation = async () => {
     setLocating(true);
@@ -47,30 +86,38 @@ export default function Checkout() {
       let perm = await Location.getForegroundPermissionsAsync();
       if (!perm.granted) {
         if (!perm.canAskAgain) {
-          setLocating(false);
-          show("فعّل صلاحية الموقع من الإعدادات", "error");
-          Linking.openSettings();
+          show("تعذر طلب صلاحية GPS مجدداً. يمكنك تحديد الموقع من العنوان المكتوب أدناه.", "error");
           return;
         }
         perm = await Location.requestForegroundPermissionsAsync();
       }
-      if (!perm.granted) { setLocating(false); return show("نحتاج صلاحية الموقع لتحديده على الخريطة", "error"); }
+      if (!perm.granted) return show("يمكنك استخدام العنوان المكتوب لتحديد الموقع دون تفعيل GPS.", "error");
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const nextCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      setCoords(nextCoords);
-      if (appliedCoupon) setAppliedCoupon(null);
-      setQuoteLoading(true);
-      try {
-        const quote = await api.deliveryQuote(nextCoords.lat, nextCoords.lng);
-        setDeliveryQuote(quote);
-        show(quote.area_name ? "تم تحديد المنطقة ورسوم التوصيل ✓" : "تم تحديد موقعك، لا توجد مناطق مسعّرة حالياً");
-      } catch (e: any) {
-        setDeliveryQuote(null);
-        show(e.message, "error");
-      } finally { setQuoteLoading(false); }
+      await setLocationAndQuote({ lat: pos.coords.latitude, lng: pos.coords.longitude }, "gps");
     } catch {
       show("تعذّر تحديد الموقع، حاول مجدداً", "error");
     } finally { setLocating(false); }
+  };
+
+  const adjustMapPin = async (event: any) => {
+    if (!coords || !mapSize.width || !mapSize.height || quoteLoading) return;
+    const { locationX, locationY } = event.nativeEvent;
+    const nextCoords = mapTapToCoordinates(coords, locationX, locationY, mapSize.width, mapSize.height);
+    await setLocationAndQuote(nextCoords, "manual");
+  };
+
+  const locateFromAddress = async () => {
+    const query = address.trim();
+    if (!query) return show("اكتب العنوان بالتفصيل أولاً، ثم حدده من العنوان.", "error");
+    setAddressLocating(true);
+    try {
+      const matches = await Location.geocodeAsync(query);
+      const match = matches?.[0];
+      if (!match) return show("لم نعثر على موقع لهذا العنوان. أضف اسم الحي والمدينة أو استخدم GPS.", "error");
+      await setLocationAndQuote({ lat: match.latitude, lng: match.longitude }, "address");
+    } catch {
+      show("تعذر تحديد العنوان على الخريطة. أضف تفاصيل أكثر أو استخدم GPS.", "error");
+    } finally { setAddressLocating(false); }
   };
 
   const applyCoupon = async () => {
@@ -90,8 +137,10 @@ export default function Checkout() {
 
   const submit = async () => {
     if (!name || !phone || !address) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
-    if (!coords) return show("حدد موقع التوصيل على الخريطة أولاً", "error");
+    if (!coords) return show("حدد موقع التوصيل عبر GPS أو من العنوان أولاً", "error");
     if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
+    if (!deliveryQuote) return show("تعذر التحقق من منطقة التوصيل. أعد تحديد الموقع وحاول مجدداً.", "error");
+    if (deliveryQuote.area_id === "default_delivery") return show("عنوانك خارج نطاق التوصيل الحالي. غيّر موقع التسليم.", "error");
     setLoading(true);
     try {
       const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
@@ -113,20 +162,23 @@ export default function Checkout() {
           <T weight="displayBold" size={type.lg} style={{ marginBottom: spacing.md }}>معلومات التوصيل</T>
           <Input icon="user" placeholder="الاسم الكامل" value={name} onChangeText={setName} testID="co-name" />
           <Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="co-phone" />
-          <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={setAddress} multiline testID="co-address" />
+          <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
           <Input icon="edit-3" placeholder="ملاحظات (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
 
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>موقع التوصيل على الخريطة</T>
           {coords ? (
             <View style={styles.mapCard}>
-              <Image source={{ uri: staticMapUrl(coords.lat, coords.lng) }} style={styles.mapImg} contentFit="cover" />
+              <Pressable testID="co-map-pin" accessibilityRole="button" accessibilityLabel="اضغط على الخريطة لتعديل موقع التسليم" onPress={adjustMapPin} onLayout={(event) => setMapSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} disabled={quoteLoading} style={styles.mapTapArea}>
+                <Image source={{ uri: staticMapUrl(coords.lat, coords.lng, 600, 260, 16) }} style={styles.mapImg} contentFit="fill" />
+              </Pressable>
+              <T color={colors.muted} size={type.xs} style={styles.mapHint}>اضغط على المكان المطلوب في الخريطة لنقل دبوس التوصيل الأحمر</T>
               <View style={styles.mapFoot}>
                 <View style={styles.mapFootRow}>
                   <Feather name="map-pin" size={16} color={colors.success} />
-                  <T weight="semi" color={colors.success} size={type.sm}>تم تحديد موقعك بدقة</T>
+                  <T weight="semi" color={colors.success} size={type.sm}>{locationSource === "address" ? "موقع تقريبي من العنوان — راجعه" : locationSource === "manual" ? "تم تعديل الموقع يدوياً" : "الموقع المحدد عبر GPS"}</T>
                 </View>
                 <Pressable testID="relocate" onPress={detectLocation} hitSlop={8}>
-                  <T weight="bold" color={colors.brandPrimary} size={type.sm}>تحديث الموقع</T>
+                  <T weight="bold" color={colors.brandPrimary} size={type.sm}>استخدام GPS</T>
                 </Pressable>
               </View>
             </View>
@@ -144,6 +196,14 @@ export default function Checkout() {
               )}
             </Pressable>
           )}
+          <Pressable testID="co-address-location" onPress={locateFromAddress} disabled={addressLocating || quoteLoading} style={styles.addressLocateBtn}>
+            {addressLocating ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="map-pin" size={18} color={colors.brandPrimary} />}
+            <View style={{ flex: 1 }}>
+              <T weight="bold" color={colors.brandPrimary}>تحديد الموقع من العنوان</T>
+              <T color={colors.muted} size={type.sm}>بديل لـGPS؛ اكتب الحي والمدينة وراجع الخريطة</T>
+            </View>
+          </Pressable>
+          {deliveryQuote?.area_id === "default_delivery" ? <T color={colors.error} size={type.sm} style={{ marginTop: spacing.xs }}>هذه المنطقة خارج نطاق التوصيل؛ لن يُرسل الطلب قبل اختيار موقع مدعوم.</T> : null}
 
           <View style={styles.codBox}>
             <View style={styles.codIcon}><Feather name="dollar-sign" size={20} color={colors.brandPrimary} /></View>
@@ -172,7 +232,7 @@ export default function Checkout() {
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
             {!deliveryQuote && !quoteLoading ? <T color={colors.muted} size={type.xs} style={styles.summaryHint}>حدد موقعك لمعرفة رسوم التوصيل بدقة</T> : null}
-            {deliveryQuote?.area_name ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
+            {deliveryQuote?.area_name && deliveryQuote.area_id !== "default_delivery" ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>{appliedCoupon.applies_to === "delivery" ? "خصم التوصيل" : "الخصم"}</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
             <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(displayedTotal)}</T></View>
@@ -204,8 +264,11 @@ const styles = StyleSheet.create({
   codBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.sm },
   locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1.5, borderColor: colors.brandPrimary, borderStyle: "dashed", borderRadius: radius.md, padding: spacing.lg, minHeight: 64 },
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  addressLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
   mapCard: { borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
-  mapImg: { width: "100%", height: 160, backgroundColor: colors.surfaceSecondary },
+  mapTapArea: { position: "relative" },
+  mapImg: { width: "100%", aspectRatio: 600 / 260, backgroundColor: colors.surfaceSecondary },
+  mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md },
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   codIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
