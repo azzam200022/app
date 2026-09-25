@@ -80,6 +80,7 @@ export default function OrderDetail() {
   const failed = order.status === "delivery_failed";
   const returned = order.status === "returned";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
+  const STATUS_ICON: Record<string, any> = { pending: "clock", confirmed: "check-circle", preparing: "package", ready_for_delivery: "check", out_for_delivery: "truck", delivered: "home" };
   const orderItems = Array.isArray(order.items) ? order.items : [];
   const orderNumber = String(order.id ?? id ?? "").replace(/^ORD/, "");
 
@@ -130,14 +131,13 @@ export default function OrderDetail() {
                   const done = i <= currentIdx;
                   const active = i === currentIdx;
                   return (
-                    <View key={st} style={styles.horizontalStep}>
+                    <View key={st} style={styles.horizontalStep} accessible accessibilityLabel={STATUS_LABEL[st]}>
                       <View style={styles.horizontalNodeRow}>
                         <View style={[styles.horizontalDot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
-                          {done && <Feather name="check" size={11} color="#fff" />}
+                          <Feather name={STATUS_ICON[st] || "circle"} size={14} color={done ? "#fff" : colors.muted} />
                         </View>
                         {i < STATUS_FLOW.length - 1 ? <View style={[styles.horizontalConnector, done && i < currentIdx ? styles.connectorDone : null]} /> : <View style={styles.horizontalConnectorPlaceholder} />}
                       </View>
-                      <T numberOfLines={2} size={type.xs} weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted} style={styles.horizontalLabel}>{STATUS_LABEL[st]}</T>
                     </View>
                   );
                 })}
@@ -232,15 +232,14 @@ const styles = StyleSheet.create({
   timelineCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   stepsRow: { flexDirection: "row-reverse", alignItems: "flex-start", width: "100%", paddingVertical: spacing.sm },
   horizontalStep: { flex: 1, minWidth: 0, alignItems: "stretch" },
-  horizontalNodeRow: { height: 26, flexDirection: "row-reverse", alignItems: "center" },
-  horizontalDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", zIndex: 1 },
+  horizontalNodeRow: { height: 32, flexDirection: "row-reverse", alignItems: "center" },
+  horizontalDot: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", zIndex: 1 },
   dotIdle: { backgroundColor: colors.surfaceTertiary },
   dotDone: { backgroundColor: colors.brandPrimary },
   dotActive: { borderWidth: 3, borderColor: colors.brandTertiary },
   horizontalConnector: { flex: 1, height: 2, backgroundColor: colors.surfaceTertiary },
   horizontalConnectorPlaceholder: { flex: 1, height: 2, backgroundColor: "transparent" },
   connectorDone: { backgroundColor: colors.brandPrimary },
-  horizontalLabel: { textAlign: "center", marginTop: spacing.xs, minHeight: 34, paddingHorizontal: 1 },
   currentStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   currentStatusIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
