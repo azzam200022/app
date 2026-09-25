@@ -92,6 +92,26 @@ CATEGORY_IMAGES = {
     "أخرى": "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&q=80",
 }
 DEFAULT_IMG = CATEGORY_IMAGES["أخرى"]
+DEFAULT_CATEGORY_BRANCHES = [
+    {
+        "category": "غذائية",
+        "name": "المراعي",
+        "match_terms": ["المراعي"],
+        "image_url": "https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&q=80",
+    },
+    {
+        "category": "غذائية",
+        "name": "أنكور",
+        "match_terms": ["أنكور", "انكور"],
+        "image_url": "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&q=80",
+    },
+    {
+        "category": "غذائية",
+        "name": "كيري",
+        "match_terms": ["كيري"],
+        "image_url": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=400&q=80",
+    },
+]
 CATALOG_ITEMS_CACHE = None
 EXISTING_PRODUCT_BARCODES_CACHE = None
 
@@ -2701,6 +2721,48 @@ async def seed():
                 "created_at": now_utc().isoformat(), "deleted_at": None,
             })
         logger.info("Seeded sample products")
+
+    branch_seed = await db.meta.find_one({"key": "category_branch_seed_version"})
+    if not branch_seed:
+        seeded_branches = {}
+        for definition in DEFAULT_CATEGORY_BRANCHES:
+            branch = await db.category_branches.find_one(
+                {"category": definition["category"], "name": definition["name"]},
+                {"_id": 0},
+            )
+            if not branch:
+                branch = {
+                    "id": "branch_" + uuid.uuid4().hex[:12],
+                    "category": definition["category"],
+                    "name": definition["name"],
+                    "image_url": definition["image_url"],
+                    "sort_order": len(seeded_branches),
+                    "is_active": True,
+                    "created_at": now_utc().isoformat(),
+                }
+                await db.category_branches.insert_one(branch)
+            seeded_branches[definition["name"]] = (branch["id"], definition["match_terms"])
+
+        for name, (branch_id, terms) in seeded_branches.items():
+            products = await db.products.find(
+                {
+                    "category": "غذائية",
+                    "deleted_at": None,
+                    "branch_id": None,
+                    "name": {"$regex": "|".join(re.escape(term) for term in terms), "$options": "i"},
+                },
+                {"_id": 0, "id": 1},
+            ).to_list(5000)
+            for product in products:
+                await db.products.update_one(
+                    {"id": product["id"], "branch_id": None},
+                    {"$set": {"branch_id": branch_id}},
+                )
+        await db.meta.update_one(
+            {"key": "category_branch_seed_version"},
+            {"$set": {"value": 1}},
+            upsert=True,
+        )
 
 
 @app.on_event("startup")
