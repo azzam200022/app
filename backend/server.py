@@ -282,8 +282,29 @@ class OrderIn(BaseModel):
     lng: Optional[float] = None
     area: Optional[str] = None
     delivery_area_id: Optional[str] = None
+    saved_address_id: Optional[str] = None
     coupon_code: Optional[str] = None
     client_request_id: Optional[str] = Field(None, min_length=8, max_length=100)
+
+
+class AddressIn(BaseModel):
+    label: str = Field(..., min_length=1, max_length=40)
+    recipient_name: str = Field(..., min_length=1, max_length=120)
+    phone: str = Field(..., min_length=5, max_length=30)
+    address: str = Field(..., min_length=3, max_length=500)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    is_default: bool = False
+
+
+class AddressUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=40)
+    recipient_name: Optional[str] = Field(None, min_length=1, max_length=120)
+    phone: Optional[str] = Field(None, min_length=5, max_length=30)
+    address: Optional[str] = Field(None, min_length=3, max_length=500)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    is_default: Optional[bool] = None
 
 
 class StatusUpdateIn(BaseModel):
@@ -1387,6 +1408,102 @@ async def delete_product(pid: str, user=Depends(require_manager)):
     return {"ok": True}
 
 
+# ---------------- Saved customer addresses ----------------
+def address_public_view(address):
+    return {
+        "id": address.get("id"),
+        "label": address.get("label", ""),
+        "recipient_name": address.get("recipient_name", ""),
+        "phone": address.get("phone", ""),
+        "address": address.get("address", ""),
+        "lat": address.get("lat"),
+        "lng": address.get("lng"),
+        "is_default": bool(address.get("is_default")),
+        "created_at": address.get("created_at"),
+        "updated_at": address.get("updated_at"),
+    }
+
+
+def validate_address_coordinates(lat, lng):
+    if (lat is None) != (lng is None):
+        raise HTTPException(status_code=400, detail="حدد الموقع على الخريطة أو استخدم موقع الجهاز")
+    if lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="يجب تحديد موقع العنوان قبل حفظه")
+
+
+async def clear_default_addresses(user_id, except_id=None):
+    query = {"user_id": user_id, "is_default": True}
+    if except_id:
+        query["id"] = {"$ne": except_id}
+    await db.addresses.update_many(query, {"$set": {"is_default": False}})
+
+
+@api.get("/addresses")
+async def list_addresses(user=Depends(require_user)):
+    docs = await db.addresses.find({"user_id": user["user_id"]}, {"_id": 0}).sort("is_default", -1).sort("updated_at", -1).to_list(100)
+    return [address_public_view(doc) for doc in docs]
+
+
+@api.post("/addresses", status_code=201)
+async def create_address(body: AddressIn, user=Depends(require_user)):
+    validate_address_coordinates(body.lat, body.lng)
+    existing_count = await db.addresses.count_documents({"user_id": user["user_id"]})
+    is_default = bool(body.is_default or existing_count == 0)
+    if is_default:
+        await clear_default_addresses(user["user_id"])
+    now = now_utc().isoformat()
+    doc = {
+        "id": "addr_" + uuid.uuid4().hex[:12],
+        "user_id": user["user_id"],
+        "label": body.label.strip(),
+        "recipient_name": body.recipient_name.strip(),
+        "phone": body.phone.strip(),
+        "address": body.address.strip(),
+        "lat": body.lat,
+        "lng": body.lng,
+        "is_default": is_default,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.addresses.insert_one(doc)
+    return address_public_view(doc)
+
+
+@api.put("/addresses/{address_id}")
+async def update_address(address_id: str, body: AddressUpdate, user=Depends(require_user)):
+    current = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="العنوان غير موجود")
+    updates = {key: value for key, value in body.dict(exclude_unset=True).items() if value is not None}
+    if not updates:
+        return address_public_view(current)
+    validate_address_coordinates(updates.get("lat", current.get("lat")), updates.get("lng", current.get("lng")))
+    for key in ("label", "recipient_name", "phone", "address"):
+        if key in updates:
+            updates[key] = updates[key].strip()
+    updates["updated_at"] = now_utc().isoformat()
+    if updates.get("is_default"):
+        await clear_default_addresses(user["user_id"], address_id)
+    elif updates.get("is_default") is False and current.get("is_default"):
+        updates["is_default"] = True
+    await db.addresses.update_one({"id": address_id, "user_id": user["user_id"]}, {"$set": updates})
+    updated = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    return address_public_view(updated)
+
+
+@api.delete("/addresses/{address_id}")
+async def delete_address(address_id: str, user=Depends(require_user)):
+    current = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="العنوان غير موجود")
+    await db.addresses.delete_one({"id": address_id, "user_id": user["user_id"]})
+    if current.get("is_default"):
+        replacement = await db.addresses.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", 1).limit(1).to_list(1)
+        if replacement:
+            await db.addresses.update_one({"id": replacement[0]["id"], "user_id": user["user_id"]}, {"$set": {"is_default": True, "updated_at": now_utc().isoformat()}})
+    return {"ok": True}
+
+
 # ---------------- Favorites ----------------
 @api.get("/favorites")
 async def get_favorites(user=Depends(require_user)):
@@ -1922,9 +2039,24 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         available_stock = max(int(item.get("stock", 0) or 0), 0)
         if int(item.get("quantity", 0) or 0) > available_stock:
             raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
-    if body.lat is None or body.lng is None:
+    saved_address = None
+    order_name = body.name.strip()
+    order_phone = body.phone.strip()
+    order_address = body.address.strip()
+    order_lat = body.lat
+    order_lng = body.lng
+    if body.saved_address_id:
+        saved_address = await db.addresses.find_one({"id": body.saved_address_id, "user_id": user["user_id"]}, {"_id": 0})
+        if not saved_address:
+            raise HTTPException(status_code=404, detail="العنوان المحفوظ غير موجود")
+        order_name = saved_address["recipient_name"]
+        order_phone = saved_address["phone"]
+        order_address = saved_address["address"]
+        order_lat = saved_address.get("lat")
+        order_lng = saved_address.get("lng")
+    if order_lat is None or order_lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة")
-    delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
+    delivery_area = await resolve_delivery_area_for_location(order_lat, order_lng)
     if not delivery_area:
         raise HTTPException(status_code=400, detail="الموقع خارج نطاق التوصيل")
     delivery_fee = float(delivery_area["fee"])
@@ -1945,14 +2077,17 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     doc = {
         "id": oid,
         "user_id": user["user_id"],
-        "customer_name": body.name,
-        "phone": body.phone,
-        "address": body.address,
-        "area": delivery_area["name"] if delivery_area else (body.area or infer_order_area(body.address)),
+        "customer_name": order_name,
+        "recipient_name": order_name,
+        "phone": order_phone,
+        "address": order_address,
+        "address_id": saved_address.get("id") if saved_address else None,
+        "address_label": saved_address.get("label") if saved_address else None,
+        "area": delivery_area["name"] if delivery_area else (body.area or infer_order_area(order_address)),
         "delivery_area_id": delivery_area["id"] if delivery_area else None,
         "delivery_fee": round(delivery_fee, 2),
         "notes": body.notes or "",
-        "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
+        "location": ({"lat": order_lat, "lng": order_lng} if (order_lat is not None and order_lng is not None) else None),
         "items": [
             {key: value for key, value in item.items() if key != "stock"}
             for item in cart["items"]
@@ -1986,7 +2121,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
     try:
-        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {body.name} بقيمة {int(total)} د.ع", "action_url": f"/order/{oid}"})
+        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {order_name} بقيمة {int(total)} د.ع", "action_url": f"/order/{oid}"})
     except Exception as e:
         logger.warning(f"push failed: {e}")
     return doc
