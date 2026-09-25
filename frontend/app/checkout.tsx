@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -41,9 +41,13 @@ export default function Checkout() {
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressesLoading, setAddressesLoading] = useState(true);
   const orderRequestId = useRef("order-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationSource, setLocationSource] = useState<"gps" | "address" | null>(null);
+  const [locationSource, setLocationSource] = useState<"gps" | "address" | "manual" | "saved" | null>(null);
   const [locating, setLocating] = useState(false);
   const [addressLocating, setAddressLocating] = useState(false);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
@@ -60,7 +64,7 @@ export default function Checkout() {
         ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
         : "يُحسب بعد تحديد الموقع";
 
-  const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual") => {
+  const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual" | "saved") => {
     setCoords(nextCoords);
     setLocationSource(source);
     setDeliveryQuote(null);
@@ -72,13 +76,65 @@ export default function Checkout() {
       if (quote.area_id === "default_delivery") {
         show("موقعك خارج نطاق التوصيل الحالي. جرّب عنواناً آخر.", "error");
       } else {
-        show(source === "address" ? "تم تحديد الموقع من العنوان؛ راجع الخريطة واضغط لتعديل الدبوس" : source === "manual" ? "تم تحديث موقع التسليم وحساب الرسوم ✓" : "تم تحديد الموقع وحساب رسوم التوصيل ✓");
+        show(source === "address" ? "تم تحديد الموقع من العنوان؛ راجع الخريطة واضغط لتعديل الدبوس" : source === "manual" ? "تم تحديث موقع التسليم وحساب الرسوم ✓" : source === "saved" ? "تم اختيار العنوان وحساب رسوم التوصيل ✓" : "تم تحديد الموقع وحساب رسوم التوصيل ✓");
       }
     } catch (e: any) {
       setDeliveryQuote(null);
       show(e.message, "error");
     } finally { setQuoteLoading(false); }
   };
+
+
+  const selectSavedAddress = async (saved: any) => {
+    setSelectedAddressId(saved.id);
+    setName(saved.recipient_name || "");
+    setPhone(saved.phone || "");
+    setAddress(saved.address || "");
+    if (saved.lat == null || saved.lng == null) {
+      setCoords(null);
+      setLocationSource(null);
+      setDeliveryQuote(null);
+      return;
+    }
+    await setLocationAndQuote({ lat: Number(saved.lat), lng: Number(saved.lng) }, "saved");
+  };
+
+  const startNewAddress = () => {
+    setSelectedAddressId(null);
+    setName(user?.name || "");
+    setPhone("");
+    setAddress("");
+    setCoords(null);
+    setLocationSource(null);
+    setDeliveryQuote(null);
+    setAppliedCoupon(null);
+  };
+
+  const saveCurrentAddress = async () => {
+    if (!name.trim() || !phone.trim() || !address.trim()) return show("يرجى تعبئة اسم المستلم والهاتف والعنوان أولاً", "error");
+    if (!coords) return show("حدد موقع العنوان عبر GPS أو من الخريطة أولاً", "error");
+    setSavingAddress(true);
+    try {
+      const saved = await api.createAddress({ label: "عنوان جديد", recipient_name: name.trim(), phone: phone.trim(), address: address.trim(), lat: coords.lat, lng: coords.lng, is_default: savedAddresses.length === 0 });
+      setSavedAddresses((items) => [saved, ...items]);
+      setSelectedAddressId(saved.id);
+      show("تم حفظ العنوان ضمن عناوينك ✓");
+    } catch (e: any) { show(e.message, "error"); }
+    finally { setSavingAddress(false); }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setAddressesLoading(true);
+    api.addresses().then((items) => {
+      if (!active) return;
+      const list = Array.isArray(items) ? items : [];
+      setSavedAddresses(list);
+      const preferred = list.find((item) => item.is_default) || list[0];
+      if (preferred) void selectSavedAddress(preferred);
+    }).catch((e: any) => { if (active) show(e.message, "error"); }).finally(() => { if (active) setAddressesLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const detectLocation = async () => {
     setLocating(true);
@@ -143,7 +199,7 @@ export default function Checkout() {
     if (deliveryQuote.area_id === "default_delivery") return show("عنوانك خارج نطاق التوصيل الحالي. غيّر موقع التسليم.", "error");
     setLoading(true);
     try {
-      const order = await api.createOrder({ name, phone, address, notes, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
+      const order = await api.createOrder({ name, phone, address, notes, saved_address_id: selectedAddressId || undefined, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
       await reload();
       router.replace(`/order/${order.id}?new=1`);
     } catch (e: any) { show(e.message, "error"); }
@@ -159,11 +215,30 @@ export default function Checkout() {
       </View>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled">
+          <View style={styles.savedSection}>
+            <View style={styles.sectionTitleRow}>
+              <T weight="displayBold" size={type.lg}>العناوين المحفوظة</T>
+              <Pressable onPress={startNewAddress} testID="co-new-address"><T weight="bold" color={colors.brandPrimary} size={type.sm}>+ عنوان جديد</T></Pressable>
+            </View>
+            {addressesLoading ? <ActivityIndicator color={colors.brandPrimary} /> : savedAddresses.length === 0 ? <T color={colors.muted} size={type.sm}>لا توجد عناوين محفوظة؛ املأ البيانات واحفظ العنوان أدناه.</T> : savedAddresses.map((saved) => (
+              <Pressable key={saved.id} testID={"co-address-" + saved.id} onPress={() => void selectSavedAddress(saved)} style={[styles.savedCard, selectedAddressId === saved.id && styles.savedCardActive]}>
+                <View style={styles.savedCardIcon}><Feather name={saved.is_default ? "star" : "map-pin"} size={18} color={saved.is_default ? colors.gold : colors.brandPrimary} /></View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.savedCardTitle}><T weight="bold">{saved.label}</T>{saved.is_default ? <T color={colors.gold} size={type.xs}>افتراضي</T> : null}</View>
+                  <T size={type.sm}>{saved.recipient_name} • {saved.phone}</T>
+                  <T color={colors.muted} size={type.sm} numberOfLines={1}>{saved.address}</T>
+                </View>
+                {selectedAddressId === saved.id ? <Feather name="check-circle" size={21} color={colors.brandPrimary} /> : <Feather name="circle" size={21} color={colors.borderStrong} />}
+              </Pressable>
+            ))}
+          </View>
+
           <T weight="displayBold" size={type.lg} style={{ marginBottom: spacing.md }}>معلومات التوصيل</T>
-          <Input icon="user" placeholder="الاسم الكامل" value={name} onChangeText={setName} testID="co-name" />
-          <Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="co-phone" />
-          <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
+          <Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); }} testID="co-name" />
+          <Input icon="phone" placeholder="رقم هاتف المستلم" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); }} keyboardType="phone-pad" testID="co-phone" />
+          <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); setSelectedAddressId(null); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
           <Input icon="edit-3" placeholder="ملاحظات (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
+          {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={18} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ هذا العنوان ضمن عناويني"}</T></Pressable> : null}
 
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>موقع التوصيل على الخريطة</T>
           {coords ? (
@@ -278,5 +353,12 @@ const styles = StyleSheet.create({
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
   couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
   couponBtn: { height: 54, paddingHorizontal: spacing.lg, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  savedSection: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm },
+  sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
+  savedCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  savedCardActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
+  savedCardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  savedCardTitle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
+  saveAddressBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 48, marginBottom: spacing.md },
   footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
 });
