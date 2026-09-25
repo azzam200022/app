@@ -21,10 +21,29 @@ export default function OrderDetail() {
   const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const orderListRoute = user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders";
+  const goBack = () => router.canGoBack() ? router.back() : router.replace(orderListRoute);
   const canPrint = user?.role === "manager";
 
   const load = async (force = false) => {
-    try { setOrder(await api.order(id!, force)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+    try {
+      setLoadError(null);
+      const result = await api.order(id!, force);
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        setOrder(null);
+        setLoadError("لم نعثر على هذا الطلب.");
+        return;
+      }
+      setOrder(result);
+    } catch (e: any) {
+      const message = e?.message || "تعذر تحميل تفاصيل الطلب. تحقق من الاتصال وحاول مجدداً.";
+      if (order) show(message, "error");
+      else setLoadError(message);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
 
@@ -41,6 +60,27 @@ export default function OrderDetail() {
 
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
 
+  if (!order) {
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <Pressable testID="od-back" onPress={goBack} hitSlop={10} style={styles.back}>
+            <Feather name="arrow-right" size={22} color={colors.onSurface} />
+          </Pressable>
+          <T weight="displayBold" size={type.xl}>تفاصيل الطلب</T>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.errorState}>
+          <Feather name="alert-circle" size={36} color={colors.error} />
+          <T weight="displayBold" size={type.lg}>{loadError ? "تعذّر تحميل الطلب" : "الطلب غير موجود"}</T>
+          <T color={colors.muted} style={styles.errorText}>{loadError || "لم نعثر على تفاصيل هذا الطلب."}</T>
+          <Button title="إعادة المحاولة" icon="refresh-cw" onPress={() => { setLoadError(null); setLoading(true); void load(true); }} testID="od-retry" style={{ marginTop: spacing.md, alignSelf: "stretch" }} />
+          <Button title="العودة إلى الطلبات" variant="outline" onPress={() => router.replace(orderListRoute)} testID="od-back-orders" style={{ alignSelf: "stretch" }} />
+        </View>
+      </View>
+    );
+  }
+
   const cancelled = order.status === "cancelled";
   const failed = order.status === "delivery_failed";
   const returned = order.status === "returned";
@@ -49,7 +89,7 @@ export default function OrderDetail() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
+        <Pressable testID="od-back" onPress={goBack} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
         <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
         {canPrint ? (
           <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
@@ -120,8 +160,10 @@ export default function OrderDetail() {
         {/* Items */}
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
-          {order.items.map((it: any, idx: number) => (
-            <View key={it.product_id} style={[styles.item, idx < order.items.length - 1 && styles.itemBorder]}>
+          {orderItems.length === 0 ? (
+            <T color={colors.muted} size={type.sm} style={{ padding: spacing.lg, textAlign: "center" }}>تفاصيل المنتجات غير متاحة</T>
+          ) : orderItems.map((it: any, idx: number) => (
+            <View key={it.product_id || idx} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
               <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{it.name}</T>
@@ -177,6 +219,8 @@ export default function OrderDetail() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  errorState: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing["2xl"], gap: spacing.md },
+  errorText: { textAlign: "center", lineHeight: 22 },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#E7F0EC", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
