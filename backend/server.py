@@ -1088,7 +1088,11 @@ async def list_products(
     if branch_id:
         q["branch_id"] = branch_id
     if search:
-        q["name"] = {"$regex": search, "$options": "i"}
+        normalized_search = search.strip()
+        if len(normalized_search) > 100:
+            raise HTTPException(status_code=400, detail="عبارة البحث طويلة جداً")
+        if normalized_search:
+            q["name"] = {"$regex": re.escape(normalized_search), "$options": "i"}
     if offers:
         q["old_price"] = {"$ne": None, "$gt": 0}
     docs_task = db.products.find(q, PRODUCT_LIST_PROJECTION).sort("created_at", -1).to_list(500)
