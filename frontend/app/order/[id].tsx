@@ -124,24 +124,34 @@ export default function OrderDetail() {
           ) : returned ? (
             <View style={styles.cancelRow}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" color={colors.error}>تم إغلاق الطلب بسبب المرتجع الكامل</T></View>
           ) : (
-            STATUS_FLOW.map((st, i) => {
-              const done = i <= currentIdx;
-              const active = i === currentIdx;
-              return (
-                <View key={st} style={styles.step}>
-                  <View style={styles.stepIndicator}>
-                    <View style={[styles.dot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
-                      {done && <Feather name="check" size={12} color="#fff" />}
-                    </View>
-                    {i < STATUS_FLOW.length - 1 && <View style={[styles.connector, done && i < currentIdx ? styles.connectorDone : null]} />}
-                  </View>
-                  <View style={{ flex: 1, paddingBottom: spacing.lg }}>
-                    <T weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted}>{STATUS_LABEL[st]}</T>
-                    {active && <T size={type.sm} color={colors.brandPrimary}>الحالة الحالية</T>}
-                  </View>
+            <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepsScroller}>
+                <View style={styles.stepsRow}>
+                  {STATUS_FLOW.map((st, i) => {
+                    const done = i <= currentIdx;
+                    const active = i === currentIdx;
+                    return (
+                      <View key={st} style={styles.horizontalStep}>
+                        <View style={styles.horizontalNodeRow}>
+                          <View style={[styles.horizontalDot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
+                            {done && <Feather name="check" size={12} color="#fff" />}
+                          </View>
+                          {i < STATUS_FLOW.length - 1 ? <View style={[styles.horizontalConnector, done && i < currentIdx ? styles.connectorDone : null]} /> : <View style={styles.horizontalConnectorPlaceholder} />}
+                        </View>
+                        <T numberOfLines={2} weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted} style={styles.horizontalLabel}>{STATUS_LABEL[st]}</T>
+                      </View>
+                    );
+                  })}
                 </View>
-              );
-            })
+              </ScrollView>
+              <View style={styles.currentStatus}>
+                <View style={styles.currentStatusIcon}><Feather name="check-circle" size={18} color={colors.brandPrimary} /></View>
+                <View style={{ flex: 1 }}>
+                  <T size={type.xs} color={colors.brandPrimary} weight="bold">الحالة الحالية</T>
+                  <T weight="bold">{STATUS_LABEL[order.status]}</T>
+                </View>
+              </View>
+            </>
           )}
           {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}{order.agent_phone ? " • " + order.agent_phone : ""}</T></View>}
         </View>
@@ -222,14 +232,20 @@ const styles = StyleSheet.create({
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#E7F0EC", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   timelineCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
-  step: { flexDirection: "row-reverse", gap: spacing.md },
-  stepIndicator: { alignItems: "center", width: 24 },
-  dot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  stepsScroller: { paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
+  stepsRow: { flexDirection: "row-reverse", alignItems: "flex-start" },
+  horizontalStep: { width: 92, alignItems: "stretch" },
+  horizontalNodeRow: { height: 26, flexDirection: "row-reverse", alignItems: "center" },
+  horizontalDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", zIndex: 1 },
   dotIdle: { backgroundColor: colors.surfaceTertiary },
   dotDone: { backgroundColor: colors.brandPrimary },
   dotActive: { borderWidth: 3, borderColor: colors.brandTertiary },
-  connector: { width: 2, flex: 1, backgroundColor: colors.surfaceTertiary, marginVertical: 2 },
+  horizontalConnector: { flex: 1, height: 2, backgroundColor: colors.surfaceTertiary },
+  horizontalConnectorPlaceholder: { flex: 1, height: 2, backgroundColor: "transparent" },
   connectorDone: { backgroundColor: colors.brandPrimary },
+  horizontalLabel: { textAlign: "center", marginTop: spacing.sm, minHeight: 34 },
+  currentStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  currentStatusIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
   cancelRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   itemsCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
