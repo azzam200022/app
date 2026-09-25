@@ -111,9 +111,13 @@ export default function Home() {
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
   const onSelect = useCallback((c: string) => {
+    if (c !== "الكل") {
+      router.push({ pathname: "/category/[category]", params: { category: c } });
+      return;
+    }
     setSelected(c);
     void loadProducts(c);
-  }, [loadProducts]);
+  }, [loadProducts, router]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -199,7 +203,11 @@ export default function Home() {
 
       {/* Categories */}
       <View style={styles.sectionHead}>
-        <T weight="displayBold" size={type.xl}>التصنيفات</T>
+        <View>
+          <T weight="displayBold" size={type.xl}>تسوّق حسب التصنيف</T>
+          <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات مرتبة لتصل لما تحب أسرع</T>
+        </View>
+        <View style={styles.sectionRule} />
       </View>
       <CategoryCircles items={[{ name: "الكل" }, ...cats.map((c: any) => ({ name: c.name, image: c.image }))]} selected={selected} onSelect={onSelect} />
 
@@ -209,8 +217,9 @@ export default function Home() {
           <View style={styles.sectionHead}>
             <View>
               <T weight="displayBold" size={type.xl}>الأكثر شراءً</T>
-              <T color={colors.muted} size={type.sm}>اختيارات العملاء</T>
+              <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات العملاء هذا الأسبوع</T>
             </View>
+            <View style={styles.sectionRule} />
           </View>
           <FlatList
             horizontal
@@ -230,7 +239,10 @@ export default function Home() {
       {offers.length > 0 && selected === "الكل" && (
         <View>
           <View style={styles.sectionHead}>
-            <T weight="displayBold" size={type.xl}>عروض مميزة</T>
+            <View>
+              <T weight="displayBold" size={type.xl}>عروض مميزة</T>
+              <T color={colors.muted} size={type.sm} style={styles.sectionHint}>خصومات تستحق التجربة</T>
+            </View>
             <Pressable onPress={() => router.push("/offers")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
           </View>
           <FlatList
@@ -263,6 +275,14 @@ export default function Home() {
               <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
             </Animated.View>
             <View style={styles.topActions}>
+            <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
+              <Feather name="shopping-bag" size={19} color={colors.onSurface} />
+              {cart.count > 0 && (
+                <View style={styles.cartBadge}>
+                  <T size={type.xs} weight="bold" color={colors.onBrandPrimary}>{cart.count > 9 ? "9+" : String(cart.count)}</T>
+                </View>
+              )}
+            </Pressable>
               <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
                 <Feather name="search" size={19} color={colors.onSurface} />
               </Pressable>
@@ -322,26 +342,29 @@ function ProductGridSkeleton() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: "#fff", paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, overflow: "hidden", zIndex: 10 },
+  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider, overflow: "hidden", zIndex: 10 },
   fullHeader: { overflow: "hidden" },
   topRow: { height: 40, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  searchPrompt: { height: 48, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  searchPrompt: { height: 52, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.divider, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  iconBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
+  cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
   compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
   compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
   brandLogo: { width: 118, height: 34 },
-  hero: { height: 168, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden" },
-  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 168 },
+  hero: { height: 190, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse },
+  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 190 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.gold },
-  heroContent: { flex: 1, padding: spacing.lg, justifyContent: "flex-end" },
-  heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.sm },
+  heroContent: { flex: 1, padding: spacing.lg, paddingBottom: spacing.xl, justifyContent: "flex-end", alignItems: "flex-start" },
+  heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionHint: { marginTop: 2 },
+  sectionRule: { flex: 1, height: 1, backgroundColor: colors.divider, marginStart: spacing.lg, marginTop: spacing.md },
   loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing["2xl"] },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
