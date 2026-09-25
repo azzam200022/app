@@ -321,7 +321,7 @@ export default function DeliveryHome() {
 
       {item.delivery_state !== "available" && (
         <View style={styles.navRow}>
-          <Pressable testID={`details-${item.id}`} onPress={() => router.push("/order/" + item.id)} style={styles.detailBtn}>
+          <Pressable testID={`details-${item.id}`} onPress={() => router.push(("/order/" + item.id) as any)} style={styles.detailBtn}>
             <Feather name="file-text" size={16} color={colors.brandPrimary} />
             <T size={type.sm} weight="bold" color={colors.brandPrimary}>عرض تفاصيل الطلب</T>
           </Pressable>
