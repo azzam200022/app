@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, Modal, TextInput, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, Modal, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
@@ -17,18 +17,28 @@ export default function ManagerProducts() {
   const [editing, setEditing] = useState<any>(null);
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
+  const [category, setCategory] = useState("");
+  const [branchId, setBranchId] = useState("");
+  const [branches, setBranches] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => { try { setItems(await api.products()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); } }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const openEdit = (p: any) => { setEditing(p); setPrice(String(p.price)); setOldPrice(p.old_price ? String(p.old_price) : ""); };
+  const openEdit = async (p: any) => {
+    setEditing(p);
+    setPrice(String(p.price));
+    setOldPrice(p.old_price ? String(p.old_price) : "");
+    setCategory(p.category || "");
+    setBranchId(p.branch_id || "");
+    try { setBranches(await api.categoryBranches(p.category || "")); } catch { setBranches([]); }
+  };
 
   const saveEdit = async () => {
     setSaving(true);
     try {
-      await api.updateProduct(editing.id, { price: Number(price), old_price: oldPrice ? Number(oldPrice) : null });
-      show("تم تحديث السعر");
+      await api.updateProduct(editing.id, { price: Number(price), old_price: oldPrice ? Number(oldPrice) : null, category, branch_id: branchId || null });
+      show("تم تحديث بيانات المنتج");
       setEditing(null); load();
     } catch (e: any) { show(e.message, "error"); } finally { setSaving(false); }
   };
@@ -79,6 +89,33 @@ export default function ManagerProducts() {
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <T weight="displayBold" size={type.lg} style={{ marginBottom: spacing.md }}>تعديل السعر</T>
             <T numberOfLines={1} color={colors.muted} style={{ marginBottom: spacing.md }}>{editing?.name}</T>
+            <T weight="semi" size={type.sm} style={{ marginBottom: spacing.xs }}>القسم</T>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {Array.from(new Set(items.map((item) => item.category).filter(Boolean))).map((itemCategory) => (
+                <Pressable key={itemCategory} onPress={async () => {
+                  setCategory(itemCategory);
+                  setBranchId("");
+                  try { setBranches(await api.categoryBranches(itemCategory)); } catch { setBranches([]); }
+                }} style={[styles.categoryChip, category === itemCategory ? styles.categoryChipActive : styles.categoryChipIdle]}>
+                  <T size={type.sm} weight="semi" color={category === itemCategory ? "#fff" : colors.onSurfaceSecondary}>{itemCategory}</T>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {branches.length > 0 && (
+              <>
+                <T weight="semi" size={type.sm} style={{ marginTop: spacing.md, marginBottom: spacing.xs }}>الفرع أو العلامة التجارية</T>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  <Pressable onPress={() => setBranchId("")} style={[styles.categoryChip, !branchId ? styles.categoryChipActive : styles.categoryChipIdle]}>
+                    <T size={type.sm} weight="semi" color={!branchId ? "#fff" : colors.onSurfaceSecondary}>بدون فرع</T>
+                  </Pressable>
+                  {branches.map((branch) => (
+                    <Pressable key={branch.id} onPress={() => setBranchId(branch.id)} style={[styles.categoryChip, branchId === branch.id ? styles.categoryChipActive : styles.categoryChipIdle]}>
+                      <T size={type.sm} weight="semi" color={branchId === branch.id ? "#fff" : colors.onSurfaceSecondary}>{branch.name}</T>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
             <T weight="semi" size={type.sm} style={{ marginBottom: spacing.xs }}>السعر (د.ع)</T>
             <TextInput testID="edit-price" style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" textAlign="right" />
             <T weight="semi" size={type.sm} style={{ marginTop: spacing.md, marginBottom: spacing.xs }}>السعر قبل الخصم (اختياري)</T>
@@ -104,4 +141,8 @@ const styles = StyleSheet.create({
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl },
   input: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 52, fontFamily: font.body, fontSize: type.base, color: colors.onSurface },
+  chipRow: { gap: spacing.sm, paddingVertical: 4 },
+  categoryChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill },
+  categoryChipActive: { backgroundColor: colors.brandPrimary },
+  categoryChipIdle: { backgroundColor: colors.surfaceSecondary },
 });
