@@ -101,6 +101,7 @@ PRODUCT_LIST_PROJECTION = {
     "id": 1,
     "name": 1,
     "category": 1,
+    "branch_id": 1,
     "price": 1,
     "old_price": 1,
     "image_url": 1,
@@ -190,6 +191,7 @@ class ProductIn(BaseModel):
     barcode: Optional[str] = ""
     name: str
     category: str = "أخرى"
+    branch_id: Optional[str] = None
     price: float
     old_price: Optional[float] = None
     image_url: Optional[str] = None
@@ -203,6 +205,7 @@ class ProductUpdate(BaseModel):
     barcode: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
+    branch_id: Optional[str] = None
     price: Optional[float] = None
     old_price: Optional[float] = None
     image_url: Optional[str] = None
@@ -223,6 +226,22 @@ class BannerIn(BaseModel):
 class BannerUpdate(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
+    image_url: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class CategoryBranchIn(BaseModel):
+    category: str
+    name: str
+    image_url: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class CategoryBranchUpdate(BaseModel):
+    category: Optional[str] = None
+    name: Optional[str] = None
     image_url: Optional[str] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
@@ -1017,6 +1036,7 @@ def clean_product(p, favorites=None, availability_alerted=None):
 @api.get("/products")
 async def list_products(
     category: Optional[str] = None,
+    branch_id: Optional[str] = None,
     search: Optional[str] = None,
     offers: Optional[bool] = False,
     authorization: Optional[str] = Header(None),
@@ -1024,6 +1044,8 @@ async def list_products(
     q = {"deleted_at": None, "is_published": True}
     if category and category != "الكل":
         q["category"] = category
+    if branch_id:
+        q["branch_id"] = branch_id
     if search:
         q["name"] = {"$regex": search, "$options": "i"}
     if offers:
@@ -1134,6 +1156,113 @@ async def categories():
     ]
 
 
+def clean_category_branch(branch):
+    item = dict(branch or {})
+    item.pop("_id", None)
+    item.setdefault("image_url", CATEGORY_IMAGES.get(item.get("category"), DEFAULT_IMG))
+    item.setdefault("sort_order", 0)
+    item.setdefault("is_active", True)
+    return item
+
+
+@api.get("/categories/{category}/branches")
+async def category_branches(category: str):
+    branches = await db.category_branches.find(
+        {"category": category, "is_active": True},
+        {"_id": 0},
+    ).sort("sort_order", 1).to_list(100)
+    if not branches:
+        return []
+    counts = {}
+    products = await db.products.find(
+        {"category": category, "deleted_at": None, "is_published": True, "branch_id": {"$in": [b["id"] for b in branches]}},
+        {"_id": 0, "branch_id": 1},
+    ).to_list(5000)
+    for product in products:
+        branch_id = product.get("branch_id")
+        counts[branch_id] = counts.get(branch_id, 0) + 1
+    return [
+        {**clean_category_branch(branch), "product_count": counts.get(branch.get("id"), 0)}
+        for branch in branches
+    ]
+
+
+@api.get("/admin/category-branches")
+async def admin_category_branches(category: Optional[str] = None, user=Depends(require_manager)):
+    query = {"category": category} if category else {}
+    branches = await db.category_branches.find(query, {"_id": 0}).sort("sort_order", 1).to_list(500)
+    counts = {}
+    if branches:
+        products = await db.products.find(
+            {"branch_id": {"$in": [branch["id"] for branch in branches]}, "deleted_at": None},
+            {"_id": 0, "branch_id": 1},
+        ).to_list(5000)
+        for product in products:
+            branch_id = product.get("branch_id")
+            counts[branch_id] = counts.get(branch_id, 0) + 1
+    return [
+        {**clean_category_branch(branch), "product_count": counts.get(branch.get("id"), 0)}
+        for branch in branches
+    ]
+
+
+@api.post("/admin/category-branches")
+async def create_category_branch(body: CategoryBranchIn, user=Depends(require_manager)):
+    category = body.category.strip()
+    name = body.name.strip()
+    if not category or not name:
+        raise HTTPException(status_code=400, detail="اسم القسم والفرع مطلوبان")
+    duplicate = await db.category_branches.find_one({"category": category, "name": name})
+    if duplicate:
+        raise HTTPException(status_code=409, detail="هذا الفرع موجود ضمن القسم")
+    branch = {
+        "id": "branch_" + uuid.uuid4().hex[:12],
+        "category": category,
+        "name": name,
+        "image_url": body.image_url or CATEGORY_IMAGES.get(category, DEFAULT_IMG),
+        "sort_order": body.sort_order,
+        "is_active": body.is_active,
+        "created_at": now_utc().isoformat(),
+    }
+    await db.category_branches.insert_one(branch)
+    return clean_category_branch(branch)
+
+
+@api.put("/admin/category-branches/{branch_id}")
+async def update_category_branch(branch_id: str, body: CategoryBranchUpdate, user=Depends(require_manager)):
+    existing = await db.category_branches.find_one({"id": branch_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="الفرع غير موجود")
+    updates = {key: value for key, value in body.dict(exclude_unset=True).items() if value is not None}
+    if "category" in updates:
+        updates["category"] = updates["category"].strip()
+    if "name" in updates:
+        updates["name"] = updates["name"].strip()
+    if not updates:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
+    next_category = updates.get("category", existing.get("category"))
+    next_name = updates.get("name", existing.get("name"))
+    duplicate = await db.category_branches.find_one({
+        "id": {"$ne": branch_id},
+        "category": next_category,
+        "name": next_name,
+    })
+    if duplicate:
+        raise HTTPException(status_code=409, detail="هذا الفرع موجود ضمن القسم")
+    await db.category_branches.update_one({"id": branch_id}, {"$set": updates})
+    return clean_category_branch(await db.category_branches.find_one({"id": branch_id}, {"_id": 0}))
+
+
+@api.delete("/admin/category-branches/{branch_id}")
+async def delete_category_branch(branch_id: str, user=Depends(require_manager)):
+    branch = await db.category_branches.find_one({"id": branch_id}, {"_id": 0, "id": 1})
+    if not branch:
+        raise HTTPException(status_code=404, detail="الفرع غير موجود")
+    await db.products.update_many({"branch_id": branch_id}, {"$set": {"branch_id": None}})
+    await db.category_branches.delete_one({"id": branch_id})
+    return {"ok": True}
+
+
 @api.post("/products")
 async def create_product(body: ProductIn, user=Depends(require_manager)):
     barcode = normalize_barcode(body.barcode)
@@ -1144,12 +1273,20 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
     duplicate = await db.products.find_one({"barcode": barcode, "deleted_at": None}, {"_id": 0, "id": 1})
     if duplicate:
         raise HTTPException(status_code=409, detail="هذا الباركود مستخدم لمنتج آخر")
+    if body.branch_id:
+        branch = await db.category_branches.find_one(
+            {"id": body.branch_id, "category": body.category, "is_active": True},
+            {"_id": 0, "id": 1},
+        )
+        if not branch:
+            raise HTTPException(status_code=400, detail="الفرع لا ينتمي إلى القسم المختار")
     pid = "prod_" + uuid.uuid4().hex[:12]
     doc = {
         "id": pid,
         "barcode": barcode,
         "name": body.name,
         "category": body.category or "أخرى",
+        "branch_id": body.branch_id or None,
         "price": body.price,
         "old_price": body.old_price,
         "image_url": body.image_url or CATEGORY_IMAGES.get(body.category, DEFAULT_IMG),
@@ -1168,7 +1305,8 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
 
 @api.put("/products/{pid}")
 async def update_product(pid: str, body: ProductUpdate, user=Depends(require_manager)):
-    upd = {k: v for k, v in body.dict().items() if v is not None}
+    raw_updates = body.dict(exclude_unset=True)
+    upd = {k: v for k, v in raw_updates.items() if v is not None or k == "branch_id"}
     if body.barcode is not None:
         barcode = normalize_barcode(body.barcode)
         if not re.fullmatch(r"\d{8,14}", barcode):
@@ -1179,9 +1317,22 @@ async def update_product(pid: str, body: ProductUpdate, user=Depends(require_man
         upd["barcode"] = barcode
     if not upd:
         raise HTTPException(status_code=400, detail="لا يوجد تغيير")
-    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0, "coming_soon": 1})
+    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0, "coming_soon": 1, "category": 1, "branch_id": 1})
     if not existing:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if "category" in upd and "branch_id" not in upd and existing.get("branch_id"):
+        upd["branch_id"] = None
+    if upd.get("branch_id"):
+        branch = await db.category_branches.find_one(
+            {
+                "id": upd["branch_id"],
+                "category": upd.get("category", existing.get("category")),
+                "is_active": True,
+            },
+            {"_id": 0, "id": 1},
+        )
+        if not branch:
+            raise HTTPException(status_code=400, detail="الفرع لا ينتمي إلى القسم المختار")
     was_coming_soon = bool(existing.get("coming_soon"))
     r = await db.products.update_one({"id": pid, "deleted_at": None}, {"$set": upd})
     if r.matched_count == 0:
