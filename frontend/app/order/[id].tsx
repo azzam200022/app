@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -37,6 +37,19 @@ export default function OrderDetail() {
 
   const cancel = async () => {
     try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); }
+  };
+
+  const contactAgent = async () => {
+    const phone = String(order?.agent_phone ?? "").replace(/[^\d+]/g, "");
+    if (!/\d/.test(phone)) {
+      show("رقم المندوب غير متوفر حالياً", "error");
+      return;
+    }
+    try {
+      await Linking.openURL(`tel:${phone}`);
+    } catch {
+      show("تعذّر فتح تطبيق الاتصال", "error");
+    }
   };
 
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
@@ -166,6 +179,17 @@ export default function OrderDetail() {
           </View>
         ) : null}
 
+        {user?.role === "customer" && (
+          order.agent_phone ? (
+            <Button title="تواصل مع المندوب بخصوص الطلب" variant="outline" icon="phone" onPress={() => void contactAgent()} testID="od-contact-agent" style={{ marginTop: spacing.lg }} />
+          ) : (
+            <View style={styles.supportHint} testID="od-contact-unassigned">
+              <Feather name="help-circle" size={18} color={colors.brandPrimary} />
+              <T color={colors.onSurfaceTertiary} size={type.sm} style={{ flex: 1 }}>للتواصل بشأن هذا الطلب، سيظهر خيار الاتصال بعد استلام المندوب له.</T>
+            </View>
+          )
+        )}
+
         {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
           <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
@@ -190,6 +214,7 @@ const styles = StyleSheet.create({
   connector: { width: 2, flex: 1, backgroundColor: colors.surfaceTertiary, marginVertical: 2 },
   connectorDone: { backgroundColor: colors.brandPrimary },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
+  supportHint: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
   cancelRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   itemsCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   item: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, padding: spacing.md },
