@@ -20,6 +20,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="products" options={{ title: "المنتجات", tabBarIcon: ({ color, size }) => <Feather name="box" size={size} color={color} /> }} />
       <Tabs.Screen name="scan" options={{ title: "إضافة", tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} /> }} />
       <Tabs.Screen name="orders" options={{ title: "الطلبات", tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} /> }} />
+      <Tabs.Screen name="support" options={{ title: "الدعم", tabBarIcon: ({ color, size }) => <Feather name="headphones" size={size} color={color} /> }} />
       <Tabs.Screen name="agents" options={{ href: null }} />
       <Tabs.Screen name="sync-settings" options={{ href: null }} />
       <Tabs.Screen name="returns" options={{ href: null }} />
