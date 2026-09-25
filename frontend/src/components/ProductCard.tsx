@@ -75,7 +75,7 @@ export const ProductCard = React.memo(function ProductCard({
             <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />
           </View>
         )}
-        <Pressable testID={`fav-${product.id}`} accessibilityLabel={fav ? "إزالة من المفضلة" : "إضافة إلى المفضلة"} onPress={toggleFav} style={styles.favBtn} hitSlop={8}>
+        <Pressable testID={`fav-${product.id}`} accessibilityLabel={fav ? "إزالة من المفضلة" : "إضافة إلى المفضلة"} onPress={(event) => { event.stopPropagation(); toggleFav(); }} style={styles.favBtn} hitSlop={8}>
           <Feather name="heart" size={16} color={fav ? colors.error : colors.onSurfaceTertiary} style={fav ? { opacity: 1 } : {}} />
         </Pressable>
       </View>
