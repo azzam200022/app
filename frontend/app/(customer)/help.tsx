@@ -80,13 +80,13 @@ export default function Help() {
           })}
         </View>
 
-        <View style={styles.nextStepCard}>
+        <Pressable testID="open-support" onPress={() => router.push("/(customer)/support")} style={styles.nextStepCard}>
           <View style={styles.nextStepIcon}><Feather name="message-circle" size={22} color={colors.gold} /></View>
           <View style={styles.nextStepCopy}>
             <T weight="bold" size={type.lg}>لم تجد الحل؟</T>
             <T color={colors.muted} size={type.sm} style={{ marginTop: 4 }}>في المرحلة التالية ستتمكن من مراسلة الدعم وإرسال صورة للمشكلة من داخل التطبيق.</T>
           </View>
-        </View>
+        </Pressable>
       </ScrollView>
     </View>
   );
