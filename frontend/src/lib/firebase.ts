@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 import { initializeApp, getApp, getApps } from "firebase/app";
-import { getAuth, initializeAuth, GoogleAuthProvider, getReactNativePersistence, type Auth } from "firebase/auth";
+import { getAuth, initializeAuth, GoogleAuthProvider, type Auth } from "@firebase/auth";
+// @ts-expect-error Firebase exposes this export through its React Native conditional entry.
+import { getReactNativePersistence } from "@firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
