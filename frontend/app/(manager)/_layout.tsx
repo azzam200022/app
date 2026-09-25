@@ -25,6 +25,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="returns" options={{ href: null }} />
       <Tabs.Screen name="banners" options={{ href: null }} />
       <Tabs.Screen name="coupons" options={{ href: null }} />
+      <Tabs.Screen name="branches" options={{ href: null }} />
       <Tabs.Screen name="delivery-areas" options={{ title: "التوصيل", tabBarIcon: ({ color, size }) => <Feather name="truck" size={size} color={color} /> }} />
     </Tabs>
   );
