@@ -42,6 +42,7 @@ export default function CustomerLayout() {
         options={{ title: "طلباتي", tabBarIcon: ({ color, size }) => <Feather name="package" size={size} color={color} /> }}
       />
       <Tabs.Screen name="help" options={{ href: null }} />
+      <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{ title: "حسابي", tabBarIcon: ({ color, size }) => <Feather name="user" size={size} color={color} /> }}
