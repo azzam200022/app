@@ -395,6 +395,23 @@ class DeliveryQuoteIn(BaseModel):
     lng: float = Field(..., ge=-180, le=180)
 
 
+class SupportTicketIn(BaseModel):
+    category: str = Field("other", min_length=2, max_length=40)
+    subject: str = Field(..., min_length=3, max_length=120)
+    message: str = Field(..., min_length=1, max_length=4000)
+    order_id: Optional[str] = Field(None, max_length=120)
+    attachment_url: Optional[str] = Field(None, max_length=1000)
+
+
+class SupportMessageIn(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    attachment_url: Optional[str] = Field(None, max_length=1000)
+
+
+class SupportStatusIn(BaseModel):
+    status: str
+
+
 # ---------------- Auth ----------------
 async def get_user_by_token(authorization: Optional[str]):
     if not authorization or not authorization.startswith("Bearer "):
@@ -2373,6 +2390,178 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
 
 
 # ---------------- Manager ops ----------------
+
+
+# ---------------- Customer support ----------------
+@api.post("/support/tickets")
+async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user)):
+    message_text = body.message.strip()
+    if not message_text:
+        raise HTTPException(status_code=400, detail="اكتب تفاصيل المشكلة أولاً")
+    order = None
+    if body.order_id:
+        order = await db.orders.find_one(
+            {"id": body.order_id, "user_id": user["user_id"]},
+            {"_id": 0, "id": 1, "status": 1, "created_at": 1, "total": 1},
+        )
+        if not order:
+            raise HTTPException(status_code=404, detail="الطلب غير موجود في حسابك")
+    now = now_utc().isoformat()
+    ticket_id = "ticket_" + uuid.uuid4().hex[:12]
+    ticket = {
+        "id": ticket_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name") or "مستخدم",
+        "user_email": user.get("email"),
+        "category": body.category,
+        "subject": body.subject.strip(),
+        "status": "open",
+        "priority": "normal",
+        "order_id": body.order_id,
+        "order_summary": order,
+        "message_count": 1,
+        "last_message_preview": message_text[:160],
+        "created_at": now,
+        "updated_at": now,
+    }
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": user["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "customer",
+        "sender_name": user.get("name") or "مستخدم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_tickets.insert_one(ticket)
+    await db.support_messages.insert_one(message)
+    return {"ticket": ticket, "messages": [message]}
+
+
+@api.get("/support/tickets")
+async def list_support_tickets(user=Depends(require_user)):
+    return await db.support_tickets.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).sort("updated_at", -1).to_list(200)
+
+
+@api.get("/support/tickets/{ticket_id}")
+async def get_support_ticket(ticket_id: str, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one(
+        {"id": ticket_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    messages = await db.support_messages.find(
+        {"ticket_id": ticket_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return {"ticket": ticket, "messages": messages}
+
+
+@api.post("/support/tickets/{ticket_id}/messages")
+async def add_support_message(ticket_id: str, body: SupportMessageIn, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one(
+        {"id": ticket_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    message_text = body.message.strip()
+    if not message_text and not body.attachment_url:
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة")
+    now = now_utc().isoformat()
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": user["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "customer",
+        "sender_name": user.get("name") or "مستخدم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_messages.insert_one(message)
+    await db.support_tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {
+            "status": "open",
+            "updated_at": now,
+            "last_message_preview": message_text[:160] or "مرفق صورة",
+            "message_count": int(ticket.get("message_count") or 0) + 1,
+        }},
+    )
+    return message
+
+
+# ---------------- Manager support ----------------
+@api.get("/admin/support/tickets")
+async def admin_support_tickets(status: Optional[str] = None, user=Depends(require_manager)):
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    return await db.support_tickets.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+
+
+@api.get("/admin/support/tickets/{ticket_id}")
+async def admin_get_support_ticket(ticket_id: str, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    messages = await db.support_messages.find(
+        {"ticket_id": ticket_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return {"ticket": ticket, "messages": messages}
+
+
+@api.post("/admin/support/tickets/{ticket_id}/messages")
+async def admin_add_support_message(ticket_id: str, body: SupportMessageIn, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    message_text = body.message.strip()
+    if not message_text and not body.attachment_url:
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة")
+    now = now_utc().isoformat()
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": ticket["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "manager",
+        "sender_name": user.get("name") or "الدعم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_messages.insert_one(message)
+    await db.support_tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {
+            "status": "pending",
+            "updated_at": now,
+            "last_message_preview": message_text[:160] or "مرفق صورة",
+            "message_count": int(ticket.get("message_count") or 0) + 1,
+        }},
+    )
+    return message
+
+
+@api.post("/admin/support/tickets/{ticket_id}/status")
+async def admin_set_support_status(ticket_id: str, body: SupportStatusIn, user=Depends(require_manager)):
+    if body.status not in ("open", "pending", "closed"):
+        raise HTTPException(status_code=400, detail="حالة تذكرة غير صالحة")
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id},
+        {"$set": {"status": body.status, "updated_at": now_utc().isoformat()}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    updated = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    return updated
+
+
 @api.get("/admin/returns")
 async def admin_returns(user=Depends(require_manager)):
     return await db.returns.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
