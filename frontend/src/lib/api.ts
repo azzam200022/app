@@ -173,6 +173,7 @@ export const api = {
       return product;
     }, CACHE_TTLS.product, force);
   },
+  productByBarcode: (barcode: string) => req("/products/barcode/" + encodeURIComponent(barcode)),
   bestsellers: () => req("/products/bestsellers"),
   categories: (force = false) => cachedRequest("categories", () => req("/categories"), CACHE_TTLS.categories, force),
   categoryBranches: (category: string, force = false) => cachedRequest(
