@@ -2420,6 +2420,7 @@ async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user
         "order_id": body.order_id,
         "order_summary": order,
         "message_count": 1,
+        "manager_unread": True,
         "last_message_preview": message_text[:160],
         "created_at": now,
         "updated_at": now,
@@ -2487,6 +2488,7 @@ async def add_support_message(ticket_id: str, body: SupportMessageIn, user=Depen
         {"id": ticket_id},
         {"$set": {
             "status": "open",
+            "manager_unread": True,
             "updated_at": now,
             "last_message_preview": message_text[:160] or "مرفق صورة",
             "message_count": int(ticket.get("message_count") or 0) + 1,
@@ -2496,6 +2498,22 @@ async def add_support_message(ticket_id: str, body: SupportMessageIn, user=Depen
 
 
 # ---------------- Manager support ----------------
+@api.get("/admin/support/unread-count")
+async def admin_support_unread_count(user=Depends(require_manager)):
+    return {"count": await db.support_tickets.count_documents({"manager_unread": True})}
+
+
+@api.post("/admin/support/tickets/{ticket_id}/read")
+async def admin_mark_support_read(ticket_id: str, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id},
+        {"$set": {"manager_unread": False}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    return {"ok": True}
+
+
 @api.get("/admin/support/tickets")
 async def admin_support_tickets(status: Optional[str] = None, user=Depends(require_manager)):
     query = {}
@@ -2540,6 +2558,7 @@ async def admin_add_support_message(ticket_id: str, body: SupportMessageIn, user
         {"id": ticket_id},
         {"$set": {
             "status": "pending",
+            "manager_unread": False,
             "updated_at": now,
             "last_message_preview": message_text[:160] or "مرفق صورة",
             "message_count": int(ticket.get("message_count") or 0) + 1,
