@@ -17,6 +17,7 @@ export default function Search() {
   const { add } = useCart();
   const { show } = useToast();
   const [q, setQ] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -113,9 +114,9 @@ export default function Search() {
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable testID="search-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <View style={styles.searchBar}>
-          <Feather name="search" size={18} color={colors.muted} />
-          <TextInput testID="search-input" style={styles.input} placeholder="ابحث باسم المنتج أو امسح الباركود" placeholderTextColor={colors.muted} value={q} onChangeText={(value) => { barcodeResultRef.current = false; setQ(value); }} autoFocus textAlign="right" />
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Feather name="search" size={18} color={searchFocused ? colors.brandPrimary : colors.muted} />
+          <TextInput testID="search-input" style={[styles.input, styles.inputWebReset]} placeholder="ابحث باسم المنتج أو امسح الباركود" placeholderTextColor={colors.muted} value={q} onChangeText={(value) => { barcodeResultRef.current = false; setQ(value); }} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus textAlign="right" />
           {q ? <Pressable testID="search-clear" accessibilityRole="button" accessibilityLabel="مسح البحث" onPress={() => { barcodeResultRef.current = false; setQ(""); }} hitSlop={8}><Feather name="x" size={18} color={colors.muted} /></Pressable> : null}
           <Pressable testID="barcode-scan" accessibilityRole="button" accessibilityLabel="مسح باركود المنتج" onPress={openBarcodeScanner} hitSlop={8}><Feather name="camera" size={19} color={colors.brandPrimary} /></Pressable>
         </View>
@@ -171,8 +172,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  searchBar: { flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 48 },
-  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%", borderWidth: 0 },
+  searchBar: { flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#F3F7F4", borderRadius: radius.pill, paddingHorizontal: spacing.lg, height: 50, borderWidth: 1, borderColor: "transparent" },
+  searchBarFocused: { backgroundColor: "#fff", borderColor: colors.brandSecondary, shadowColor: colors.brandPrimary, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%", borderWidth: 0, backgroundColor: "transparent" },
+  inputWebReset: { outlineStyle: "none", outlineWidth: 0, outlineColor: "transparent", boxShadow: "none" } as any,
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   scannerRoot: { flex: 1, backgroundColor: "#000" },
   scannerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff" },
