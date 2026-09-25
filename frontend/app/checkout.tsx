@@ -43,6 +43,7 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [addressLabel, setAddressLabel] = useState("عنوان جديد");
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressesLoading, setAddressesLoading] = useState(true);
   const orderRequestId = useRef("order-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
@@ -87,6 +88,7 @@ export default function Checkout() {
 
   const selectSavedAddress = async (saved: any) => {
     setSelectedAddressId(saved.id);
+    setAddressLabel(saved.label || "عنوان جديد");
     setName(saved.recipient_name || "");
     setPhone(saved.phone || "");
     setAddress(saved.address || "");
@@ -101,6 +103,7 @@ export default function Checkout() {
 
   const startNewAddress = () => {
     setSelectedAddressId(null);
+    setAddressLabel("عنوان جديد");
     setName(user?.name || "");
     setPhone("");
     setAddress("");
@@ -115,7 +118,7 @@ export default function Checkout() {
     if (!coords) return show("حدد موقع العنوان عبر GPS أو من الخريطة أولاً", "error");
     setSavingAddress(true);
     try {
-      const saved = await api.createAddress({ label: "عنوان جديد", recipient_name: name.trim(), phone: phone.trim(), address: address.trim(), lat: coords.lat, lng: coords.lng, is_default: savedAddresses.length === 0 });
+      const saved = await api.createAddress({ label: addressLabel.trim() || "عنوان جديد", recipient_name: name.trim(), phone: phone.trim(), address: address.trim(), lat: coords.lat, lng: coords.lng, is_default: savedAddresses.length === 0 });
       setSavedAddresses((items) => [saved, ...items]);
       setSelectedAddressId(saved.id);
       show("تم حفظ العنوان ضمن عناوينك ✓");
@@ -237,6 +240,7 @@ export default function Checkout() {
           <Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); }} testID="co-name" />
           <Input icon="phone" placeholder="رقم هاتف المستلم" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); }} keyboardType="phone-pad" testID="co-phone" />
           <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); setSelectedAddressId(null); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
+          {!selectedAddressId ? <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" /> : null}
           <Input icon="edit-3" placeholder="ملاحظات (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
           {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={18} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ هذا العنوان ضمن عناويني"}</T></Pressable> : null}
 
