@@ -21,10 +21,25 @@ export default function OrderDetail() {
   const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
+  const [loadError, setLoadError] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const canPrint = user?.role === "manager";
 
+  const goBack = () => {
+    if (router.canGoBack()) { router.back(); return; }
+    router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders");
+  };
+
   const load = async (force = false) => {
-    try { setOrder(await api.order(id!, force)); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+    try {
+      const result = await api.order(id!, force);
+      if (!result) throw new Error("تعذر العثور على الطلب");
+      setOrder(result);
+      setLoadError(false);
+    } catch (e: any) {
+      setLoadError(true);
+      if (order) show(e?.message || "تعذر تحديث الطلب", "error");
+    } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
 
@@ -36,21 +51,43 @@ export default function OrderDetail() {
   }, [order?.status, id]);
 
   const cancel = async () => {
-    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); }
+    if (cancelling) return;
+    setCancelling(true);
+    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); } finally { setCancelling(false); }
   };
 
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
+
+  if (!order) {
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <Pressable testID="od-back-error" onPress={goBack} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
+          <T weight="displayBold" size={type.xl}>تفاصيل الطلب</T>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.errorState}>
+          <View style={styles.errorIcon}><Feather name={loadError ? "alert-circle" : "package"} size={26} color={colors.error} /></View>
+          <T weight="displayBold" size={type.lg}>تعذّر تحميل تفاصيل الطلب</T>
+          <T color={colors.muted} style={styles.errorCopy}>تحقق من اتصالك بالإنترنت ثم أعد المحاولة.</T>
+          <Button title="إعادة المحاولة" icon="refresh-cw" onPress={() => { setLoading(true); void load(true); }} style={styles.retryButton} />
+        </View>
+      </View>
+    );
+  }
 
   const cancelled = order.status === "cancelled";
   const failed = order.status === "delivery_failed";
   const returned = order.status === "returned";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const orderNumber = String(order.id ?? id ?? "").replace(/^ORD/, "");
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable testID="od-back" onPress={() => router.canGoBack() ? router.back() : router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders")} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
+        <Pressable testID="od-back" onPress={goBack} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
+        <T weight="displayBold" size={type.xl}>طلب #{orderNumber}</T>
         {canPrint ? (
           <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
             <Feather name="printer" size={20} color={colors.brandPrimary} />
@@ -120,8 +157,8 @@ export default function OrderDetail() {
         {/* Items */}
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
-          {order.items.map((it: any, idx: number) => (
-            <View key={it.product_id} style={[styles.item, idx < order.items.length - 1 && styles.itemBorder]}>
+          {orderItems.map((it: any, idx: number) => (
+            <View key={it.product_id} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
               <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{it.name}</T>
@@ -167,7 +204,7 @@ export default function OrderDetail() {
         ) : null}
 
         {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
-          <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
+          <Button title={cancelling ? "جارٍ إلغاء الطلب..." : "إلغاء الطلب"} variant="outline" icon="x" onPress={cancel} loading={cancelling} disabled={cancelling} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
       </ScrollView>
     </View>
@@ -177,6 +214,10 @@ export default function OrderDetail() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  errorState: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.md },
+  errorIcon: { width: 62, height: 62, borderRadius: 31, backgroundColor: "#F8EAEA", alignItems: "center", justifyContent: "center" },
+  errorCopy: { textAlign: "center", maxWidth: 290 },
+  retryButton: { marginTop: spacing.xs, minWidth: 190 },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#E7F0EC", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
