@@ -25,6 +25,8 @@ export default function Scan() {
   const [barcode, setBarcode] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("غذائية");
+  const [branchId, setBranchId] = useState("");
+  const [branches, setBranches] = useState<any[]>([]);
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function Scan() {
     try { setResults(await api.catalogSearch(searchQ.trim())); } catch (e: any) { show(e.message, "error"); } finally { setSearching(false); }
   };
   const pickResult = (r: any) => {
-    setBarcode(r.barcode); setName(r.name); setCategory(r.category); setSuggestedImg(r.suggested_image);
+    setBarcode(r.barcode); setName(r.name); setCategory(r.category); setBranchId(""); setSuggestedImg(r.suggested_image);
     setPrice(r.price ? String(r.price) : ""); setOldPrice(r.old_price ? String(r.old_price) : ""); setImageUri(null);
     setMode("form");
   };
@@ -48,6 +50,19 @@ export default function Scan() {
   useEffect(() => {
     (async () => { try { const c = await api.categories(); setCats(c.map((x: any) => x.name)); } catch {} })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await api.categoryBranches(category);
+        setBranches(Array.isArray(result) ? result : []);
+        setBranchId("");
+      } catch {
+        setBranches([]);
+        setBranchId("");
+      }
+    })();
+  }, [category]);
 
   const ALL_CATS = Array.from(new Set([...cats, "غذائية", "عصائر", "منظفات", "مواد منزليه", "كوزمتك", "حفاظات", "العاب", "الكترونيات", "بقوليات", "ورقيات", "قرطاسية", "أخرى"]));
 
@@ -60,6 +75,7 @@ export default function Scan() {
       if (res.found) {
         setName(res.name);
         setCategory(res.category);
+        setBranchId("");
         setSuggestedImg(res.suggested_image);
         setPrice(res.price ? String(res.price) : "");
         setOldPrice(res.old_price ? String(res.old_price) : "");
@@ -68,6 +84,7 @@ export default function Scan() {
       } else {
         setName("");
         setCategory("أخرى");
+        setBranchId("");
         setSuggestedImg(null);
         setPrice(""); setOldPrice("");
         show("لم يوجد في الكتالوج، أدخل البيانات يدوياً", "info");
@@ -106,11 +123,11 @@ export default function Scan() {
         image_url = up.url;
       }
       await api.createProduct({
-        barcode, name: name.trim(), category, price: Number(price),
+        barcode, name: name.trim(), category, branch_id: branchId || null, price: Number(price),
         old_price: oldPrice ? Number(oldPrice) : null, image_url, stock: 100, is_published: true,
       });
       show("تمت إضافة المنتج بنجاح 🎉");
-      setMode("scan"); setManual(""); setName(""); setPrice(""); setOldPrice(""); setImageUri(null); setBarcode("");
+      setMode("scan"); setManual(""); setName(""); setPrice(""); setOldPrice(""); setImageUri(null); setBarcode(""); setBranchId("");
     } catch (e: any) { show(e.message, "error"); }
     finally { setSaving(false); }
   };
@@ -144,11 +161,24 @@ export default function Scan() {
           <Label text="التصنيف" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: 4 }}>
             {ALL_CATS.map((c) => (
-              <Pressable key={c} testID={`cat-${c}`} onPress={() => setCategory(c)} style={[styles.catChip, category === c ? styles.catActive : styles.catIdle]}>
+              <Pressable key={c} testID={`cat-${c}`} onPress={() => { setCategory(c); setBranchId(""); }} style={[styles.catChip, category === c ? styles.catActive : styles.catIdle]}>
                 <T size={type.sm} weight="semi" color={category === c ? "#fff" : colors.onSurfaceSecondary}>{c}</T>
               </Pressable>
             ))}
           </ScrollView>
+
+          {branches.length > 0 && (
+            <>
+              <Label text="الفرع أو العلامة التجارية (اختياري)" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: 4 }}>
+                {branches.map((branch) => (
+                  <Pressable key={branch.id} testID={`branch-${branch.id}`} onPress={() => setBranchId(branch.id)} style={[styles.catChip, branchId === branch.id ? styles.catActive : styles.catIdle]}>
+                    <T size={type.sm} weight="semi" color={branchId === branch.id ? "#fff" : colors.onSurfaceSecondary}>{branch.name}</T>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
           <View style={styles.priceGrid}>
             <View style={{ flex: 1 }}>
