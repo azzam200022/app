@@ -125,25 +125,23 @@ export default function OrderDetail() {
             <View style={styles.cancelRow}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" color={colors.error}>تم إغلاق الطلب بسبب المرتجع الكامل</T></View>
           ) : (
             <>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepsScroller}>
-                <View style={styles.stepsRow}>
-                  {STATUS_FLOW.map((st, i) => {
-                    const done = i <= currentIdx;
-                    const active = i === currentIdx;
-                    return (
-                      <View key={st} style={styles.horizontalStep}>
-                        <View style={styles.horizontalNodeRow}>
-                          <View style={[styles.horizontalDot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
-                            {done && <Feather name="check" size={12} color="#fff" />}
-                          </View>
-                          {i < STATUS_FLOW.length - 1 ? <View style={[styles.horizontalConnector, done && i < currentIdx ? styles.connectorDone : null]} /> : <View style={styles.horizontalConnectorPlaceholder} />}
+              <View style={styles.stepsRow}>
+                {STATUS_FLOW.map((st, i) => {
+                  const done = i <= currentIdx;
+                  const active = i === currentIdx;
+                  return (
+                    <View key={st} style={styles.horizontalStep}>
+                      <View style={styles.horizontalNodeRow}>
+                        <View style={[styles.horizontalDot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
+                          {done && <Feather name="check" size={11} color="#fff" />}
                         </View>
-                        <T numberOfLines={2} weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted} style={styles.horizontalLabel}>{STATUS_LABEL[st]}</T>
+                        {i < STATUS_FLOW.length - 1 ? <View style={[styles.horizontalConnector, done && i < currentIdx ? styles.connectorDone : null]} /> : <View style={styles.horizontalConnectorPlaceholder} />}
                       </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
+                      <T numberOfLines={2} size={type.xs} weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted} style={styles.horizontalLabel}>{STATUS_LABEL[st]}</T>
+                    </View>
+                  );
+                })}
+              </View>
               <View style={styles.currentStatus}>
                 <View style={styles.currentStatusIcon}><Feather name="check-circle" size={18} color={colors.brandPrimary} /></View>
                 <View style={{ flex: 1 }}>
@@ -232,9 +230,8 @@ const styles = StyleSheet.create({
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#E7F0EC", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   timelineCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
-  stepsScroller: { paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
-  stepsRow: { flexDirection: "row-reverse", alignItems: "flex-start" },
-  horizontalStep: { width: 92, alignItems: "stretch" },
+  stepsRow: { flexDirection: "row-reverse", alignItems: "flex-start", width: "100%", paddingVertical: spacing.sm },
+  horizontalStep: { flex: 1, minWidth: 0, alignItems: "stretch" },
   horizontalNodeRow: { height: 26, flexDirection: "row-reverse", alignItems: "center" },
   horizontalDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", zIndex: 1 },
   dotIdle: { backgroundColor: colors.surfaceTertiary },
@@ -243,7 +240,7 @@ const styles = StyleSheet.create({
   horizontalConnector: { flex: 1, height: 2, backgroundColor: colors.surfaceTertiary },
   horizontalConnectorPlaceholder: { flex: 1, height: 2, backgroundColor: "transparent" },
   connectorDone: { backgroundColor: colors.brandPrimary },
-  horizontalLabel: { textAlign: "center", marginTop: spacing.sm, minHeight: 34 },
+  horizontalLabel: { textAlign: "center", marginTop: spacing.xs, minHeight: 34, paddingHorizontal: 1 },
   currentStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   currentStatusIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
