@@ -83,7 +83,7 @@ export default function ManagerDashboard() {
   ] : [];
 
   const quickActions = [
-    { icon: "grid", label: "الفئات", onPress: () => router.push("/(manager)/products"), testID: "qa-categories" },
+    { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
     { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
     { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
     { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
