@@ -89,18 +89,36 @@ export default function ManagerDashboard() {
     { label: "إجمالي المنتجات", value: stats.products ?? 0, icon: "shopping-cart", color: colors.brandPrimary },
   ] : [];
 
-  const quickActions = [
-    { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
-    { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
-    { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
-    { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
-    { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
-    { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
-    { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
-     { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
-            { icon: "image", label: "البانورامات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
-    { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
-    { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
+  const quickActionGroups = [
+    {
+      title: "تشغيل المتجر",
+      hint: "المهام التي تستخدمها يوميًا",
+      actions: [
+        { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
+        { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
+        { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
+      ],
+    },
+    {
+      title: "إدارة المتجر",
+      hint: "الأقسام والعروض والبيانات",
+      actions: [
+        { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
+        { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
+        { icon: "image", label: "البانرات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
+        { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
+      ],
+    },
+    {
+      title: "الفريق والدعم",
+      hint: "المتابعة والتواصل اليومي",
+      actions: [
+        { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
+        { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
+        { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
+        { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
+      ],
+    },
   ];
 
   const attentionItems = [
@@ -142,28 +160,26 @@ export default function ManagerDashboard() {
             ))}
           </View>
 
-          <Pressable testID="dashboard-print-settings" onPress={() => router.push("/(manager)/orders")} style={styles.printBanner}>
-            <View style={styles.printIcon}><Feather name="printer" size={25} color="#fff" /></View>
-            <View style={styles.printCopy}>
-              <T weight="bold" color="#fff" size={type.lg}>الطباعة التلقائية للطلبات</T>
-              <T size={type.sm} color="rgba(255,255,255,0.8)">تعمل عند استلام الطلبات الجديدة</T>
-            </View>
-            <View style={styles.printAction}>
-              <T weight="bold" size={11} color={colors.brandPrimary}>إعدادات الطباعة</T>
-              <Feather name="chevron-left" size={15} color={colors.brandPrimary} />
-            </View>
-          </Pressable>
-
           <View style={styles.sectionTitle}>
-            <T weight="displayBold" size={type.lg}>إجراءات سريعة</T>
+            <View style={styles.sectionTitleCopy}>
+              <T weight="displayBold" size={type.lg}>مركز العمل</T>
+              <T color={colors.muted} size={type.sm}>ابدأ من المهام الأهم في متجرك</T>
+            </View>
             <Feather name="zap" size={18} color={colors.gold} />
           </View>
-          <View style={styles.quickGrid}>
-            {quickActions.map((action) => <QuickAction key={action.testID} {...action} />)}
-          </View>
-
+          {quickActionGroups.map((group) => (
+            <View key={group.title} style={styles.actionGroup}>
+              <View style={styles.actionGroupHeader}>
+                <T weight="semi" color={colors.onSurfaceSecondary}>{group.title}</T>
+                <T color={colors.muted} size={type.xs}>{group.hint}</T>
+              </View>
+              <View style={styles.quickGrid}>
+                {group.actions.map((action) => <QuickAction key={action.testID} {...action} />)}
+              </View>
+            </View>
+          ))}
           <View style={styles.sectionTitle}>
-            <T weight="displayBold" size={type.lg}>يحتاج انتباهك</T>
+            <T weight="displayBold" size={type.lg}>أولوية اليوم</T>
             <Feather name="bell" size={18} color={colors.error} />
           </View>
           {attentionItems.length === 0 ? (
@@ -274,6 +290,18 @@ export default function ManagerDashboard() {
             </Pressable>
           ))}
 
+          <Pressable testID="dashboard-print-settings" onPress={() => router.push("/(manager)/orders")} style={styles.printBanner}>
+            <View style={styles.printIcon}><Feather name="printer" size={25} color="#fff" /></View>
+            <View style={styles.printCopy}>
+              <T weight="bold" color="#fff" size={type.lg}>الطباعة التلقائية للطلبات</T>
+              <T size={type.sm} color="rgba(255,255,255,0.8)">تعمل عند استلام الطلبات الجديدة</T>
+            </View>
+            <View style={styles.printAction}>
+              <T weight="bold" size={11} color={colors.brandPrimary}>إعدادات الطباعة</T>
+              <Feather name="chevron-left" size={15} color={colors.brandPrimary} />
+            </View>
+          </Pressable>
+
           <View style={styles.tip}><Feather name="info" size={17} color={colors.gold} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>تأكد من توفر المندوبين قبل إضافة الطلبات الجديدة للتوصيل.</T></View>
         </ScrollView>
       )}
@@ -301,14 +329,17 @@ const styles = StyleSheet.create({
   greeting: { flex: 1, alignItems: "center", marginHorizontal: spacing.sm },
   profileBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.55)", alignItems: "center", justifyContent: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  statsGrid: { flexDirection: "row-reverse", gap: spacing.xs, marginBottom: spacing.md },
-  statCard: { flex: 1, minHeight: 94, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  statsGrid: { flexDirection: "row-reverse", gap: spacing.sm, marginBottom: spacing.md },
+  statCard: { flex: 1, minHeight: 104, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   statIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  printBanner: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.md, minHeight: 82 },
+  printBanner: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.md, minHeight: 82, marginTop: spacing.sm },
   printIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   printCopy: { flex: 1 },
   printAction: { flexDirection: "row-reverse", alignItems: "center", gap: 2, backgroundColor: "#fff", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionTitleCopy: { flex: 1, alignItems: "flex-end", gap: 2 },
+  actionGroup: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
+  actionGroupHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xs, marginBottom: spacing.sm },
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
   attentionPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
   attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
