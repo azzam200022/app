@@ -226,7 +226,17 @@ export const api = {
   adminSupportTicket: (id: string) => req("/admin/support/tickets/" + id),
   adminSendSupportMessage: (id: string, body: any) => req("/admin/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
   adminSetSupportStatus: (id: string, status: string) => req("/admin/support/tickets/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
-  adminOrders: (status?: string) => req("/admin/orders" + (status ? "?status=" + status : "")),
+  adminOrders: (params: { status?: string; page?: number; page_size?: number; search?: string; date_from?: string; date_to?: string } = {}) => {
+      const query = new URLSearchParams();
+      if (params.status && params.status !== "all") query.set("status", params.status);
+      if (params.page) query.set("page", String(params.page));
+      if (params.page_size) query.set("page_size", String(params.page_size));
+      if (params.search) query.set("search", params.search);
+      if (params.date_from) query.set("date_from", params.date_from);
+      if (params.date_to) query.set("date_to", params.date_to);
+      const suffix = query.toString();
+      return req("/admin/orders" + (suffix ? "?" + suffix : ""));
+    },
   adminReturns: () => req("/admin/returns"),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
