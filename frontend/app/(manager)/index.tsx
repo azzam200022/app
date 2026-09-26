@@ -104,9 +104,9 @@ export default function ManagerDashboard() {
   ];
 
   const attentionItems = [
-    { key: "orders", label: "طلبات تحتاج متابعة", detail: "طلبات لم تكتمل بعد", count: Number(stats?.active_orders ?? 0), icon: "clock", color: colors.brandSecondary, route: "/(manager)/orders" },
+    { key: "orders", label: "طلبات قيد المعالجة", detail: "تحتاج إلى متابعة الحالة", count: Number(stats?.active_orders ?? 0), icon: "clock", color: colors.brandSecondary, route: "/(manager)/orders" },
     { key: "support", label: "رسائل دعم غير مقروءة", detail: "تحتاج إلى رد من فريق الدعم", count: supportUnread, icon: "message-circle", color: colors.brandPrimary, route: "/(manager)/support" },
-    { key: "returns", label: "مرتجعات بانتظار المراجعة", detail: "راجع الحالات المفتوحة قبل تأخير العميل", count: Number(stats?.returns ?? 0), icon: "rotate-ccw", color: colors.error, route: "/(manager)/returns" },
+    { key: "returns", label: "إجمالي المرتجعات", detail: "راجع سجلات المرتجعات عند الحاجة", count: Number(stats?.returns ?? 0), icon: "rotate-ccw", color: colors.error, route: "/(manager)/returns" },
     { key: "stock", label: "منتجات منخفضة المخزون", detail: "راجع الكميات قبل نفادها", count: lowStockProducts.length, icon: "alert-triangle", color: colors.gold, route: "/(manager)/products" },
   ].filter((item) => item.count > 0);
 
@@ -311,7 +311,6 @@ const styles = StyleSheet.create({
   sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.lg, marginBottom: spacing.sm },
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
   attentionPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
-  attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   attentionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   attentionCopy: { flex: 1, alignItems: "flex-end" },
