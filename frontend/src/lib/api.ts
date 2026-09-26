@@ -219,6 +219,8 @@ export const api = {
   createSupportTicket: (body: any) => req("/support/tickets", { method: "POST", body: JSON.stringify(body) }),
   sendSupportMessage: (id: string, body: any) => req("/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
   adminSupportTickets: (status?: string) => req("/admin/support/tickets" + (status ? "?status=" + encodeURIComponent(status) : "")),
+  adminSupportUnreadCount: () => req("/admin/support/unread-count"),
+  adminMarkSupportRead: (id: string) => req("/admin/support/tickets/" + id + "/read", { method: "POST" }),
   adminSupportTicket: (id: string) => req("/admin/support/tickets/" + id),
   adminSendSupportMessage: (id: string, body: any) => req("/admin/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
   adminSetSupportStatus: (id: string, status: string) => req("/admin/support/tickets/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
