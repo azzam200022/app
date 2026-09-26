@@ -2637,15 +2637,55 @@ async def admin_stats(user=Depends(require_manager)):
 
 
 @api.get("/admin/orders")
-async def admin_orders(status: Optional[str] = None, user=Depends(require_manager)):
-    q = {}
-    if status and status != "all":
-        q["status"] = status
-    docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
-    for doc in docs:
-        doc.pop("delivery_otp", None)
-    return docs
+    async def admin_orders(
+      status: Optional[str] = None,
+      page: int = Query(1, ge=1, le=1000),
+      page_size: int = Query(50, ge=1, le=100),
+      search: Optional[str] = Query(None, max_length=100),
+      date_from: Optional[str] = Query(None, max_length=40),
+      date_to: Optional[str] = Query(None, max_length=40),
+      user=Depends(require_manager),
+    ):
+      q = {}
+      if status and status != "all":
+          q["status"] = status
+      created_filter = {}
+      if date_from:
+          created_filter["$gte"] = date_from
+      if date_to:
+          created_filter["$lte"] = date_to
+      if created_filter:
+          q["created_at"] = created_filter
 
+      projection = {"_id": 0}
+      search_term = search.strip().casefold() if search else ""
+      if search_term:
+          # Firestore does not provide a portable contains query for these fields.
+          # Search the filtered result set in memory, then paginate the matches.
+          all_docs = await db.orders.find(q, projection).sort("created_at", -1).to_list(None)
+          docs = [
+              doc for doc in all_docs
+              if any(search_term in str(doc.get(field) or "").casefold() for field in ("id", "customer_name", "phone"))
+          ]
+          total = len(docs)
+      else:
+          total = await db.orders.count_documents(q)
+          fetch_count = page * page_size
+          docs = await db.orders.find(q, projection).sort("created_at", -1).limit(fetch_count).to_list(fetch_count)
+
+      start = (page - 1) * page_size
+      page_docs = docs[start : start + page_size]
+      for doc in page_docs:
+          doc.pop("delivery_otp", None)
+      return {
+          "items": page_docs,
+          "pagination": {
+              "page": page,
+              "page_size": page_size,
+              "total": total,
+              "has_more": start + len(page_docs) < total,
+          },
+      }
 
 async def notify_customer_status(oid, status):
     o = await db.orders.find_one({"id": oid}, {"_id": 0, "user_id": 1})
