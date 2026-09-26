@@ -2421,6 +2421,7 @@ async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user
         "order_summary": order,
         "message_count": 1,
         "manager_unread": True,
+        "customer_unread": False,
         "last_message_preview": message_text[:160],
         "created_at": now,
         "updated_at": now,
@@ -2446,6 +2447,22 @@ async def list_support_tickets(user=Depends(require_user)):
     return await db.support_tickets.find(
         {"user_id": user["user_id"]}, {"_id": 0}
     ).sort("updated_at", -1).to_list(200)
+
+
+@api.get("/support/unread-count")
+async def support_unread_count(user=Depends(require_user)):
+    return {"count": await db.support_tickets.count_documents({"user_id": user["user_id"], "customer_unread": True})}
+
+
+@api.post("/support/tickets/{ticket_id}/read")
+async def mark_support_ticket_read(ticket_id: str, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id, "user_id": user["user_id"]},
+        {"$set": {"customer_unread": False}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    return {"ok": True}
 
 
 @api.get("/support/tickets/{ticket_id}")
@@ -2489,6 +2506,7 @@ async def add_support_message(ticket_id: str, body: SupportMessageIn, user=Depen
         {"$set": {
             "status": "open",
             "manager_unread": True,
+            "customer_unread": False,
             "updated_at": now,
             "last_message_preview": message_text[:160] or "مرفق صورة",
             "message_count": int(ticket.get("message_count") or 0) + 1,
@@ -2559,11 +2577,20 @@ async def admin_add_support_message(ticket_id: str, body: SupportMessageIn, user
         {"$set": {
             "status": "pending",
             "manager_unread": False,
+            "customer_unread": True,
             "updated_at": now,
             "last_message_preview": message_text[:160] or "مرفق صورة",
             "message_count": int(ticket.get("message_count") or 0) + 1,
         }},
     )
+    try:
+        await send_push([ticket["user_id"]], {
+            "title": "رد جديد من الدعم",
+            "message": message_text[:120] or "لديك رد جديد من فريق الدعم",
+            "action_url": f"/support?ticketId={ticket_id}",
+        })
+    except Exception as exc:
+        logger.warning(f"support push failed: {exc}")
     return message
 
 
