@@ -27,6 +27,7 @@ export default function ManagerDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [supportUnread, setSupportUnread] = useState(0);
+  const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -34,13 +35,15 @@ export default function ManagerDashboard() {
     try {
       const [s, o, products, support] = await Promise.all([
         api.adminStats(),
-        api.adminOrders({ page: 1, page_size: 50 }),
+        api.adminOrders({ page: 1, page_size: 100 }),
         api.products({}, true),
         api.adminSupportUnreadCount(),
+        api.adminAgents().catch(() => []),
       ]);
       setStats(s);
       setOrders(Array.isArray(o) ? o : (o?.items || []));
       setSupportUnread(Number(support?.count ?? 0));
+      setAgents(Array.isArray(agents) ? agents : []);
       setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
       show(e.message, "error");
@@ -65,6 +68,31 @@ export default function ManagerDashboard() {
   const todayRevenue = todayOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
   const recent = orders.slice(0, 5);
   const maxStatusCount = Math.max(1, ...STATUS_ROWS.map((row) => counts[row.key] || 0));
+
+  const agentOverview = useMemo(() => {
+    const activeStatuses = new Set(["ready_for_delivery", "out_for_delivery"]);
+    const assignedOrders = orders.filter((order) => Boolean(order.agent_id));
+    const deliveredOrders = assignedOrders.filter((order) => order.status === "delivered");
+    const today = new Date().toDateString();
+    const deliveredToday = deliveredOrders.filter((order) => new Date(order.delivered_at || order.created_at).toDateString() === today).length;
+    const rows = agents.map((agent) => {
+      const agentOrders = assignedOrders.filter((order) => order.agent_id === agent.user_id);
+      return {
+        ...agent,
+        assigned: agentOrders.length,
+        active: agentOrders.filter((order) => activeStatuses.has(order.status)).length,
+        delivered: agentOrders.filter((order) => order.status === "delivered").length,
+      };
+    }).sort((a, b) => b.active - a.active || b.delivered - a.delivered || b.assigned - a.assigned);
+    return {
+      total: agents.length,
+      activeAgents: rows.filter((agent) => agent.active > 0).length,
+      activeOrders: assignedOrders.filter((order) => activeStatuses.has(order.status)).length,
+      deliveredToday,
+      unassignedReady: orders.filter((order) => order.status === "ready_for_delivery" && !order.agent_id).length,
+      rows,
+    };
+  }, [agents, orders]);
 
   const toggleComingSoon = async (product: any) => {
     const next = !product.coming_soon;
@@ -276,6 +304,64 @@ export default function ManagerDashboard() {
           </View>
 
           <View style={styles.sectionTitle}>
+            <View style={styles.sectionTitleCopy}>
+              <T weight="displayBold" size={type.lg}>إحصائيات المندوبين</T>
+              <T color={colors.muted} size={type.sm}>{agentOverview.total} مندوب مسجل</T>
+            </View>
+            <Pressable testID="agent-view-all" onPress={() => router.push("/(manager)/agents")}>
+              <T color={colors.brandPrimary} weight="semi" size={type.sm}>إدارة المندوبين ‹</T>
+            </Pressable>
+          </View>
+          <View style={styles.agentPanel} testID="agent-stats-panel">
+            <View style={styles.agentMetrics}>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.brandTertiary }]}><Feather name="users" size={17} color={colors.brandPrimary} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.activeAgents}</T>
+                <T color={colors.muted} size={10}>نشطون الآن</T>
+              </View>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.brandSecondary + "1A" }]}><Feather name="truck" size={17} color={colors.brandSecondary} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.activeOrders}</T>
+                <T color={colors.muted} size={10}>طلبات قيد التوصيل</T>
+              </View>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.success + "1A" }]}><Feather name="check-circle" size={17} color={colors.success} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.deliveredToday}</T>
+                <T color={colors.muted} size={10}>تم توصيلها اليوم</T>
+              </View>
+            </View>
+            {agentOverview.unassignedReady > 0 && (
+              <Pressable testID="unassigned-ready-orders" onPress={() => router.push("/(manager)/orders")} style={styles.agentWarning}>
+                <Feather name="alert-triangle" size={17} color={colors.gold} />
+                <T color={colors.onSurfaceSecondary} size={type.sm} style={{ flex: 1 }}>هناك {agentOverview.unassignedReady} طلبات جاهزة بانتظار التعيين</T>
+                <Feather name="chevron-left" size={17} color={colors.gold} />
+              </Pressable>
+            )}
+            {agentOverview.rows.length === 0 ? (
+              <View style={styles.agentEmpty}>
+                <Feather name="users" size={20} color={colors.muted} />
+                <T color={colors.muted} size={type.sm}>لا يوجد مندوبون مسجلون بعد</T>
+              </View>
+            ) : (
+              <View style={styles.agentList}>
+                {agentOverview.rows.slice(0, 4).map((agent) => (
+                  <View key={agent.user_id} style={styles.agentRow}>
+                    <View style={styles.agentAvatar}><Feather name="truck" size={17} color={colors.brandPrimary} /></View>
+                    <View style={styles.agentCopy}>
+                      <T weight="semi" numberOfLines={1}>{agent.name || "مندوب توصيل"}</T>
+                      <T color={colors.muted} size={type.sm}>{agent.active} نشطة • {agent.delivered} مكتملة</T>
+                    </View>
+                    <View style={styles.agentScore}>
+                      <T weight="displayBold" color={colors.brandPrimary}>{agent.assigned}</T>
+                      <T color={colors.muted} size={10}>طلبات</T>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.sectionTitle}>
             <T weight="displayBold" size={type.lg}>أحدث الطلبات</T>
             <Pressable onPress={() => router.push("/(manager)/orders")}><T color={colors.brandPrimary} weight="semi" size={type.sm}>عرض الكل ‹</T></Pressable>
           </View>
@@ -366,6 +452,17 @@ const styles = StyleSheet.create({
   qaBadge: { position: "absolute", top: -3, insetInlineEnd: -5, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   insightsRow: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.lg },
   insightCard: { flex: 1, minHeight: 188, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+  agentPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm },
+  agentMetrics: { flexDirection: "row-reverse", gap: spacing.xs },
+  agentMetric: { flex: 1, minHeight: 86, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: 2 },
+  agentMetricIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  agentWarning: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: "#FFF3D6", borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.sm },
+  agentList: { marginTop: spacing.sm },
+  agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider, paddingVertical: spacing.sm },
+  agentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  agentCopy: { flex: 1, alignItems: "flex-end" },
+  agentScore: { minWidth: 44, alignItems: "center" },
+  agentEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingVertical: spacing.lg },
   cardTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   statusRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingVertical: 5 },
   statusDot: { width: 9, height: 9, borderRadius: 5 },
