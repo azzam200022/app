@@ -26,14 +26,21 @@ export default function ManagerDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [supportUnread, setSupportUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [s, o, products] = await Promise.all([api.adminStats(), api.adminOrders(), api.products({}, true)]);
+      const [s, o, products, support] = await Promise.all([
+        api.adminStats(),
+        api.adminOrders(),
+        api.products({}, true),
+        api.adminSupportUnreadCount(),
+      ]);
       setStats(s);
       setOrders(o);
+      setSupportUnread(Number(support?.count ?? 0));
       setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
       show(e.message, "error");
@@ -76,10 +83,10 @@ export default function ManagerDashboard() {
   };
 
   const statCards = stats ? [
-    { label: "إجمالي المنتجات", value: stats.products, icon: "shopping-cart", color: colors.brandPrimary },
-    { label: "قيد المراجعة", value: counts.pending || 0, icon: "truck", color: "#3C9C91" },
-    { label: "قيد التجهيز", value: counts.preparing || 0, icon: "check-circle", color: colors.success },
-    { label: "إجمالي الطلبات", value: stats.orders, icon: "users", color: colors.brandSecondary },
+    { label: "الإيرادات الكلية", value: formatPrice(stats.revenue || 0), icon: "bar-chart-2", color: colors.gold },
+    { label: "الطلبات النشطة", value: stats.active_orders ?? 0, icon: "activity", color: colors.brandSecondary },
+    { label: "طلبات مكتملة", value: stats.delivered ?? 0, icon: "check-circle", color: colors.success },
+    { label: "إجمالي المنتجات", value: stats.products ?? 0, icon: "shopping-cart", color: colors.brandPrimary },
   ] : [];
 
   const quickActions = [
@@ -92,8 +99,16 @@ export default function ManagerDashboard() {
     { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
      { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
             { icon: "image", label: "البانورامات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
+    { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
     { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
   ];
+
+  const attentionItems = [
+    { key: "orders", label: "طلبات تحتاج متابعة", detail: "طلبات لم تكتمل بعد", count: Number(stats?.active_orders ?? 0), icon: "clock", color: colors.brandSecondary, route: "/(manager)/orders" },
+    { key: "support", label: "رسائل دعم غير مقروءة", detail: "تحتاج إلى رد من فريق الدعم", count: supportUnread, icon: "message-circle", color: colors.brandPrimary, route: "/(manager)/support" },
+    { key: "returns", label: "مرتجعات بانتظار المراجعة", detail: "راجع الحالات المفتوحة قبل تأخير العميل", count: Number(stats?.returns ?? 0), icon: "rotate-ccw", color: colors.error, route: "/(manager)/returns" },
+    { key: "stock", label: "منتجات منخفضة المخزون", detail: "راجع الكميات قبل نفادها", count: lowStockProducts.length, icon: "alert-triangle", color: colors.gold, route: "/(manager)/products" },
+  ].filter((item) => item.count > 0);
 
   return (
     <View style={styles.root}>
@@ -146,6 +161,31 @@ export default function ManagerDashboard() {
           <View style={styles.quickGrid}>
             {quickActions.map((action) => <QuickAction key={action.testID} {...action} />)}
           </View>
+
+          <View style={styles.sectionTitle}>
+            <T weight="displayBold" size={type.lg}>يحتاج انتباهك</T>
+            <Feather name="bell" size={18} color={colors.error} />
+          </View>
+          {attentionItems.length === 0 ? (
+            <View style={styles.attentionEmpty} testID="attention-empty">
+              <Feather name="check-circle" size={20} color={colors.success} />
+              <T color={colors.muted} size={type.sm}>لا توجد تنبيهات عاجلة حالياً</T>
+            </View>
+          ) : (
+            <View style={styles.attentionPanel} testID="attention-panel">
+              {attentionItems.map((item) => (
+                <Pressable key={item.key} testID={"attention-" + item.key} onPress={() => router.push(item.route as any)} style={styles.attentionRow}>
+                  <View style={[styles.attentionIcon, { backgroundColor: item.color + "1A" }]}><Feather name={item.icon as any} size={18} color={item.color} /></View>
+                  <View style={styles.attentionCopy}>
+                    <T weight="semi">{item.label}</T>
+                    <T color={colors.muted} size={type.sm}>{item.detail}</T>
+                  </View>
+                  <View style={[styles.attentionCount, { backgroundColor: item.color + "1A" }]}><T weight="displayBold" color={item.color}>{item.count}</T></View>
+                  <Feather name="chevron-left" size={18} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           <View style={styles.stockSectionTitle}>
             <View style={styles.stockSectionHeading}>
@@ -270,6 +310,13 @@ const styles = StyleSheet.create({
   printAction: { flexDirection: "row-reverse", alignItems: "center", gap: 2, backgroundColor: "#fff", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.lg, marginBottom: spacing.sm },
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
+  attentionPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
+  attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  attentionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  attentionCopy: { flex: 1, alignItems: "flex-end" },
+  attentionCount: { minWidth: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  attentionEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   stockSectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, marginBottom: spacing.sm },
   stockSectionHeading: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   stockPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: "#F2D39A", paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
