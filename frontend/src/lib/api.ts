@@ -215,6 +215,8 @@ export const api = {
   reorderOrder: async (id: string) => { const result = await req("/orders/" + id + "/reorder", { method: "POST" }); if (result?.cart) setCachedCart(result.cart); return result; },
   adminStats: () => req("/admin/stats"),
   supportTickets: () => req("/support/tickets"),
+  supportUnreadCount: () => req("/support/unread-count"),
+  markSupportRead: (id: string) => req("/support/tickets/" + id + "/read", { method: "POST" }),
   supportTicket: (id: string) => req("/support/tickets/" + id),
   createSupportTicket: (body: any) => req("/support/tickets", { method: "POST", body: JSON.stringify(body) }),
   sendSupportMessage: (id: string, body: any) => req("/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
