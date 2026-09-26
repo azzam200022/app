@@ -9,7 +9,7 @@ import { T } from "@/src/components/ui";
 import { api, resolveImage, uploadImage } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
-type SupportTicket = { id: string; subject: string; category: string; status: string; message_count?: number; updated_at?: string; created_at?: string; };
+type SupportTicket = { id: string; subject: string; category: string; status: string; message_count?: number; customer_unread?: boolean; order_id?: string; updated_at?: string; created_at?: string; };
 type SupportMessage = { id: string; message: string; sender_role: "customer" | "manager"; sender_name?: string; attachment_url?: string | null; created_at?: string; };
 
 type TicketDetails = { ticket: SupportTicket; messages: SupportMessage[] };
@@ -31,6 +31,7 @@ export default function Support() {
   const initialTicketId = typeof params.ticketId === "string" ? params.ticketId : undefined;
   const initialOrderId = typeof params.orderId === "string" ? params.orderId : undefined;
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [selected, setSelected] = useState<TicketDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingTicket, setLoadingTicket] = useState(false);
@@ -44,12 +45,13 @@ export default function Support() {
 
   const loadTickets = useCallback(async () => {
     try {
-      const data = await api.supportTickets();
+      const [data, unread] = await Promise.all([api.supportTickets(), api.supportUnreadCount()]);
       const nextTickets = Array.isArray(data) ? data : [];
       setTickets(nextTickets);
+      setUnreadCount(Number(unread?.count) || 0);
       if (initialTicketId) {
         const found = nextTickets.find((item: SupportTicket) => item.id === initialTicketId);
-        if (found) await openTicket(found.id);
+        if (found) await openTicket(found.id, !!found.customer_unread);
       }
     } catch (error: any) {
       show(error.message, "error");
@@ -58,10 +60,13 @@ export default function Support() {
     }
   }, [initialTicketId, show]);
 
-  const openTicket = useCallback(async (ticketId: string) => {
+  const openTicket = useCallback(async (ticketId: string, wasUnread = false) => {
     setLoadingTicket(true);
     try {
+      await api.markSupportRead(ticketId);
       setSelected(await api.supportTicket(ticketId));
+      setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, customer_unread: false } : item));
+      if (wasUnread) setUnreadCount((current) => Math.max(0, current - 1));
     } catch (error: any) {
       show(error.message, "error");
     } finally {
@@ -70,6 +75,16 @@ export default function Support() {
   }, [show]);
 
   useEffect(() => { void loadTickets(); }, [loadTickets]);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const unread = await api.supportUnreadCount();
+        setUnreadCount(Number(unread?.count) || 0);
+      } catch {}
+    }, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   const pickImage = async (forReply = false) => {
     try {
@@ -147,7 +162,7 @@ export default function Support() {
           <Pressable testID="support-back" onPress={() => selected ? setSelected(null) : router.back()} style={styles.backButton}>
             <Feather name="arrow-right" size={22} color="#fff" />
           </Pressable>
-          <T weight="displayBold" size={type.xl} color="#fff">مراسلة الدعم</T>
+          <View style={styles.headerTitleWrap}><T weight="displayBold" size={type.xl} color="#fff">مراسلة الدعم</T>{unreadCount > 0 ? <View style={styles.unreadCount}><T size={type.xs} weight="bold" color="#fff">{unreadCount > 99 ? "99+" : unreadCount} جديد</T></View> : null}</View>
           <View style={styles.headerSpacer} />
         </View>
         <T color="rgba(255,255,255,0.78)" style={styles.headerHint}>{selected ? selected.ticket.subject : "نحن هنا لمساعدتك في أي مشكلة"}</T>
@@ -194,7 +209,7 @@ export default function Support() {
           </View>
         ) : (
           <View>
-            {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item) => <Pressable key={item.id} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><T color={colors.muted} size={type.sm} style={{ marginTop: 4 }}>{STATUS_LABEL[item.status] || item.status}</T></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
+            {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item) => <Pressable key={item.id} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id, !!item.customer_unread)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginTop: 4 }}><T color={colors.muted} size={type.sm}>{STATUS_LABEL[item.status] || item.status}</T>{item.customer_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>رد جديد</T></View> : null}</View></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
             <View style={styles.section}><T weight="displayBold" size={type.xl}>أرسل رسالة للدعم</T><T color={colors.muted} size={type.sm} style={styles.sectionHint}>صف المشكلة بالتفصيل، ويمكنك إرفاق صورة توضحها.</T></View>
             <View style={styles.formCard}>
               {initialOrderId ? <View style={styles.orderLink}><Feather name="package" size={17} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm} weight="semi">الدعم متعلق بالطلب: {initialOrderId}</T></View> : null}
@@ -218,6 +233,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  headerTitleWrap: { flex: 1, alignItems: "center", gap: spacing.xs },
+  unreadCount: { backgroundColor: colors.error, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
   headerSpacer: { width: 40 },
   headerHint: { textAlign: "center", marginTop: spacing.sm },
@@ -228,6 +245,7 @@ const styles = StyleSheet.create({
   ticketList: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden" },
   ticketItem: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   ticketItemText: { flex: 1 },
+  unreadPill: { borderRadius: radius.pill, backgroundColor: "#F8EAEA", paddingHorizontal: spacing.sm, paddingVertical: 3 },
   formCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   orderLink: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   label: { textAlign: "right", marginBottom: spacing.sm, marginTop: spacing.sm },
