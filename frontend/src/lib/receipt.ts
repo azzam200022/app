@@ -53,22 +53,28 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { font-family: -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; box-sizing: border-box; }
-    body { margin: 0; padding: 24px; color: #1A1F1B; direction: rtl; }
-    .head { text-align: center; border-bottom: 2px dashed #C2C0B6; padding-bottom: 14px; margin-bottom: 14px; }
-    .brand { font-size: 26px; font-weight: 800; color: #1F4529; margin: 0; }
-    .meta { display: flex; justify-content: space-between; font-size: 13px; color: #2C332D; margin-bottom: 6px; }
+    @page { size: 80mm auto; margin: 0; }
+    body { width: 80mm; margin: 0 auto; padding: 5mm 3mm; color: #1A1F1B; direction: rtl; font-size: 11px; }
+    .head { text-align: center; border-bottom: 1px dashed #888; padding-bottom: 8px; margin-bottom: 8px; }
+    .brand { font-size: 18px; font-weight: 800; color: #1F4529; margin: 0; }
+    .meta { display: flex; justify-content: space-between; font-size: 11px; color: #2C332D; margin-bottom: 5px; }
     .meta b { color: #1A1F1B; }
-    .box { border: 1px solid #E0DFD8; border-radius: 10px; padding: 12px 14px; margin: 10px 0; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-    th { background: #1F4529; color: #fff; padding: 8px 6px; font-weight: 700; }
-    td { padding: 8px 6px; border-bottom: 1px solid #E8E7E0; }
+    .box { border: 1px solid #D0D0D0; border-radius: 5px; padding: 7px 8px; margin: 7px 0; font-size: 11px; }
+    table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+    th { background: #1F4529; color: #fff; padding: 5px 2px; font-weight: 700; white-space: nowrap; }
+    td { padding: 5px 2px; border-bottom: 1px solid #E8E7E0; overflow-wrap: anywhere; }
+    th:nth-child(1), td:nth-child(1) { width: 8%; }
+    th:nth-child(2), td:nth-child(2) { width: 34%; }
+    th:nth-child(3), td:nth-child(3) { width: 14%; }
+    th:nth-child(4), td:nth-child(4) { width: 22%; }
+    th:nth-child(5), td:nth-child(5) { width: 22%; }
     .c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; color: #1F4529; }
-    .total { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 12px 14px; background: #E8EDE7; border-radius: 10px; }
-    .total .t { font-size: 20px; font-weight: 800; color: #1F4529; }
+    .total { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; padding: 8px 9px; background: #E8EDE7; border-radius: 5px; font-size: 11px; }
+    .total .t { font-size: 15px; font-weight: 800; color: #1F4529; white-space: nowrap; }
   </style></head>
   <body>
     <div class="head">
-      ${logoSrc ? `<img src="${logoSrc}" style="width:150px;height:auto;margin:0 auto 6px;display:block;" />` : ""}
+      ${logoSrc ? `<img src="${logoSrc}" style="width:42mm;height:auto;max-height:18mm;margin:0 auto 4px;display:block;" />` : ""}
       <h1 class="brand">بن سليم سوبرماركت</h1>
     </div>
     <div class="meta"><span>رقم الطلب: <b>#${String(order.id ?? "").replace("ORD", "")}</b></span></div>
