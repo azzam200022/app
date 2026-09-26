@@ -1186,7 +1186,7 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
             fav = {pid}
         alert = await db.product_availability_alerts.find_one({"user_id": user["user_id"], "product_id": pid})
         availability_alerted = bool(alert)
-    const product_view = clean_product(d, fav, availability_alerted)
+    product_view = clean_product(d, fav, availability_alerted)
     if not user or user.get("role") != "manager":
         product_view.pop("barcode", None)
     return product_view
