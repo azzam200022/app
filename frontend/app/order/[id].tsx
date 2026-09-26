@@ -211,6 +211,13 @@ export default function OrderDetail() {
           </View>
         ) : null}
 
+        {user?.role === "customer" && (
+          <Pressable testID="od-support" onPress={() => router.push({ pathname: "/(customer)/support", params: { orderId: String(order.id) } })} style={styles.supportButton}>
+            <Feather name="message-circle" size={18} color={colors.brandPrimary} />
+            <T color={colors.brandPrimary} weight="bold">تحتاج مساعدة بهذا الطلب؟</T>
+          </Pressable>
+        )}
+
         {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
           <Button title={cancelling ? "جارٍ إلغاء الطلب..." : "إلغاء الطلب"} variant="outline" icon="x" onPress={cancel} loading={cancelling} disabled={cancelling} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
@@ -243,6 +250,7 @@ const styles = StyleSheet.create({
   currentStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   currentStatusIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
+  supportButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.lg },
   cancelRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   itemsCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   item: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, padding: spacing.md },
