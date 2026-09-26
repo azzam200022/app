@@ -26,9 +26,10 @@ const STATUS_LABEL: Record<string, string> = { open: "مفتوحة", pending: "�
 export default function Support() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ ticketId?: string }>();
+  const params = useLocalSearchParams<{ ticketId?: string; orderId?: string }>();
   const { show } = useToast();
   const initialTicketId = typeof params.ticketId === "string" ? params.ticketId : undefined;
+  const initialOrderId = typeof params.orderId === "string" ? params.orderId : undefined;
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selected, setSelected] = useState<TicketDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,7 +107,7 @@ export default function Support() {
     setSending(true);
     try {
       const attachment_url = await uploadAttachment(attachmentUri);
-      const created = await api.createSupportTicket({ category, subject: subject.trim(), message: newMessage.trim(), attachment_url });
+      const created = await api.createSupportTicket({ category, subject: subject.trim(), message: newMessage.trim(), order_id: initialOrderId, attachment_url });
       setSelected(created);
       setTickets((current) => [created.ticket, ...current.filter((item) => item.id !== created.ticket.id)]);
       setSubject("");
@@ -196,6 +197,7 @@ export default function Support() {
             {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item) => <Pressable key={item.id} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><T color={colors.muted} size={type.sm} style={{ marginTop: 4 }}>{STATUS_LABEL[item.status] || item.status}</T></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
             <View style={styles.section}><T weight="displayBold" size={type.xl}>أرسل رسالة للدعم</T><T color={colors.muted} size={type.sm} style={styles.sectionHint}>صف المشكلة بالتفصيل، ويمكنك إرفاق صورة توضحها.</T></View>
             <View style={styles.formCard}>
+              {initialOrderId ? <View style={styles.orderLink}><Feather name="package" size={17} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm} weight="semi">الدعم متعلق بالطلب: {initialOrderId}</T></View> : null}
               <T weight="semi" style={styles.label}>نوع المشكلة</T>
               <View style={styles.categoryRow}>{CATEGORIES.map((item) => <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, category === item.value && styles.categoryChipActive]}><T color={category === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View>
               <T weight="semi" style={styles.label}>عنوان المشكلة</T>
@@ -227,6 +229,7 @@ const styles = StyleSheet.create({
   ticketItem: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   ticketItemText: { flex: 1 },
   formCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  orderLink: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   label: { textAlign: "right", marginBottom: spacing.sm, marginTop: spacing.sm },
   categoryRow: { flexDirection: "row-reverse", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md },
   categoryChip: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
