@@ -9,7 +9,7 @@ import { T } from "@/src/components/ui";
 import { api, resolveImage } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
-type SupportTicket = { id: string; subject: string; category: string; status: string; user_name?: string; user_email?: string; order_id?: string | null; order_summary?: any; message_count?: number; updated_at?: string; };
+type SupportTicket = { id: string; subject: string; category: string; status: string; user_name?: string; user_email?: string; order_id?: string | null; order_summary?: any; message_count?: number; manager_unread?: boolean; updated_at?: string; };
 type SupportMessage = { id: string; message: string; sender_role: "customer" | "manager"; sender_name?: string; attachment_url?: string | null; created_at?: string; };
 type TicketDetails = { ticket: SupportTicket; messages: SupportMessage[] };
 
@@ -51,6 +51,8 @@ export default function ManagerSupport() {
   const openTicket = async (ticketId: string) => {
     setLoadingTicket(true);
     try {
+      await api.adminMarkSupportRead(ticketId);
+      setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, manager_unread: false } : item));
       setSelected(await api.adminSupportTicket(ticketId));
     } catch (error: any) {
       show(error.message, "error");
@@ -124,7 +126,7 @@ export default function ManagerSupport() {
       ) : (
         <View style={styles.listRoot}>
           <ScrollView horizontal inverted showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}><View style={styles.filterRow}>{FILTERS.map((item) => <Pressable key={item.value} testID={"support-filter-" + item.value} onPress={() => setFilter(item.value)} style={[styles.filterChip, filter === item.value && styles.filterChipActive]}><T color={filter === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View></ScrollView>
-          {loading ? <ActivityIndicator color={colors.brandPrimary} size="large" style={{ marginTop: spacing["2xl"] }} /> : tickets.length === 0 ? <View style={styles.empty}><View style={styles.emptyIcon}><Feather name="inbox" size={28} color={colors.brandPrimary} /></View><T weight="bold" size={type.lg}>لا توجد تذاكر</T><T color={colors.muted} style={{ textAlign: "center", marginTop: spacing.xs }}>ستظهر رسائل الزبائن هنا عند إرسالها.</T></View> : <FlatList data={tickets} keyExtractor={(item) => item.id} contentContainerStyle={[styles.ticketList, { paddingBottom: insets.bottom + spacing.xl }]} renderItem={({ item }) => <Pressable testID={"manager-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketCard}><View style={styles.ticketCardTop}><View style={[styles.ticketStatus, item.status === "open" ? styles.openStatus : item.status === "pending" ? styles.pendingStatus : styles.closedStatus]}><T size={type.xs} weight="bold" color={item.status === "open" ? colors.success : item.status === "pending" ? colors.warning : colors.muted}>{STATUS_LABEL[item.status] || item.status}</T></View><T color={colors.muted} size={type.xs}>{CATEGORY_LABEL[item.category] || item.category}</T></View><T weight="bold" size={type.lg} style={styles.ticketSubject}>{item.subject}</T><View style={styles.ticketCustomer}><Feather name="user" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.user_name || "زبون"}</T>{item.order_id ? <><Feather name="package" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.order_id}</T></> : null}</View><View style={styles.ticketBottom}><T color={colors.muted} size={type.xs}>{item.message_count || 1} رسائل</T><Feather name="chevron-left" size={19} color={colors.muted} /></View></Pressable>} />}
+          {loading ? <ActivityIndicator color={colors.brandPrimary} size="large" style={{ marginTop: spacing["2xl"] }} /> : tickets.length === 0 ? <View style={styles.empty}><View style={styles.emptyIcon}><Feather name="inbox" size={28} color={colors.brandPrimary} /></View><T weight="bold" size={type.lg}>لا توجد تذاكر</T><T color={colors.muted} style={{ textAlign: "center", marginTop: spacing.xs }}>ستظهر رسائل الزبائن هنا عند إرسالها.</T></View> : <FlatList data={tickets} keyExtractor={(item) => item.id} contentContainerStyle={[styles.ticketList, { paddingBottom: insets.bottom + spacing.xl }]} renderItem={({ item }) => <Pressable testID={"manager-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketCard}><View style={styles.ticketCardTop}><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm }}><View style={[styles.ticketStatus, item.status === "open" ? styles.openStatus : item.status === "pending" ? styles.pendingStatus : styles.closedStatus]}><T size={type.xs} weight="bold" color={item.status === "open" ? colors.success : item.status === "pending" ? colors.warning : colors.muted}>{STATUS_LABEL[item.status] || item.status}</T></View>{item.manager_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>جديد</T></View> : null}</View><T color={colors.muted} size={type.xs}>{CATEGORY_LABEL[item.category] || item.category}</T></View><T weight="bold" size={type.lg} style={styles.ticketSubject}>{item.subject}</T><View style={styles.ticketCustomer}><Feather name="user" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.user_name || "زبون"}</T>{item.order_id ? <><Feather name="package" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.order_id}</T></> : null}</View><View style={styles.ticketBottom}><T color={colors.muted} size={type.xs}>{item.message_count || 1} رسائل</T><Feather name="chevron-left" size={19} color={colors.muted} /></View></Pressable>} />}
         </View>
       )}
     </View>
@@ -147,6 +149,7 @@ const styles = StyleSheet.create({
   ticketCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg },
   ticketCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   ticketStatus: { borderRadius: 16, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  unreadPill: { borderRadius: 16, backgroundColor: "#F8EAEA", paddingHorizontal: spacing.sm, paddingVertical: 4 },
   openStatus: { backgroundColor: "rgba(46,125,50,0.12)" },
   pendingStatus: { backgroundColor: "rgba(230,145,56,0.14)" },
   closedStatus: { backgroundColor: "rgba(117,117,117,0.12)" },
