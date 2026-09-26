@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, StyleSheet, FlatList, Pressable, Modal, ActivityIndicator, Switch, Platform } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, Modal, ActivityIndicator, Switch, Platform, TextInput } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,13 +14,24 @@ import { storage } from "@/src/utils/storage";
 
 const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered", "delivery_failed"];
 const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL };
+const PAGE_SIZE = 30;
+
+function normalizeOrdersResponse(result: any) {
+  return {
+    items: Array.isArray(result) ? result : (Array.isArray(result?.items) ? result.items : []),
+    pagination: result?.pagination || { page: 1, page_size: PAGE_SIZE, total: 0, has_more: false },
+  };
+}
 
 export default function ManagerOrders() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { show } = useToast();
   const [filter, setFilter] = useState("all");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<any[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, page_size: PAGE_SIZE, total: 0, has_more: false });
   const [loading, setLoading] = useState(true);
   const [assignFor, setAssignFor] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
@@ -60,31 +71,35 @@ export default function ManagerOrders() {
     if (fresh.length) persistPrinted();
   }, [printerUrl, persistPrinted]);
 
-  const load = useCallback(async (f: string) => {
-    setLoading(true);
-    try {
-      const data = await api.adminOrders(f);
-      setOrders(data);
-      const printData = autoRef.current && f !== "all" ? await api.adminOrders("all") : data;
-      autoPrintNew(printData);
-    } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
-  }, [show, autoPrintNew]);
+  const load = useCallback(async (f: string, page = 1, append = false, searchTerm = search) => {
+      setLoading(!append);
+      try {
+        const result = normalizeOrdersResponse(await api.adminOrders({ status: f, page, page_size: PAGE_SIZE, search: searchTerm }));
+        setOrders((current) => append ? [...current, ...result.items] : result.items);
+        setPagination(result.pagination);
+        const printData = autoRef.current
+          ? normalizeOrdersResponse(await api.adminOrders({ status: "all", page: 1, page_size: PAGE_SIZE })).items
+          : result.items;
+        await autoPrintNew(printData);
+      } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+    }, [show, autoPrintNew, search]);
 
-  useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter); }, [load, filter, printPrefsReady]));
+    useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter, 1, false, search); }, [load, filter, search, printPrefsReady]));
 
   // poll for new orders while auto-print is enabled
   useEffect(() => {
-    if (!autoPrint) return;
-    const iv = setInterval(async () => {
-      try {
-        const data = await api.adminOrders(filter);
-        setOrders(data);
-        const printData = filter !== "all" ? await api.adminOrders("all") : data;
-        autoPrintNew(printData);
-      } catch {}
-    }, 5000);
-    return () => clearInterval(iv);
-  }, [autoPrint, filter, autoPrintNew]);
+      if (!autoPrint) return;
+      const iv = setInterval(async () => {
+        try {
+          const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
+          setOrders(result.items);
+          setPagination(result.pagination);
+          const printData = normalizeOrdersResponse(await api.adminOrders({ status: "all", page: 1, page_size: PAGE_SIZE })).items;
+          await autoPrintNew(printData);
+        } catch {}
+      }, 5000);
+      return () => clearInterval(iv);
+    }, [autoPrint, filter, search, autoPrintNew]);
 
   const toggleAuto = async (v: boolean) => {
     setAutoPrint(v);
@@ -118,7 +133,7 @@ export default function ManagerOrders() {
   };
 
   const setStatus = async (id: string, status: string) => {
-    try { await api.adminSetStatus(id, status); show("تم تحديث الحالة"); load(filter); } catch (e: any) { show(e.message, "error"); }
+    try { await api.adminSetStatus(id, status); show("تم تحديث الحالة"); load(filter, 1, false, search); } catch (e: any) { show(e.message, "error"); }
   };
 
   const openAssign = async (order: any) => {
@@ -127,10 +142,26 @@ export default function ManagerOrders() {
   };
 
   const assign = async (agentId: string) => {
-    try { await api.adminAssign(assignFor.id, agentId); show("تم تعيين المندوب"); setAssignFor(null); load(filter); } catch (e: any) { show(e.message, "error"); }
+    try { await api.adminAssign(assignFor.id, agentId); show("تم تعيين المندوب"); setAssignFor(null); load(filter, 1, false, search); } catch (e: any) { show(e.message, "error"); }
   };
 
-  const nextAction = (o: any) => {
+  const submitSearch = () => {
+      const nextSearch = searchDraft.trim();
+      setSearch(nextSearch);
+      load(filter, 1, false, nextSearch);
+    };
+
+    const clearSearch = () => {
+      setSearchDraft("");
+      setSearch("");
+      load(filter, 1, false, "");
+    };
+
+    const loadMore = () => {
+      if (!loading && pagination.has_more) load(filter, pagination.page + 1, true, search);
+    };
+
+    const nextAction = (o: any) => {
     if (o.status === "pending") return { label: "تأكيد الطلب", icon: "check", onPress: () => setStatus(o.id, "confirmed") };
     if (o.status === "confirmed") return { label: "بدء التجهيز", icon: "package", onPress: () => setStatus(o.id, "preparing") };
     if (o.status === "preparing") return { label: "تم تجهيز الطلب", icon: "check-circle", onPress: () => setStatus(o.id, "ready_for_delivery") };
@@ -169,12 +200,27 @@ export default function ManagerOrders() {
             <T size={type.sm} color={colors.muted}>على Android والويب ستظهر نافذة النظام لاختيار الطابعة عند الطباعة.</T>
           </View>
         )}
-        <CategoryChips categories={FILTERS.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = FILTERS.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
+        <View style={styles.searchRow}>
+            <Feather name="search" size={18} color={colors.muted} />
+            <TextInput
+              testID="orders-search"
+              value={searchDraft}
+              onChangeText={setSearchDraft}
+              onSubmitEditing={submitSearch}
+              placeholder="ابحث برقم الطلب أو اسم العميل أو الهاتف"
+              placeholderTextColor={colors.muted}
+              returnKeyType="search"
+              style={styles.searchInput}
+              textAlign="right"
+            />
+            {searchDraft ? <Pressable testID="clear-orders-search" onPress={clearSearch}><Feather name="x-circle" size={18} color={colors.muted} /></Pressable> : null}
+          </View>
+                  <CategoryChips categories={FILTERS.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = FILTERS.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : orders.length === 0 ? (
         <View style={styles.center}><EmptyState icon="clipboard" title="لا توجد طلبات" /></View>
       ) : (
-        <FlatList data={orders} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+        <FlatList data={orders} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} onEndReached={loadMore} onEndReachedThreshold={0.5} ListHeaderComponent={<T color={colors.muted} size={type.sm} style={styles.resultsSummary}>عرض {orders.length} من {pagination.total} طلب</T>} ListFooterComponent={pagination.has_more ? <View style={styles.loadMoreFooter}><ActivityIndicator color={colors.brandPrimary} /></View> : null}
           renderItem={({ item }) => {
             const action = nextAction(item);
             return (
@@ -231,7 +277,11 @@ export default function ManagerOrders() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { backgroundColor: "#fff", paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  autoRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginHorizontal: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  searchRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
+    searchInput: { flex: 1, minHeight: 44, color: colors.onSurface, fontFamily: "Tajawal-Regular" },
+    resultsSummary: { textAlign: "right", marginBottom: spacing.xs },
+    loadMoreFooter: { paddingVertical: spacing.lg },
+      autoRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginHorizontal: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   autoLeft: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, flex: 1 },
   printIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   printerBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, alignSelf: "flex-end", marginHorizontal: spacing.lg, marginBottom: spacing.sm },
