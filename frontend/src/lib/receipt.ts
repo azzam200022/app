@@ -2,7 +2,6 @@ import * as Print from "expo-print";
 import { Platform } from "react-native";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
-import { STATUS_LABEL } from "@/src/lib/api";
 
 let _logoSrc: string | null = null;
 async function getLogoSrc(): Promise<string> {
@@ -36,10 +35,8 @@ function escapeHtml(value: unknown): string {
 }
 
 export function buildReceiptHTML(order: any, logoSrc = ""): string {
-  const date = new Date(order.created_at).toLocaleString("ar-IQ");
   const total = Number(order.total || 0);
-  const amountDue = Number(order.amount_due ?? total);
-  const rows = order.items
+  const rows = (Array.isArray(order.items) ? order.items : [])
     .map(
       (it: any, i: number) => `
       <tr>
@@ -59,7 +56,6 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
     body { margin: 0; padding: 24px; color: #1A1F1B; direction: rtl; }
     .head { text-align: center; border-bottom: 2px dashed #C2C0B6; padding-bottom: 14px; margin-bottom: 14px; }
     .brand { font-size: 26px; font-weight: 800; color: #1F4529; margin: 0; }
-    .sub { color: #4A524C; font-size: 13px; margin: 4px 0 0; }
     .meta { display: flex; justify-content: space-between; font-size: 13px; color: #2C332D; margin-bottom: 6px; }
     .meta b { color: #1A1F1B; }
     .box { border: 1px solid #E0DFD8; border-radius: 10px; padding: 12px 14px; margin: 10px 0; font-size: 13px; }
@@ -69,32 +65,19 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
     .c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; color: #1F4529; }
     .total { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 12px 14px; background: #E8EDE7; border-radius: 10px; }
     .total .t { font-size: 20px; font-weight: 800; color: #1F4529; }
-    .cod { text-align: center; margin-top: 12px; font-weight: 700; color: #8B3A3A; font-size: 15px; }
-    .foot { text-align: center; color: #8A8F88; font-size: 12px; margin-top: 18px; border-top: 2px dashed #C2C0B6; padding-top: 12px; }
-    .status { display:inline-block; background:#C5A059; color:#1A1A1A; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
   </style></head>
   <body>
     <div class="head">
       ${logoSrc ? `<img src="${logoSrc}" style="width:150px;height:auto;margin:0 auto 6px;display:block;" />` : ""}
       <h1 class="brand">بن سليم سوبرماركت</h1>
-      <p class="sub">فاتورة الطلب — الدفع عند الاستلام</p>
     </div>
-    <div class="meta"><span>رقم الطلب: <b>#${order.id.replace("ORD", "")}</b></span><span class="status">${STATUS_LABEL[order.status] || order.status}</span></div>
-    <div class="meta"><span>التاريخ: <b>${date}</b></span></div>
-    <div class="box">
-      <div><b>الزبون:</b> ${escapeHtml(order.customer_name)}</div>
-      <div><b>الهاتف:</b> ${escapeHtml(order.phone)}</div>
-      <div><b>العنوان:</b> ${escapeHtml(order.address)}</div>
-      ${order.area ? `<div><b>المنطقة:</b> ${escapeHtml(order.area)}</div>` : ""}
-      ${order.notes ? `<div><b>ملاحظات:</b> ${escapeHtml(order.notes)}</div>` : ""}
-    </div>
+    <div class="meta"><span>رقم الطلب: <b>#${String(order.id ?? "").replace("ORD", "")}</b></span></div>
+    <div class="box"><div><b>الزبون:</b> ${escapeHtml(order.customer_name)}</div></div>
     <table>
       <thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="total"><span>مجموع المبلغ</span><span class="t">${money(total)}</span></div>
-    ${amountDue !== total ? `<div class="cod">💵 المبلغ المطلوب تحصيله: ${money(amountDue)}</div>` : ""}
-    <div class="foot">شكراً لتسوقك من بن سليم سوبرماركت 🌿<br/>${order.id}</div>
   </body></html>`;
 }
 
