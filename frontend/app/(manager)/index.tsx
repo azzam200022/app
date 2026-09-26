@@ -34,12 +34,12 @@ export default function ManagerDashboard() {
     try {
       const [s, o, products, support] = await Promise.all([
         api.adminStats(),
-        api.adminOrders(),
+        api.adminOrders({ page: 1, page_size: 50 }),
         api.products({}, true),
         api.adminSupportUnreadCount(),
       ]);
       setStats(s);
-      setOrders(o);
+      setOrders(Array.isArray(o) ? o : (o?.items || []));
       setSupportUnread(Number(support?.count ?? 0));
       setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
