@@ -271,6 +271,28 @@ export const api = {
   deliveryCreateReturn: (id: string, body: any) => req("/delivery/orders/" + id + "/returns", { method: "POST", body: JSON.stringify(body) }),
 };
 
+export async function removeBackgroundImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string; processed: boolean }> {
+  let token = authToken;
+  if (!token) token = await storage.secureGet(TOKEN_KEY, "");
+  const form = new FormData();
+  const name = "product_" + Date.now() + ".jpg";
+  if (platformWeb) { const blob = await (await fetch(uri)).blob(); form.append("file", blob, name); }
+  else form.append("file", { uri, name, type: "image/jpeg" } as any);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000);
+  try {
+    const res = await fetch(BACKEND + "/api/remove-background", { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
+    const text = await res.text();
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) throw new Error(data?.detail || "تعذر عزل خلفية الصورة");
+    return data;
+  } catch (error: any) {
+    if (error?.name === "AbortError") throw new Error("استغرقت معالجة الصورة وقتاً طويلاً");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string }> {
   let token = authToken;
   if (!token) token = await storage.secureGet(TOKEN_KEY, "");
