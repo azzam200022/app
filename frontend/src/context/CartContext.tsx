@@ -39,9 +39,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setCart(empty);
       return;
     }
+    // A navigation to the cart can happen while an add/quantity request is
+    // still queued. Read only after those writes have settled.
+    await mutationQueue.current.catch(() => undefined);
+    const versionAtStart = mutationVersion.current;
     if (cartRef.current.items.length === 0) setLoading(true);
     try {
       const next = await api.cart(force);
+      // If a mutation started while the read was in flight, retry against the
+      // server instead of showing the older response.
+      if (versionAtStart !== mutationVersion.current) {
+        const latest = await api.cart(true);
+        cartRef.current = latest;
+        setCart(latest);
+        return;
+      }
       cartRef.current = next;
       setCart(next);
     } catch {

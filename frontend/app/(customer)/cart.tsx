@@ -18,7 +18,7 @@ export default function CartScreen() {
   const { cart, reload, setQty, remove, loading } = useCart();
   const { show } = useToast();
 
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { void reload(true); }, [reload]));
 
   const changeQty = (id: string, qty: number) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();

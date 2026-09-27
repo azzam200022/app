@@ -28,6 +28,7 @@ const CACHE_TTLS = {
 type CacheEntry = { value: any; expiresAt: number };
 const responseCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<any>>();
+const cacheEpochs = new Map<string, number>();
 const productCache = new Map<string, any>();
 
 function cloneValue<T>(value: T): T {
@@ -41,7 +42,7 @@ function setCachedValue(key: string, value: any, ttl: number) {
 
 function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, force = false): Promise<T> {
   const inFlight = inflightRequests.get(key);
-  if (inFlight) return inFlight.then(cloneValue) as Promise<T>;
+  if (inFlight && !force) return inFlight.then(cloneValue) as Promise<T>;
 
   const cached = responseCache.get(key);
   if (!force && cached) {
@@ -50,17 +51,28 @@ function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, fo
     return Promise.resolve(cloneValue(cached.value));
   }
 
+  const requestEpoch = cacheEpochs.get(key) || 0;
   const request = loader()
     .then((value) => {
-      setCachedValue(key, value, ttl);
+      // A cart mutation can finish while this read is still in flight. Do not
+      // let that older response overwrite the newer cart snapshot.
+      if ((cacheEpochs.get(key) || 0) === requestEpoch) {
+        setCachedValue(key, value, ttl);
+      }
       return cloneValue(value);
     })
-    .finally(() => inflightRequests.delete(key));
+    .finally(() => {
+      if (inflightRequests.get(key) === request) inflightRequests.delete(key);
+    });
   inflightRequests.set(key, request);
   return request;
 }
 
 export function setCachedCart(cart: any) {
+  cacheEpochs.set("cart", (cacheEpochs.get("cart") || 0) + 1);
+  // Let the next cart read start from the new server state instead of
+  // reusing a pre-mutation request that is still pending.
+  inflightRequests.delete("cart");
   setCachedValue("cart", cart, CACHE_TTLS.cart);
 }
 
