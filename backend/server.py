@@ -3029,6 +3029,31 @@ def get_object(path):
     return blob.download_as_bytes(), blob.content_type or "application/octet-stream"
 
 
+@api.post("/remove-background")
+async def remove_background(file: UploadFile = File(...), user=Depends(require_manager)):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="الصورة فارغة")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم الصورة كبير جداً")
+    try:
+        from rembg import remove as remove_bg
+        output = await run_in_threadpool(remove_bg, data)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="معالجة الصور غير مفعلة على الخادم")
+    except Exception as e:
+        logger.error(f"background removal failed: {e}")
+        raise HTTPException(status_code=502, detail="تعذر عزل المنتج عن الخلفية")
+    path = f"{APP_NAME}/processed/{user['user_id']}/{uuid.uuid4().hex}.png"
+    try:
+        await run_in_threadpool(put_object, path, output, "image/png")
+    except Exception as e:
+        logger.error(f"processed image upload failed: {e}")
+        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة المعزولة")
+    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": "background_removed", "created_at": now_utc().isoformat()})
+    return {"path": path, "url": f"/api/files/{path}", "processed": True}
+
+
 @api.post("/upload")
 async def upload(file: UploadFile = File(...), user=Depends(require_manager)):
     ext = (file.filename or "img.jpg").rsplit(".", 1)[-1].lower()
