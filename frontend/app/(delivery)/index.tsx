@@ -9,7 +9,8 @@ import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, EmptyState } from "@/src/components/ui";
 import { StatusPill } from "../(customer)/orders";
 import { api, formatPrice, resolveImage } from "@/src/lib/api";
-import { staticMapUrl, openDirections } from "@/src/lib/maps";
+import { openDirections } from "@/src/lib/maps";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 import { useEffect } from "react";
@@ -331,10 +332,12 @@ export default function DeliveryHome() {
       )}
 
       {item.location ? (
-        <Pressable testID={`map-${item.id}`} onPress={() => openDirections(item.location.lat, item.location.lng, item.address)} style={styles.mapPreview}>
-          <Image source={{ uri: staticMapUrl(item.location.lat, item.location.lng, 600, 200) }} style={styles.mapImg} contentFit="cover" />
-          <View style={styles.mapPill}><Feather name="navigation" size={13} color="#fff" /><T size={type.sm} weight="bold" color="#fff">تتبّع على الخريطة</T></View>
-        </Pressable>
+        <View style={styles.mapPreview}>
+          <InteractiveMap center={item.location} destination={item.location} style={styles.mapImg} />
+          <Pressable testID={`map-${item.id}`} onPress={() => openDirections(item.location.lat, item.location.lng, item.address)} style={styles.mapPill}>
+            <Feather name="navigation" size={13} color="#fff" /><T size={type.sm} weight="bold" color="#fff">فتح الملاحة الحقيقية</T>
+          </Pressable>
+        </View>
       ) : null}
 
       {item.delivery_state !== "available" && (
