@@ -8,7 +8,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
-import { api, uploadImage, resolveImage } from "@/src/lib/api";
+import { api, uploadImage, removeBackgroundImage, resolveImage, formatPrice } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
 export default function Scan() {
@@ -30,6 +30,8 @@ export default function Scan() {
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
+  const [processingImage, setProcessingImage] = useState(false);
   const [suggestedImg, setSuggestedImg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -43,7 +45,7 @@ export default function Scan() {
   };
   const pickResult = (r: any) => {
     setBarcode(r.barcode); setName(r.name); setCategory(r.category); setBranchId(""); setSuggestedImg(r.suggested_image);
-    setPrice(r.price ? String(r.price) : ""); setOldPrice(r.old_price ? String(r.old_price) : ""); setImageUri(null);
+    setPrice(r.price ? String(r.price) : ""); setOldPrice(r.old_price ? String(r.old_price) : ""); setImageUri(null); setProcessedImageUri(null);
     setMode("form");
   };
 
@@ -90,6 +92,7 @@ export default function Scan() {
         show("لم يوجد في الكتالوج، أدخل البيانات يدوياً", "info");
       }
       setImageUri(null);
+      setProcessedImageUri(null);
       setMode("form");
     } catch (e: any) { show(e.message, "error"); }
     finally { setLooking(false); scannedRef.current = false; }
@@ -102,14 +105,39 @@ export default function Scan() {
     doLookup(data);
   };
 
+  const processProductImage = async (uri: string) => {
+    setImageUri(uri);
+    setProcessedImageUri(null);
+    setProcessingImage(true);
+    try {
+      const result = await removeBackgroundImage(uri, Platform.OS === "web");
+      setProcessedImageUri(result.url);
+      show("تم عزل المنتج عن الخلفية ✓", "info");
+    } catch (e: any) {
+      show(e.message || "تعذر عزل الخلفية، سنستخدم الصورة الأصلية", "error");
+    } finally {
+      setProcessingImage(false);
+    }
+  };
+
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       if (!perm.canAskAgain) return show("فعّل صلاحية الصور من الإعدادات", "error");
       return show("نحتاج صلاحية الوصول للصور", "error");
     }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7, allowsEditing: true, aspect: [1, 1] });
-    if (!res.canceled && res.assets?.[0]) setImageUri(res.assets[0].uri);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+    if (!res.canceled && res.assets?.[0]) await processProductImage(res.assets[0].uri);
+  };
+
+  const takeProductPhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      if (!perm.canAskAgain) return show("فعّل صلاحية الكاميرا من الإعدادات", "error");
+      return show("نحتاج صلاحية الكاميرا لالتقاط صورة المنتج", "error");
+    }
+    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+    if (!res.canceled && res.assets?.[0]) await processProductImage(res.assets[0].uri);
   };
 
   const save = async () => {
@@ -117,8 +145,9 @@ export default function Scan() {
     if (!price || Number(price) <= 0) return show("أدخل سعراً صحيحاً", "error");
     setSaving(true);
     try {
-      let image_url = suggestedImg;
-      if (imageUri) {
+      if (processingImage) return show("انتظر حتى يكتمل تجهيز الصورة", "info");
+      let image_url = processedImageUri || suggestedImg;
+      if (imageUri && !processedImageUri) {
         const up = await uploadImage(imageUri, Platform.OS === "web");
         image_url = up.url;
       }
@@ -127,14 +156,14 @@ export default function Scan() {
         old_price: oldPrice ? Number(oldPrice) : null, image_url, stock: 100, is_published: true,
       });
       show("تمت إضافة المنتج بنجاح 🎉");
-      setMode("scan"); setManual(""); setName(""); setPrice(""); setOldPrice(""); setImageUri(null); setBarcode(""); setBranchId("");
+      setMode("scan"); setManual(""); setName(""); setPrice(""); setOldPrice(""); setImageUri(null); setProcessedImageUri(null); setBarcode(""); setBranchId("");
     } catch (e: any) { show(e.message, "error"); }
     finally { setSaving(false); }
   };
 
   // FORM view
   if (mode === "form") {
-    const previewImg = imageUri || resolveImage(suggestedImg || "");
+    const previewImg = processedImageUri || imageUri || resolveImage(suggestedImg || "");
     return (
       <View style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -145,15 +174,38 @@ export default function Scan() {
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled">
           {!!barcode && <View style={styles.bcChip}><Feather name="maximize" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>باركود: {barcode}</T></View>}
 
-          <Pressable testID="pick-image" onPress={pickImage} style={styles.imagePicker}>
-            {previewImg ? (
-              <Image source={{ uri: previewImg }} style={StyleSheet.absoluteFill} contentFit="cover" />
-            ) : null}
-            <View style={[styles.imageOverlay, previewImg ? { backgroundColor: "rgba(0,0,0,0.35)" } : {}]}>
-              <Feather name="camera" size={26} color={previewImg ? "#fff" : colors.brandPrimary} />
-              <T weight="semi" color={previewImg ? "#fff" : colors.onSurface}>{previewImg ? "تغيير الصورة" : "أضف صورة من الاستديو"}</T>
+          <View style={styles.templatePreview}>
+            <View style={styles.templateBrandRow}>
+              <Image source={require("../../assets/images/logo-binsaleem.png")} style={styles.templateLogo} contentFit="contain" />
+              <View style={styles.templateBrandCopy}>
+                <T weight="displayBold" size={type.sm} color={colors.brandPrimary}>سوق بن سليم</T>
+                <T size={type.xs} color={colors.muted}>منتج مختار بعناية</T>
+              </View>
+              <View style={styles.templateGoldDot} />
             </View>
-          </Pressable>
+            <View style={styles.templateCanvas}>
+              {previewImg ? <Image source={{ uri: previewImg }} style={styles.templateProductImage} contentFit="contain" /> : <Feather name="package" size={42} color={colors.gold} />}
+              {processingImage && <View style={styles.processingOverlay}><ActivityIndicator color="#fff" size="large" /><T color="#fff" weight="semi">نعزل المنتج عن الخلفية…</T></View>}
+            </View>
+            <View style={styles.templateFooter}>
+              <View style={styles.templateProductCopy}>
+                <T weight="displayBold" numberOfLines={1}>{name || "اسم المنتج"}</T>
+                <T color={colors.brandPrimary} weight="displayBold" size={type.lg}>{price ? formatPrice(Number(price)) : "السعر"}</T>
+              </View>
+              <View style={styles.templateBadge}><T size={type.xs} weight="bold" color={colors.brandPrimary}>متوفر</T></View>
+            </View>
+          </View>
+          <View style={styles.photoActions}>
+            <Pressable testID="take-product-photo" onPress={takeProductPhoto} style={styles.photoAction}>
+              <Feather name="camera" size={18} color={colors.brandPrimary} />
+              <T size={type.sm} weight="semi" color={colors.brandPrimary}>التقاط صورة</T>
+            </Pressable>
+            <Pressable testID="pick-image" onPress={pickImage} style={styles.photoAction}>
+              <Feather name="image" size={18} color={colors.onSurfaceSecondary} />
+              <T size={type.sm} weight="semi" color={colors.onSurfaceSecondary}>اختيار من الجهاز</T>
+            </Pressable>
+          </View>
+          <T color={colors.muted} size={type.xs} style={styles.imageHint}>الصورة تُعالج داخل خادم التطبيق مجانًا، ثم يظهر المنتج بخلفية شفافة داخل القالب.</T>
 
           <Label text="اسم المنتج" />
           <TextInput testID="f-name" style={styles.input} value={name} onChangeText={setName} placeholder="اسم المنتج" placeholderTextColor={colors.muted} textAlign="right" />
@@ -263,7 +315,7 @@ export default function Scan() {
           </Pressable>
         ))}
 
-        <Pressable testID="manual-new" onPress={() => { setBarcode(""); setName(""); setCategory("أخرى"); setSuggestedImg(null); setImageUri(null); setPrice(""); setOldPrice(""); setMode("form"); }} style={styles.manualNew}>
+        <Pressable testID="manual-new" onPress={() => { setBarcode(""); setName(""); setCategory("أخرى"); setSuggestedImg(null); setImageUri(null); setProcessedImageUri(null); setPrice(""); setOldPrice(""); setMode("form"); }} style={styles.manualNew}>
           <Feather name="edit-3" size={16} color={colors.brandPrimary} />
           <T color={colors.brandPrimary} weight="semi">إضافة منتج بدون باركود</T>
         </Pressable>
@@ -292,6 +344,20 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   input: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, marginBottom: spacing.sm },
   bcChip: { flexDirection: "row-reverse", alignSelf: "flex-start", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, marginBottom: spacing.md },
+  templatePreview: { backgroundColor: "#fff", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden", shadowColor: "#15302E", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  templateBrandRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.brandTertiary },
+  templateLogo: { width: 42, height: 28 },
+  templateBrandCopy: { flex: 1, alignItems: "flex-end" },
+  templateGoldDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
+  templateCanvas: { height: 220, backgroundColor: "#F8F5EC", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  templateProductImage: { width: "88%", height: "88%" },
+  processingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(14,91,91,0.82)", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  templateFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, padding: spacing.md },
+  templateProductCopy: { flex: 1, alignItems: "flex-end", gap: 2 },
+  templateBadge: { backgroundColor: colors.brandTertiary, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 5 },
+  photoActions: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.sm },
+  photoAction: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.sm },
+  imageHint: { textAlign: "right", marginTop: spacing.sm, lineHeight: 17 },
   imagePicker: { height: 180, borderRadius: radius.md, borderWidth: 2, borderColor: colors.border, borderStyle: "dashed", backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
   imageOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   catChip: { paddingHorizontal: spacing.lg, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", flexShrink: 0, borderWidth: 1 },
