@@ -25,7 +25,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
-  const isPreview = __DEV__;
+  // Keep preview roles available on Replit web preview; Firebase popup auth rejects temporary preview domains.
+  const isPreview = __DEV__ || Platform.OS === "web";
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured";
   const [request, response, promptAsync] = Google.useAuthRequest({
