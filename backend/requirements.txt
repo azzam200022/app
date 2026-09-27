@@ -12,3 +12,4 @@ requests>=2.31.0
 python-multipart>=0.0.9
 firebase-admin>=6.5.0
 pypdf>=5.0.0
+rembg>=2.0.67
