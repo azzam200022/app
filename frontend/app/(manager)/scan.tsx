@@ -163,7 +163,7 @@ export default function Scan() {
 
   // FORM view
   if (mode === "form") {
-    const previewImg = processedImageUri || imageUri || resolveImage(suggestedImg || "");
+    const previewImg = processedImageUri ? resolveImage(processedImageUri) : imageUri || resolveImage(suggestedImg || "");
     return (
       <View style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
