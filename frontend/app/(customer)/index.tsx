@@ -28,7 +28,7 @@ export default function Home() {
   const [cats, setCats] = useState<any[]>(() => getCachedCategories() || []);
   const [selected, setSelected] = useState("الكل");
   const [products, setProducts] = useState<any[]>(() => getCachedProducts() || []);
-  const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 6) || []);
+  const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 2) || []);
   const [bestsellers, setBestsellers] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>(() => getCachedBanners() || []);
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -96,13 +96,13 @@ export default function Home() {
     ]);
     const [c, o, p, b, best] = results;
     if (c.status === "fulfilled") setCats(c.value);
-    if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 6) : []);
+    if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 2) : []);
     if (p.status === "fulfilled") setProducts(p.value);
     if (b.status === "fulfilled") {
       setBanners(Array.isArray(b.value) ? b.value : []);
       setBannerIndex(0);
     }
-    if (best.status === "fulfilled") setBestsellers(Array.isArray(best.value) ? best.value.slice(0, 10) : []);
+    if (best.status === "fulfilled") setBestsellers(Array.isArray(best.value) ? best.value.slice(0, 3) : []);
     const failed = results.slice(0, 4).find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) show(failed.reason?.message || "تعذر تحميل بعض البيانات", "error");
     setLoading(false);
@@ -227,9 +227,9 @@ export default function Home() {
             data={bestsellers}
             keyExtractor={(i) => "bestseller-" + i.id}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 156 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
             )}
           />
         </View>
@@ -251,9 +251,9 @@ export default function Home() {
             data={offers}
             keyExtractor={(i) => i.id}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 156 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
             )}
           />
         </View>
@@ -307,7 +307,7 @@ export default function Home() {
            numColumns={2}
            ListHeaderComponent={header}
            columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
+           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.sm }}
            initialNumToRender={12}
            maxToRenderPerBatch={8}
            windowSize={5}
@@ -342,29 +342,29 @@ function ProductGridSkeleton() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider, overflow: "hidden", zIndex: 10 },
+  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   fullHeader: { overflow: "hidden" },
-  topRow: { height: 40, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
-  topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  searchPrompt: { height: 52, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.divider, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  iconBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
+  topRow: { height: 38, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  searchPrompt: { height: 48, marginHorizontal: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  iconBtn: { width: 38, height: 38, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
   compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
   compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
   brandLogo: { width: 118, height: 34 },
-  hero: { height: 190, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse },
-  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 190 },
+  hero: { height: 180, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 180 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.gold },
-  heroContent: { flex: 1, padding: spacing.lg, paddingBottom: spacing.xl, justifyContent: "flex-end", alignItems: "flex-start" },
+  heroContent: { flex: 1, padding: spacing.lg, paddingBottom: spacing.lg, justifyContent: "flex-end", alignItems: "flex-start" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
-  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.lg, marginBottom: spacing.sm },
   sectionHint: { marginTop: 2 },
-  sectionRule: { flex: 1, height: 1, backgroundColor: colors.divider, marginStart: spacing.lg, marginTop: spacing.md },
+  sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: spacing.md, borderRadius: 1 },
   loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing["2xl"] },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
