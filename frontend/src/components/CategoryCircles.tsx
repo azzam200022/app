@@ -30,10 +30,10 @@ export function CategoryCircles({ items, selected, onSelect }: { items: { name: 
 }
 
 const styles = StyleSheet.create({
-  row: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  item: { alignItems: "center", width: 74, flexShrink: 0 },
-  circle: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 2, borderColor: "transparent" },
-  circleActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary },
+  row: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  item: { alignItems: "center", width: 70, flexShrink: 0 },
+  circle: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1.5, borderColor: "transparent" },
+  circleActive: { borderColor: colors.gold, backgroundColor: colors.brandPrimary },
   img: { width: "100%", height: "100%" },
-  label: { marginTop: spacing.xs, textAlign: "center", maxWidth: 74 },
+  label: { marginTop: spacing.xs, textAlign: "center", maxWidth: 70 },
 });
