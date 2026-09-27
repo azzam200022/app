@@ -67,18 +67,29 @@ export default function ManagerProducts() {
           renderItem={({ item }) => (
             <View style={styles.card} testID={`mp-${item.id}`}>
               <Image source={{ uri: resolveImage(item.image_url) }} style={styles.img} contentFit="cover" />
-              <View style={{ flex: 1 }}>
-                <T weight="semi" numberOfLines={2}>{item.name}</T>
-                <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 2 }}>{formatPrice(item.price)}</T>
-                <T color={item.stock > 0 ? colors.muted : colors.error} size={type.sm}>{item.category} • المخزون: {item.stock ?? 0}</T>
+              <View style={styles.productInfo}>
+                <View style={styles.productTopLine}>
+                  <T weight="semi" numberOfLines={2} style={styles.productName}>{item.name}</T>
+                  <View style={[styles.stockPill, Number(item.stock ?? 0) <= 0 ? styles.stockOut : Number(item.stock ?? 0) <= 5 ? styles.stockLow : styles.stockOk]}>
+                    <T size={10} weight="bold" color={Number(item.stock ?? 0) <= 0 ? colors.error : Number(item.stock ?? 0) <= 5 ? colors.gold : colors.success}>{Number(item.stock ?? 0) <= 0 ? "نفد" : Number(item.stock ?? 0) <= 5 ? `باقي ${item.stock}` : `${item.stock} متوفر`}</T>
+                  </View>
+                </View>
+                <View style={styles.priceRow}>
+                  <T weight="displayBold" color={colors.brandPrimary}>{formatPrice(item.price)}</T>
+                  {item.old_price && item.old_price > item.price ? <T size={type.sm} color={colors.muted} style={styles.oldPrice}>{formatPrice(item.old_price)}</T> : null}
+                </View>
+                <View style={styles.metaRow}>
+                  <T color={colors.muted} size={type.xs} numberOfLines={1}>{item.category || "بدون تصنيف"}</T>
+                  {item.old_price && item.old_price > item.price ? <T color={colors.error} size={type.xs} weight="bold">خصم {Math.round((1 - item.price / item.old_price) * 100)}%</T> : null}
+                </View>
                 <Pressable testID={`coming-${item.id}`} onPress={() => toggleComing(item)} style={[styles.comingBtn, item.coming_soon && styles.comingActive]}>
                   <Feather name={item.coming_soon ? "clock" : "check"} size={12} color={item.coming_soon ? colors.gold : colors.brandPrimary} />
-                  <T size={11} weight="bold" color={item.coming_soon ? colors.gold : colors.brandPrimary}>{item.coming_soon ? "يتوفر قريباً (اضغط للإتاحة)" : "متاح — اجعله يتوفر قريباً"}</T>
+                  <T size={11} weight="bold" color={item.coming_soon ? colors.gold : colors.brandPrimary}>{item.coming_soon ? "إتاحة المنتج للبيع" : "وضعه كيتوفر قريباً"}</T>
                 </Pressable>
               </View>
               <View style={styles.actions}>
-                <Pressable testID={`edit-${item.id}`} onPress={() => openEdit(item)} style={styles.actionBtn}><Feather name="edit-2" size={18} color={colors.brandPrimary} /></Pressable>
-                <Pressable testID={`del-${item.id}`} onPress={() => del(item.id)} style={styles.actionBtn}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
+                <Pressable testID={`edit-${item.id}`} accessibilityLabel={`تعديل ${item.name}`} onPress={() => openEdit(item)} style={[styles.actionBtn, styles.editBtn]} hitSlop={6}><Feather name="edit-2" size={18} color={colors.brandPrimary} /></Pressable>
+                <Pressable testID={`del-${item.id}`} accessibilityLabel={`حذف ${item.name}`} onPress={() => del(item.id)} style={[styles.actionBtn, styles.deleteBtn]} hitSlop={6}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
               </View>
             </View>
           )} />
@@ -132,12 +143,24 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row-reverse", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
-  img: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
+  card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#15302E", shadowOpacity: 0.05, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  img: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
+  productInfo: { flex: 1, minWidth: 0 },
+  productTopLine: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.xs },
+  productName: { flex: 1, minHeight: 38 },
+  stockPill: { borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  stockOk: { backgroundColor: "#E6F5EF" },
+  stockLow: { backgroundColor: "#FFF3D6" },
+  stockOut: { backgroundColor: "#FDE8E7" },
+  priceRow: { flexDirection: "row-reverse", alignItems: "baseline", gap: spacing.sm, marginTop: spacing.xs },
+  oldPrice: { textDecorationLine: "line-through" },
+  metaRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, marginTop: 2 },
   actions: { gap: spacing.sm },
-  comingBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm },
+  comingBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: spacing.sm, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.sm },
   comingActive: { backgroundColor: "#FBF1DE" },
-  actionBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  actionBtn: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  editBtn: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+  deleteBtn: { backgroundColor: "#FDE8E7", borderColor: "#F4C4C2" },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl },
   input: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 52, fontFamily: font.body, fontSize: type.base, color: colors.onSurface },
