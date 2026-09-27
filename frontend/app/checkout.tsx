@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator, Modal, Animated, PanResponder } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator, Modal } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -7,8 +7,9 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { api, formatPrice } from "@/src/lib/api";
-import { staticMapUrl, staticMapBackgroundUrl } from "@/src/lib/maps";
+import { staticMapUrl } from "@/src/lib/maps";
 import { useCart } from "@/src/context/CartContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
@@ -54,8 +55,6 @@ export default function Checkout() {
   const [locating, setLocating] = useState(false);
   const [manualMapOpen, setManualMapOpen] = useState(false);
   const [manualMapCenter, setManualMapCenter] = useState(DEFAULT_MAP_CENTER);
-  const [manualMapSize, setManualMapSize] = useState({ width: 0, height: 0 });
-  const manualMapOffset = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -177,28 +176,6 @@ export default function Checkout() {
     setManualMapSize({ width: 0, height: 0 });
     setManualMapOpen(true);
   };
-
-  const manualMapPanResponder = React.useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
-    onPanResponderGrant: () => manualMapOffset.setValue({ x: 0, y: 0 }),
-    onPanResponderMove: Animated.event([null, { dx: manualMapOffset.x, dy: manualMapOffset.y }], { useNativeDriver: false }),
-    onPanResponderRelease: (_, gesture) => {
-      if (manualMapSize.width && manualMapSize.height) {
-        const nextCenter = mapTapToCoordinates(
-          manualMapCenter,
-          manualMapSize.width / 2 - gesture.dx,
-          manualMapSize.height / 2 - gesture.dy,
-          manualMapSize.width,
-          manualMapSize.height,
-          600,
-          450,
-        );
-        setManualMapCenter(nextCenter);
-      }
-      manualMapOffset.setValue({ x: 0, y: 0 });
-    },
-  }), [manualMapCenter, manualMapOffset, manualMapSize]);
 
   const confirmManualLocation = async () => {
     await setLocationAndQuote(manualMapCenter, "manual");
@@ -358,16 +335,8 @@ export default function Checkout() {
               <T weight="bold" color={colors.brandPrimary}>{quoteLoading ? "جارٍ الحفظ..." : "حفظ"}</T>
             </Pressable>
           </View>
-          <View
-            style={styles.manualPickerMap}
-            onLayout={(event) => setManualMapSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
-            accessibilityRole="adjustable"
-            accessibilityLabel="حرّك الخريطة لوضع دبوس موقع التوصيل"
-            {...manualMapPanResponder.panHandlers}
-          >
-            <Animated.View style={[styles.manualPickerImageLayer, { transform: [{ scale: 1.12 }, ...manualMapOffset.getTranslateTransform()] }]} pointerEvents="none">
-              <Image source={{ uri: staticMapBackgroundUrl(manualMapCenter.lat, manualMapCenter.lng, 600, 450, 15) }} style={styles.manualPickerImage} contentFit="fill" />
-            </Animated.View>
+          <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
+            <InteractiveMap center={manualMapCenter} zoom={15} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
             <View pointerEvents="none" style={styles.manualPickerPin}>
               <View style={styles.manualPickerPinDot} />
               <Feather name="map-pin" size={42} color={colors.error} />
@@ -378,7 +347,7 @@ export default function Checkout() {
               <Feather name="map-pin" size={20} color={colors.brandPrimary} />
               <T weight="bold">حرّك الخريطة لوضع الدبوس في المنتصف</T>
             </View>
-            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>حرّك الخريطة تحت الدبوس حتى تصل للموقع الصحيح، ثم احفظه للعودة إلى العنوان.</T>
+            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>اسحب الخريطة الحقيقية تحت الدبوس حتى تصل للموقع الصحيح، ثم احفظه للعودة إلى العنوان.</T>
             <Pressable onPress={confirmManualLocation} disabled={quoteLoading} style={styles.manualPickerSave}>
               {quoteLoading ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={18} color="#fff" />}
               <T weight="bold" color="#fff">{quoteLoading ? "جارٍ حفظ الموقع..." : "حفظ الموقع والعودة"}</T>
@@ -432,8 +401,6 @@ const styles = StyleSheet.create({
   manualPicker: { flex: 1, backgroundColor: colors.surface },
   manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
   manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
-  manualPickerImageLayer: { position: "absolute", width: "100%", height: "100%" },
-  manualPickerImage: { width: "100%", height: "100%" },
   manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 52, marginLeft: -26, marginTop: -44, alignItems: "center", justifyContent: "center" },
   manualPickerPinDot: { position: "absolute", bottom: 3, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
   manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
