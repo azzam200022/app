@@ -8,7 +8,8 @@ import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
 import { api, getCachedOrders, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
 import { printOrder } from "@/src/lib/receipt";
-import { staticMapUrl, staticMapUrlTwo, openDirections } from "@/src/lib/maps";
+import { openDirections } from "@/src/lib/maps";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -46,7 +47,7 @@ export default function OrderDetail() {
   // live refresh while out for delivery (tracks agent location)
   useEffect(() => {
     if (!order || order.status !== "out_for_delivery") return;
-    const iv = setInterval(async () => { try { setOrder(await api.order(id!, true)); } catch {} }, 15000);
+    const iv = setInterval(async () => { try { setOrder(await api.order(id!, true)); } catch {} }, 5000);
     return () => clearInterval(iv);
   }, [order?.status, id]);
 
@@ -197,17 +198,31 @@ export default function OrderDetail() {
         </View>
 
         {order.location ? (
-          <Pressable testID="od-map" onPress={() => openDirections(order.location.lat, order.location.lng, order.address)} style={styles.mapCard}>
-            <Image source={{ uri: staticMapUrl(order.location.lat, order.location.lng, 600, 220) }} style={styles.mapImg} contentFit="cover" />
-            <View style={styles.mapFoot}><Feather name="navigation" size={15} color={colors.brandPrimary} /><T weight="bold" size={type.sm} color={colors.brandPrimary}>موقع التوصيل المحدد — فتح في الخرائط</T></View>
-          </Pressable>
-        ) : null}
-
-        {order.status === "out_for_delivery" && order.agent_location && order.location ? (
           <View style={styles.mapCard}>
-            <View style={styles.liveBadge}><View style={styles.liveDot} /><T size={type.sm} weight="bold" color="#fff">تتبّع مباشر</T></View>
-            <Image source={{ uri: staticMapUrlTwo(order.location.lat, order.location.lng, order.agent_location.lat, order.agent_location.lng, 600, 240) }} style={styles.mapImg} contentFit="cover" />
-            <View style={styles.mapFoot}><Feather name="truck" size={15} color={colors.brandPrimary} /><T weight="bold" size={type.sm} color={colors.brandPrimary}>مندوبك {order.agent_name || ""} في الطريق إليك الآن</T></View>
+            {order.status === "out_for_delivery" && (
+              <View style={styles.liveBadge}><View style={styles.liveDot} /><T size={type.sm} weight="bold" color="#fff">تتبّع مباشر GPS</T></View>
+            )}
+            <InteractiveMap
+              center={order.location}
+              destination={order.location}
+              agent={order.status === "out_for_delivery" ? order.agent_location : null}
+              followAgent={order.status === "out_for_delivery"}
+              style={styles.mapImg}
+            />
+            <View style={styles.mapFoot}>
+              <Feather name={order.status === "out_for_delivery" ? "truck" : "navigation"} size={15} color={colors.brandPrimary} />
+              <T weight="bold" size={type.sm} color={colors.brandPrimary} style={{ flex: 1 }}>
+                {order.status === "out_for_delivery"
+                  ? order.agent_location
+                    ? "مندوبك " + (order.agent_name || "") + " يتحرك الآن على الخريطة — آخر تحديث " + new Date(order.agent_location.at).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })
+                    : "بانتظار أول تحديث GPS من المندوب"
+                  : "موقع التوصيل المحدد — حرّك الخريطة أو افتح الملاحة"}
+              </T>
+            </View>
+            <Pressable testID="od-map-directions" onPress={() => openDirections(order.location.lat, order.location.lng, order.address)} style={styles.mapDirections}>
+              <Feather name="navigation" size={15} color={colors.brandPrimary} />
+              <T weight="bold" size={type.sm} color={colors.brandPrimary}>فتح الملاحة إلى موقع الزبون</T>
+            </Pressable>
           </View>
         ) : null}
 
@@ -264,6 +279,7 @@ const styles = StyleSheet.create({
   mapCard: { marginTop: spacing.lg, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
   mapImg: { width: "100%", height: 150, backgroundColor: colors.surfaceSecondary },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md },
+  mapDirections: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
   liveBadge: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.error, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff" },
 });
