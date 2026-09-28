@@ -12,20 +12,6 @@ import { useToast } from "@/src/context/ToastContext";
 
 type SavedAddress = { id: string; label: string; recipient_name: string; phone: string; address: string; lat: number; lng: number; is_default: boolean };
 const blankForm = { label: "", recipient_name: "", phone: "", address: "" };
-function mapTapToCoordinates(center: { lat: number; lng: number }, x: number, y: number, width: number, height: number) {
-  const worldSize = 256 * 2 ** 16;
-  const sinLat = Math.sin((center.lat * Math.PI) / 180);
-  const centerX = ((center.lng + 180) / 360) * worldSize;
-  const centerY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * worldSize;
-  const pixelX = centerX + (x / width - 0.5) * 600;
-  const pixelY = centerY + (y / height - 0.5) * 260;
-  const wrappedX = ((pixelX % worldSize) + worldSize) % worldSize;
-  const clampedY = Math.max(0, Math.min(worldSize, pixelY));
-  const lng = (wrappedX / worldSize) * 360 - 180;
-  const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * clampedY) / worldSize)) * 180) / Math.PI;
-  return { lat, lng };
-}
-
 export default function AddressesScreen() {
   const router = useRouter(); const insets = useSafeAreaInsets(); const { show } = useToast();
   const [items, setItems] = useState<SavedAddress[]>([]); const [loading, setLoading] = useState(true); const [editingId, setEditingId] = useState<string | null>(null); const [form, setForm] = useState(blankForm); const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null); const [isDefault, setIsDefault] = useState(false); const [saving, setSaving] = useState(false); const [locating, setLocating] = useState(false); const [mapPickerOpen, setMapPickerOpen] = useState(false); const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
