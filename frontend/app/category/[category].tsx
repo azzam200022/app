@@ -163,7 +163,7 @@ export default function CategoryDetail() {
         <FlatList
           data={products}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          numColumns={3}
           ListHeaderComponent={header}
           columnWrapperStyle={styles.column}
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing["2xl"] }]}
@@ -181,15 +181,15 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.divider },
   circleButton: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
   cartDot: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 3, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.surface },
-  content: { paddingTop: spacing.md, gap: spacing.md },
-  hero: { height: 178, marginHorizontal: spacing.lg, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.brandPrimary },
+  content: { paddingTop: spacing.sm, gap: spacing.sm },
+  hero: { height: 160, marginHorizontal: spacing.md, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.brandPrimary },
   heroScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(14,35,23,0.64)" },
-  heroContent: { flex: 1, justifyContent: "flex-end", alignItems: "flex-start", padding: spacing.xl },
+  heroContent: { flex: 1, justifyContent: "flex-end", alignItems: "flex-start", padding: spacing.lg },
   heroTitle: { marginTop: spacing.xs },
-  branchSection: { marginTop: spacing.xl },
+  branchSection: { marginTop: spacing.lg },
   sectionHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg },
   countPill: { minWidth: 30, height: 30, borderRadius: 15, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  branchList: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  branchList: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   branchItem: { width: 86, alignItems: "center" },
   branchImageWrap: { width: 74, height: 74, borderRadius: 37, backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: "transparent", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   branchImageActive: { borderColor: colors.brandPrimary },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   branchCheck: { position: "absolute", end: 0, bottom: 0, width: 21, height: 21, borderRadius: 11, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   branchName: { marginTop: spacing.xs, maxWidth: 86, textAlign: "center" },
   productsHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.xs },
-  column: { gap: spacing.md, paddingHorizontal: spacing.lg },
+  column: { gap: spacing.sm, paddingHorizontal: spacing.lg },
   empty: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
