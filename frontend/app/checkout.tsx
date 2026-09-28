@@ -150,7 +150,6 @@ export default function Checkout() {
 
   const openManualMap = () => {
     setManualMapCenter(coords || DEFAULT_MAP_CENTER);
-    setManualMapSize({ width: 0, height: 0 });
     setManualMapOpen(true);
   };
 
