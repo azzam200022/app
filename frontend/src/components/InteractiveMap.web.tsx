@@ -65,8 +65,11 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
 
 export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  // Keep the embedded document stable; viewport and markers are synchronized without reloading it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const markerPayload = useMemo(() => JSON.stringify({ destination: destination || null, agent: agent || null, followAgent }), [destination?.lat, destination?.lng, destination?.at, agent?.lat, agent?.lng, agent?.at, followAgent]);
   const viewportPayload = useMemo(() => JSON.stringify({ lat: center.lat, lng: center.lng, zoom }), [center.lat, center.lng, zoom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => createMapHtml(center, zoom, { destination: destination || null, agent: agent || null, followAgent }), []);
   const [mapWarning, setMapWarning] = React.useState(false);
   const syncMap = useCallback(() => {
