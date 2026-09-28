@@ -112,7 +112,7 @@ export default function SyncSettings() {
           <View style={styles.noteBox}>
             <Feather name="info" size={16} color={colors.gold} />
             <T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1, lineHeight: 20 }}>
-              يتم المطابقة عبر الباركود. أرسل الكمية (quantity) لتحديث المخزون، والسعر (price) اختياري لتحديث السعر. المنتجات غير الموجودة تُرجَع ضمن قائمة "not_found".
+              يتم المطابقة عبر الباركود. أرسل الكمية (quantity) لتحديث المخزون، والسعر (price) اختياري لتحديث السعر. المنتجات غير الموجودة تُرجَع ضمن قائمة «not_found».
             </T>
           </View>
         </ScrollView>
