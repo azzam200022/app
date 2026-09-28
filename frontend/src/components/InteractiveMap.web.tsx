@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useCallback } from "react";
-import { ViewStyle } from "react-native";
+import { View, StyleSheet, ViewStyle, Text } from "react-native";
 
 export type MapRegion = { lat: number; lng: number; zoom: number };
 export type MapPoint = { lat: number; lng: number; at?: string | null };
@@ -30,7 +30,12 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "const initial = " + initial + ";",
     "const markerSeed = " + markerSeed + ";",
     "const map = L.map(\"map\", { zoomControl: true, attributionControl: true, tap: true }).setView([initial.lat, initial.lng], initial.zoom);",
-    "L.tileLayer(\"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png\", { maxZoom: 19, attribution: \"&copy; OpenStreetMap contributors\" }).addTo(map);",
+    "const postMapMessage = (type, payload = {}) => { const message = JSON.stringify({ type, ...payload }); if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(message); else if (window.parent) window.parent.postMessage(message, '*'); };",
+    "let tileErrorReported = false;",
+    "const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, crossOrigin: true, attribution: "&copy; OpenStreetMap contributors" });",
+    "tiles.on("tileerror", () => { if (!tileErrorReported) { tileErrorReported = true; postMapMessage("map-error", { code: "tiles" }); } });",
+    "tiles.on("load", () => { tileErrorReported = false; postMapMessage("map-ready"); });",
+    "tiles.addTo(map);",
     "const destinationIcon = L.divIcon({ className: \"marker-wrap\", html: \"<div class='destination-marker' aria-label='موقع الزبون'></div>\", iconSize: [30, 30], iconAnchor: [15, 28] });",
     "const agentIcon = L.divIcon({ className: \"marker-wrap\", html: \"<div class='agent-marker' aria-label='مندوب التوصيل'>🚗</div>\", iconSize: [44, 44], iconAnchor: [22, 22] });",
     "const liveMarkers = {};",
@@ -50,9 +55,10 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "  setTimeout(() => map.invalidateSize(), 50);",
     "}",
     "window.updateMapMarkers = (next) => updateMarkers(next || {}, false);",
-    "window.addEventListener('message', (event) => { const data = event.data || {}; if (data.type === 'markers') updateMarkers(data.payload || {}, false); });",
-    "const sendRegion = () => { const c = map.getCenter(); window.parent.postMessage(JSON.stringify({ type: 'region', lat: c.lat, lng: c.lng, zoom: map.getZoom() }), '*'); };",
-    "map.on('moveend zoomend', sendRegion); map.whenReady(() => { updateMarkers(markerSeed, true); sendRegion(); });",
+    "window.updateMapViewport = (next) => { if (!validPoint(next)) return; const lat = Number(next.lat); const lng = Number(next.lng); const targetZoom = Number(next.zoom) || map.getZoom(); const c = map.getCenter(); if (Math.abs(c.lat - lat) > 0.00001 || Math.abs(c.lng - lng) > 0.00001 || Math.abs(map.getZoom() - targetZoom) > 0.25) map.setView([lat, lng], targetZoom, { animate: false }); };",
+    "window.addEventListener('message', (event) => { const data = event.data || {}; if (data.type === 'viewport') window.updateMapViewport(data.payload || {}); if (data.type === 'markers') updateMarkers(data.payload || {}, false); });",
+    "const sendRegion = () => { const c = map.getCenter(); postMapMessage('region', { lat: c.lat, lng: c.lng, zoom: map.getZoom() }); };",
+    "map.on('moveend zoomend', sendRegion); map.whenReady(() => { updateMarkers(markerSeed, true); postMapMessage('map-ready'); sendRegion(); });",
     "</script></body></html>",
   ].join("\\n");
 }
@@ -60,11 +66,16 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
 export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const markerPayload = useMemo(() => JSON.stringify({ destination: destination || null, agent: agent || null, followAgent }), [destination?.lat, destination?.lng, destination?.at, agent?.lat, agent?.lng, agent?.at, followAgent]);
+  const viewportPayload = useMemo(() => JSON.stringify({ lat: center.lat, lng: center.lng, zoom }), [center.lat, center.lng, zoom]);
   const html = useMemo(() => createMapHtml(center, zoom, { destination: destination || null, agent: agent || null, followAgent }), []);
-  const syncMarkers = useCallback(() => {
-    frameRef.current?.contentWindow?.postMessage({ type: "markers", payload: JSON.parse(markerPayload) }, "*");
-  }, [markerPayload]);
-  useEffect(() => { const timer = setTimeout(syncMarkers, 0); return () => clearTimeout(timer); }, [syncMarkers]);
+  const [mapWarning, setMapWarning] = React.useState(false);
+  const syncMap = useCallback(() => {
+    const frame = frameRef.current?.contentWindow;
+    if (!frame) return;
+    frame.postMessage({ type: "viewport", payload: JSON.parse(viewportPayload) }, "*");
+    frame.postMessage({ type: "markers", payload: JSON.parse(markerPayload) }, "*");
+  }, [markerPayload, viewportPayload]);
+  useEffect(() => { const timer = setTimeout(syncMap, 0); return () => clearTimeout(timer); }, [syncMap]);
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(typeof event.data === "string" ? event.data : "");
@@ -72,5 +83,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
     } catch {}
   }, [onRegionChange, zoom]);
   useEffect(() => { window.addEventListener("message", handleMessage); return () => window.removeEventListener("message", handleMessage); }, [handleMessage]);
-  return <iframe ref={frameRef} title="خريطة حقيقية لاختيار موقع التوصيل" srcDoc={html} onLoad={syncMarkers} style={{ width: "100%", height: "100%", border: 0, ...(style as any) }} />;
+  return <View style={[styles.root, style]}><iframe ref={frameRef} title="خريطة حقيقية لاختيار موقع التوصيل" srcDoc={html} onLoad={syncMap} style={{ width: "100%", height: "100%", border: 0 }} /><View pointerEvents="none" style={[styles.warning, !mapWarning && styles.hidden]}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View></View>
 }
+
+const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, hidden: { display: "none" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
