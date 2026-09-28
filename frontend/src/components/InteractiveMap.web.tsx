@@ -79,6 +79,8 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(typeof event.data === "string" ? event.data : "");
+      if (data?.type === "map-error") setMapWarning(true);
+      if (data?.type === "map-ready") setMapWarning(false);
       if (data?.type === "region" && Number.isFinite(data.lat) && Number.isFinite(data.lng)) onRegionChange?.({ lat: Number(data.lat), lng: Number(data.lng), zoom: Number(data.zoom) || zoom });
     } catch {}
   }, [onRegionChange, zoom]);
