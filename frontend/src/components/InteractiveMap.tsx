@@ -33,9 +33,9 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "const map = L.map(\"map\", { zoomControl: true, attributionControl: true, tap: true }).setView([initial.lat, initial.lng], initial.zoom);",
     "const postMapMessage = (type, payload = {}) => { const message = JSON.stringify({ type, ...payload }); if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(message); else if (window.parent) window.parent.postMessage(message, '*'); };",
     "let tileErrorReported = false;",
-    "const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, crossOrigin: true, attribution: "&copy; OpenStreetMap contributors" });",
-    "tiles.on("tileerror", () => { if (!tileErrorReported) { tileErrorReported = true; postMapMessage("map-error", { code: "tiles" }); } });",
-    "tiles.on("load", () => { tileErrorReported = false; postMapMessage("map-ready"); });",
+    "const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '&copy; OpenStreetMap contributors' });",
+    "tiles.on('tileerror', () => { if (!tileErrorReported) { tileErrorReported = true; postMapMessage('map-error', { code: 'tiles' }); } });",
+    "tiles.on('load', () => { tileErrorReported = false; postMapMessage('map-ready'); });",
     "tiles.addTo(map);",
     "const destinationIcon = L.divIcon({ className: \"marker-wrap\", html: \"<div class='destination-marker' aria-label='موقع الزبون'></div>\", iconSize: [30, 30], iconAnchor: [15, 28] });",
     "const agentIcon = L.divIcon({ className: \"marker-wrap\", html: \"<div class='agent-marker' aria-label='مندوب التوصيل'>🚗</div>\", iconSize: [44, 44], iconAnchor: [22, 22] });",
@@ -84,7 +84,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
           if (data?.type === "region" && Number.isFinite(data.lat) && Number.isFinite(data.lng)) onRegionChange?.({ lat: Number(data.lat), lng: Number(data.lng), zoom: Number(data.zoom) || zoom });
         } catch {}
       }} style={styles.webview} />
-      {mapWarning ? <View pointerEvents="none" style={styles.warning}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View>}
+      {mapWarning ? <View pointerEvents="none" style={styles.warning}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View> : null}
     </View>
   );
 }
