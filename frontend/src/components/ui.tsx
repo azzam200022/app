@@ -81,11 +81,11 @@ export function Badge({ text, color = colors.gold, textColor = "#1A1A1A" }: { te
 }
 
 const styles = StyleSheet.create({
-  btn: { minHeight: 52, borderRadius: radius.md, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
+  btn: { minHeight: 50, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   btnRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   btnText: { fontFamily: font.bodyBold, fontSize: type.lg },
   empty: { alignItems: "center", justifyContent: "center", paddingVertical: spacing["3xl"], paddingHorizontal: spacing.xl },
   emptyIcon: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm, alignSelf: "flex-start" },
+  badge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, alignSelf: "flex-start" },
   badgeText: { fontFamily: font.bodyBold, fontSize: 11 },
 });

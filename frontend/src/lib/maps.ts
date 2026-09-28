@@ -5,6 +5,11 @@ export function staticMapUrl(lat: number, lng: number, w = 600, h = 260, zoom = 
   return `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&z=${zoom}&size=${w},${h}&l=map&pt=${lng},${lat},pm2rdm`;
 }
 
+// Map background without a baked-in pin, used with a fixed center pin while panning.
+export function staticMapBackgroundUrl(lat: number, lng: number, w = 600, h = 260, zoom = 16): string {
+  return `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&z=${zoom}&size=${w},${h}&l=map`;
+}
+
 // Two pins: destination (red) + delivery agent (green), auto-fit.
 export function staticMapUrlTwo(dLat: number, dLng: number, aLat: number, aLng: number, w = 600, h = 260): string {
   const pts = `${dLng},${dLat},pm2rdm~${aLng},${aLat},pm2gnm`;

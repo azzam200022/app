@@ -7,25 +7,11 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { api, formatPrice } from "@/src/lib/api";
-import { staticMapUrl } from "@/src/lib/maps";
 import { useCart } from "@/src/context/CartContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
-
-function mapTapToCoordinates(center: { lat: number; lng: number }, x: number, y: number, width: number, height: number, mapPixelWidth = 600, mapPixelHeight = 260) {
-  const worldSize = 256 * 2 ** 16;
-  const sinLat = Math.sin((center.lat * Math.PI) / 180);
-  const centerX = ((center.lng + 180) / 360) * worldSize;
-  const centerY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * worldSize;
-  const pixelX = centerX + (x / width - 0.5) * mapPixelWidth;
-  const pixelY = centerY + (y / height - 0.5) * mapPixelHeight;
-  const wrappedX = ((pixelX % worldSize) + worldSize) % worldSize;
-  const clampedY = Math.max(0, Math.min(worldSize, pixelY));
-  const lng = (wrappedX / worldSize) * 360 - 180;
-  const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * clampedY) / worldSize)) * 180) / Math.PI;
-  return { lat, lng };
-}
 
 const DEFAULT_MAP_CENTER = { lat: 33.3152, lng: 44.3661 };
 
@@ -54,8 +40,6 @@ export default function Checkout() {
   const [locating, setLocating] = useState(false);
   const [manualMapOpen, setManualMapOpen] = useState(false);
   const [manualMapCenter, setManualMapCenter] = useState(DEFAULT_MAP_CENTER);
-  const [manualMapSize, setManualMapSize] = useState({ width: 0, height: 0 });
-  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
@@ -164,24 +148,9 @@ export default function Checkout() {
     } finally { setLocating(false); }
   };
 
-  const adjustMapPin = async (event: any) => {
-    if (!coords || !mapSize.width || !mapSize.height || quoteLoading) return;
-    const { locationX, locationY } = event.nativeEvent;
-    const nextCoords = mapTapToCoordinates(coords, locationX, locationY, mapSize.width, mapSize.height);
-    await setLocationAndQuote(nextCoords, "manual");
-  };
-
   const openManualMap = () => {
     setManualMapCenter(coords || DEFAULT_MAP_CENTER);
-    setManualMapSize({ width: 0, height: 0 });
     setManualMapOpen(true);
-  };
-
-  const handleManualMapTap = (event: any) => {
-    if (!manualMapSize.width || !manualMapSize.height) return;
-    const { locationX, locationY } = event.nativeEvent;
-    const nextCenter = mapTapToCoordinates(manualMapCenter, locationX, locationY, manualMapSize.width, manualMapSize.height, 600, 450);
-    setManualMapCenter(nextCenter);
   };
 
   const confirmManualLocation = async () => {
@@ -257,10 +226,17 @@ export default function Checkout() {
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>موقع التوصيل على الخريطة</T>
           {coords ? (
             <View style={styles.mapCard}>
-              <Pressable testID="co-map-pin" accessibilityRole="button" accessibilityLabel="اضغط على الخريطة لتعديل موقع التسليم" onPress={adjustMapPin} onLayout={(event) => setMapSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} disabled={quoteLoading} style={styles.mapTapArea}>
-                <Image source={{ uri: staticMapUrl(coords.lat, coords.lng, 600, 260, 16) }} style={styles.mapImg} contentFit="fill" />
-              </Pressable>
-              <T color={colors.muted} size={type.xs} style={styles.mapHint}>اضغط على المكان المطلوب في الخريطة لنقل دبوس التوصيل الأحمر</T>
+              <InteractiveMap
+                center={coords}
+                destination={coords}
+                followAgent
+                onRegionChange={(region) => {
+                  if (quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
+                  void setLocationAndQuote({ lat: region.lat, lng: region.lng }, "manual");
+                }}
+                style={styles.mapImg}
+              />
+              <T color={colors.muted} size={type.xs} style={styles.mapHint}>اسحب الخريطة الحقيقية لوضع دبوس التوصيل الأحمر في المكان الصحيح</T>
               <View style={styles.mapFoot}>
                 <View style={styles.mapFootRow}>
                   <Feather name="map-pin" size={16} color={colors.success} />
@@ -342,21 +318,19 @@ export default function Checkout() {
               <T weight="bold" color={colors.brandPrimary}>{quoteLoading ? "جارٍ الحفظ..." : "حفظ"}</T>
             </Pressable>
           </View>
-          <Pressable
-            style={styles.manualPickerMap}
-            onPress={handleManualMapTap}
-            onLayout={(event) => setManualMapSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
-            accessibilityRole="button"
-            accessibilityLabel="اضغط على الخريطة لاختيار موقع التوصيل"
-          >
-            <Image source={{ uri: staticMapUrl(manualMapCenter.lat, manualMapCenter.lng, 600, 450, 15) }} style={styles.manualPickerImage} contentFit="fill" />
-          </Pressable>
+          <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
+            <InteractiveMap center={manualMapCenter} zoom={15} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
+            <View pointerEvents="none" style={styles.manualPickerPin}>
+              <View style={styles.manualPickerPinDot} />
+              <Feather name="map-pin" size={42} color={colors.error} />
+            </View>
+          </View>
           <View style={[styles.manualPickerFooter, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.mapFootRow}>
               <Feather name="map-pin" size={20} color={colors.brandPrimary} />
-              <T weight="bold">اضغط على موقعك في الخريطة لوضع الدبوس</T>
+              <T weight="bold">حرّك الخريطة لوضع الدبوس في المنتصف</T>
             </View>
-            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>يمكنك الضغط مرة أخرى لتعديل الموقع، ثم احفظه للعودة إلى العنوان.</T>
+            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>اسحب الخريطة الحقيقية تحت الدبوس حتى تصل للموقع الصحيح، ثم احفظه للعودة إلى العنوان.</T>
             <Pressable onPress={confirmManualLocation} disabled={quoteLoading} style={styles.manualPickerSave}>
               {quoteLoading ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={18} color="#fff" />}
               <T weight="bold" color="#fff">{quoteLoading ? "جارٍ حفظ الموقع..." : "حفظ الموقع والعودة"}</T>
@@ -379,40 +353,40 @@ function Input({ icon, testID, multiline, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
-  back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 54, marginBottom: spacing.md },
-  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 54 },
-  codBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.sm },
-  locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1.5, borderColor: colors.brandPrimary, borderStyle: "dashed", borderRadius: radius.md, padding: spacing.lg, minHeight: 64 },
+  header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
+  back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFEFC", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
+  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 52 },
+  codBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.md, marginTop: spacing.md },
+  locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#FFFEFC", borderWidth: 1.5, borderColor: colors.brandSecondary, borderStyle: "dashed", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64 },
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
-  mapCard: { borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
-  mapTapArea: { position: "relative" },
+  manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
+  mapCard: { borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFEFC", marginTop: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   mapImg: { width: "100%", aspectRatio: 600 / 260, backgroundColor: colors.surfaceSecondary },
-  mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.xs },
-  mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md },
+  mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.sm, lineHeight: 18 },
+  mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md, paddingTop: spacing.sm },
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  codIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
-  summary: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm },
+  codIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: "#FFFEFC", alignItems: "center", justifyContent: "center" },
+  summary: { backgroundColor: "#FFFEFC", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   summaryHint: { marginTop: spacing.xs, textAlign: "right" },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
   couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
-  couponBtn: { height: 54, paddingHorizontal: spacing.lg, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
-  savedSection: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm },
+  couponBtn: { height: 52, paddingHorizontal: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  savedSection: { backgroundColor: "#FFFEFC", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
-  savedCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  savedCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   savedCardActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
   savedCardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   savedCardTitle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
   saveAddressBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 48, marginBottom: spacing.md },
   manualPicker: { flex: 1, backgroundColor: colors.surface },
-  manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
-  manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  manualPickerImage: { width: "100%", height: "100%" },
-  manualPickerFooter: { backgroundColor: "#fff", padding: spacing.lg, gap: spacing.sm },
+  manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
+  manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
+  manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 52, marginLeft: -26, marginTop: -44, alignItems: "center", justifyContent: "center" },
+  manualPickerPinDot: { position: "absolute", bottom: 3, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
+  manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   manualPickerHint: { textAlign: "right" },
-  manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 52, marginTop: spacing.sm },
-  footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
+  manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.lg, minHeight: 52, marginTop: spacing.sm, shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  footer: { backgroundColor: colors.surface, padding: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 0, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 5, zIndex: 3 },
 });

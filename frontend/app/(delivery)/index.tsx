@@ -9,7 +9,8 @@ import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, EmptyState } from "@/src/components/ui";
 import { StatusPill } from "../(customer)/orders";
 import { api, formatPrice, resolveImage } from "@/src/lib/api";
-import { staticMapUrl, openDirections } from "@/src/lib/maps";
+import { openDirections } from "@/src/lib/maps";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 import { useEffect } from "react";
@@ -220,16 +221,42 @@ export default function DeliveryHome() {
   const dailyEarnings = Number(dailySummary?.earnings ?? 0);
   const list = orderTab === "available" ? available : orderTab === "active" ? active : done;
 
-  // Broadcast live location for active deliveries.
+  // Broadcast high-accuracy live GPS for every active delivery until it is delivered.
   const activeIds = active.map((o) => o.id).join(",");
   useEffect(() => {
     let cancelled = false;
+    let sending = false;
+    let subscription: { remove: () => void } | null = null;
     if (!activeIds) {
       setLocationWarning(null);
       return () => { cancelled = true; };
     }
 
-    const send = async () => {
+    const send = async (coords: { latitude: number; longitude: number }) => {
+      if (cancelled || sending) return;
+      sending = true;
+      try {
+        let sent = 0;
+        let failed = 0;
+        for (const id of activeIds.split(",")) {
+          if (cancelled) break;
+          try {
+            await api.deliverySetLocation(id, coords.latitude, coords.longitude);
+            sent += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+        if (failed > 0 && sent === 0) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
+        else if (sent > 0) setLocationWarning(null);
+      } catch {
+        if (!cancelled) setLocationWarning("تعذر إرسال موقعك الحالي؛ تحقق من الاتصال وحاول مرة أخرى");
+      } finally {
+        sending = false;
+      }
+    };
+
+    const startTracking = async () => {
       try {
         if (!(await Location.hasServicesEnabledAsync())) {
           setLocationWarning("فعّل خدمة الموقع من إعدادات الهاتف لمتابعة التوصيل المباشر");
@@ -243,27 +270,19 @@ export default function DeliveryHome() {
             return;
           }
         }
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        let sent = 0;
-        let failed = 0;
-        for (const id of activeIds.split(",")) {
-          if (cancelled) break;
-          try {
-            await api.deliverySetLocation(id, pos.coords.latitude, pos.coords.longitude);
-            sent += 1;
-          } catch {
-            failed += 1;
-          }
-        }
-        if (failed > 0 && sent === 0) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
-        else if (sent > 0) setLocationWarning(null);
+        const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        await send(first.coords);
+        if (cancelled) return;
+        subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 5 },
+          (position) => { void send(position.coords); },
+        );
       } catch {
         if (!cancelled) setLocationWarning("تعذر قراءة موقعك الحالي؛ تحقق من تفعيل GPS وحاول مرة أخرى");
       }
     };
-    send();
-    const iv = setInterval(send, 20000);
-    return () => { cancelled = true; clearInterval(iv); };
+    void startTracking();
+    return () => { cancelled = true; subscription?.remove(); subscription = null; };
   }, [activeIds, locationRetryKey]);
 
   const doLogout = async () => { setConfirmLogout(false); await logout(); router.replace("/login"); };
@@ -313,10 +332,12 @@ export default function DeliveryHome() {
       )}
 
       {item.location ? (
-        <Pressable testID={`map-${item.id}`} onPress={() => openDirections(item.location.lat, item.location.lng, item.address)} style={styles.mapPreview}>
-          <Image source={{ uri: staticMapUrl(item.location.lat, item.location.lng, 600, 200) }} style={styles.mapImg} contentFit="cover" />
-          <View style={styles.mapPill}><Feather name="navigation" size={13} color="#fff" /><T size={type.sm} weight="bold" color="#fff">تتبّع على الخريطة</T></View>
-        </Pressable>
+        <View style={styles.mapPreview}>
+          <InteractiveMap center={item.location} destination={item.location} style={styles.mapImg} />
+          <Pressable testID={`map-${item.id}`} onPress={() => openDirections(item.location.lat, item.location.lng, item.address)} style={styles.mapPill}>
+            <Feather name="navigation" size={13} color="#fff" /><T size={type.sm} weight="bold" color="#fff">فتح الملاحة الحقيقية</T>
+          </Pressable>
+        </View>
       ) : null}
 
       {item.delivery_state !== "available" && (
