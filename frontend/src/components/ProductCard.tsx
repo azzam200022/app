@@ -93,7 +93,7 @@ export const ProductCard = React.memo(function ProductCard({
         <View style={[styles.priceRow, quantity > 0 && styles.quantityPriceRow]}>
           <View style={[styles.priceBlock, quantity > 0 && styles.quantityPriceBlock]}>
             <View style={styles.priceHighlight}>
-              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
+              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.onBrandPrimary}>{formatPrice(product.price)}</T>
             </View>
             {product.old_price ? (
               <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   quantityPriceRow: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm },
   priceBlock: { flex: 1, minWidth: 0 },
   quantityPriceBlock: { minHeight: 50 },
-  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: 5, paddingVertical: 3 },
+  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.brandPrimary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 6 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
