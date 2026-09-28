@@ -88,7 +88,7 @@ export const ProductCard = React.memo(function ProductCard({
         </Pressable>
       </View>
       <View style={styles.body}>
-        <T weight="semi" numberOfLines={2} style={styles.name}>{product.name}</T>
+        <T weight="semi" size={type.sm} numberOfLines={2} style={styles.name}>{product.name}</T>
         {product.category ? <T numberOfLines={1} size={type.xs} color={colors.muted} style={styles.category}>{product.category}</T> : null}
         <View style={[styles.priceRow, quantity > 0 && styles.quantityPriceRow]}>
           <View style={[styles.priceBlock, quantity > 0 && styles.quantityPriceBlock]}>
@@ -168,27 +168,27 @@ export function ProductCardSkeleton({ width }: { width?: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  card: { backgroundColor: "#FFFEFC", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.divider },
   cardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
-  imgWrap: { width: "100%", aspectRatio: 1.06, backgroundColor: colors.surfaceSecondary },
+  imgWrap: { width: "100%", aspectRatio: 0.98, backgroundColor: colors.surfaceSecondary },
   img: { width: "100%", height: "100%" },
   imageFallback: { alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: colors.surfaceSecondary },
-  badgeStack: { position: "absolute", top: spacing.sm, insetInlineStart: spacing.sm, alignItems: "flex-start", gap: spacing.xs },
+  badgeStack: { position: "absolute", top: spacing.xs, insetInlineStart: spacing.xs, alignItems: "flex-start", gap: 3 },
   lowStockBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: "#FFF3D6", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  body: { padding: spacing.md, minHeight: 134 },
-  name: { minHeight: 40, lineHeight: 20, color: colors.onSurface, letterSpacing: -0.15 },
-  category: { marginTop: 3, minHeight: 16 },
-  priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", marginTop: spacing.sm, gap: spacing.sm, minHeight: 42 },
+  favBtn: { position: "absolute", top: spacing.xs, insetInlineEnd: spacing.xs, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.divider, alignItems: "center", justifyContent: "center" },
+  body: { padding: spacing.sm, minHeight: 116 },
+  name: { minHeight: 36, lineHeight: 18, color: colors.onSurface, letterSpacing: -0.1 },
+  category: { marginTop: 2, minHeight: 14 },
+  priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: 4, minHeight: 36 },
   quantityPriceRow: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm },
   priceBlock: { flex: 1, minWidth: 0 },
   quantityPriceBlock: { minHeight: 50 },
-  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: 5, paddingVertical: 3 },
   old: { textDecorationLine: "line-through" },
-  addBtn: { width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  addBtnDisabled: { width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  quantityControls: { width: "100%", height: 44, minWidth: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  quantityBtn: { width: 35, height: 35, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  addBtnDisabled: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  quantityControls: { width: "100%", height: 36, minWidth: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
+  quantityBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   quantityText: { minWidth: 24, textAlign: "center", color: colors.onSurface },
   skeletonCard: { overflow: "hidden" },
   skeletonBlock: { backgroundColor: colors.surfaceSecondary },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   skeletonShort: { width: "52%", marginTop: spacing.sm },
   skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg },
   skeletonPrice: { width: "34%" },
-  skeletonAction: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
+  skeletonAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary },
   outOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });
