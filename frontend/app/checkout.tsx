@@ -9,24 +9,9 @@ import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
 import InteractiveMap from "@/src/components/InteractiveMap";
 import { api, formatPrice } from "@/src/lib/api";
-import { staticMapUrl } from "@/src/lib/maps";
 import { useCart } from "@/src/context/CartContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
-
-function mapTapToCoordinates(center: { lat: number; lng: number }, x: number, y: number, width: number, height: number, mapPixelWidth = 600, mapPixelHeight = 260) {
-  const worldSize = 256 * 2 ** 16;
-  const sinLat = Math.sin((center.lat * Math.PI) / 180);
-  const centerX = ((center.lng + 180) / 360) * worldSize;
-  const centerY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * worldSize;
-  const pixelX = centerX + (x / width - 0.5) * mapPixelWidth;
-  const pixelY = centerY + (y / height - 0.5) * mapPixelHeight;
-  const wrappedX = ((pixelX % worldSize) + worldSize) % worldSize;
-  const clampedY = Math.max(0, Math.min(worldSize, pixelY));
-  const lng = (wrappedX / worldSize) * 360 - 180;
-  const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * clampedY) / worldSize)) * 180) / Math.PI;
-  return { lat, lng };
-}
 
 const DEFAULT_MAP_CENTER = { lat: 33.3152, lng: 44.3661 };
 
@@ -55,7 +40,6 @@ export default function Checkout() {
   const [locating, setLocating] = useState(false);
   const [manualMapOpen, setManualMapOpen] = useState(false);
   const [manualMapCenter, setManualMapCenter] = useState(DEFAULT_MAP_CENTER);
-  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
@@ -164,13 +148,6 @@ export default function Checkout() {
     } finally { setLocating(false); }
   };
 
-  const adjustMapPin = async (event: any) => {
-    if (!coords || !mapSize.width || !mapSize.height || quoteLoading) return;
-    const { locationX, locationY } = event.nativeEvent;
-    const nextCoords = mapTapToCoordinates(coords, locationX, locationY, mapSize.width, mapSize.height);
-    await setLocationAndQuote(nextCoords, "manual");
-  };
-
   const openManualMap = () => {
     setManualMapCenter(coords || DEFAULT_MAP_CENTER);
     setManualMapSize({ width: 0, height: 0 });
@@ -250,10 +227,17 @@ export default function Checkout() {
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>موقع التوصيل على الخريطة</T>
           {coords ? (
             <View style={styles.mapCard}>
-              <Pressable testID="co-map-pin" accessibilityRole="button" accessibilityLabel="اضغط على الخريطة لتعديل موقع التسليم" onPress={adjustMapPin} onLayout={(event) => setMapSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} disabled={quoteLoading} style={styles.mapTapArea}>
-                <Image source={{ uri: staticMapUrl(coords.lat, coords.lng, 600, 260, 16) }} style={styles.mapImg} contentFit="fill" />
-              </Pressable>
-              <T color={colors.muted} size={type.xs} style={styles.mapHint}>اضغط على المكان المطلوب في الخريطة لنقل دبوس التوصيل الأحمر</T>
+              <InteractiveMap
+                center={coords}
+                destination={coords}
+                followAgent
+                onRegionChange={(region) => {
+                  if (quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
+                  void setLocationAndQuote({ lat: region.lat, lng: region.lng }, "manual");
+                }}
+                style={styles.mapImg}
+              />
+              <T color={colors.muted} size={type.xs} style={styles.mapHint}>اسحب الخريطة الحقيقية لوضع دبوس التوصيل الأحمر في المكان الصحيح</T>
               <View style={styles.mapFoot}>
                 <View style={styles.mapFootRow}>
                   <Feather name="map-pin" size={16} color={colors.success} />
@@ -379,7 +363,6 @@ const styles = StyleSheet.create({
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
   mapCard: { borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFEFC", marginTop: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  mapTapArea: { position: "relative" },
   mapImg: { width: "100%", aspectRatio: 600 / 260, backgroundColor: colors.surfaceSecondary },
   mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.sm, lineHeight: 18 },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md, paddingTop: spacing.sm },
