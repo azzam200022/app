@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { View, StyleSheet, ViewStyle, Text } from "react-native";
+import { View, StyleSheet, ViewStyle, Text, Pressable } from "react-native";
 import { WebView } from "react-native-webview";
+import { Feather } from "@expo/vector-icons";
 
 export type MapRegion = { lat: number; lng: number; zoom: number };
 export type MapPoint = { lat: number; lng: number; at?: string | null };
@@ -12,6 +13,7 @@ type Props = {
   followAgent?: boolean;
   onRegionChange?: (region: MapRegion) => void;
   style?: ViewStyle;
+  onLocate?: () => void;
 };
 
 type MarkerPayload = { destination?: MapPoint | null; agent?: MapPoint | null; followAgent?: boolean };
@@ -61,10 +63,10 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "const sendRegion = () => { const c = map.getCenter(); postMapMessage('region', { lat: c.lat, lng: c.lng, zoom: map.getZoom() }); };",
     "map.on('moveend zoomend', sendRegion); map.whenReady(() => { updateMarkers(markerSeed, true); postMapMessage('map-ready'); sendRegion(); });",
     "</script></body></html>",
-  ].join("\\n");
+  ].join("\n");
 }
 
-export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style }: Props) {
+export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style, onLocate }: Props) {
   const webRef = useRef<WebView>(null);
   // Keep the embedded document stable; viewport and markers are synchronized without reloading it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,9 +89,10 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
           if (data?.type === "region" && Number.isFinite(data.lat) && Number.isFinite(data.lng)) onRegionChange?.({ lat: Number(data.lat), lng: Number(data.lng), zoom: Number(data.zoom) || zoom });
         } catch {}
       }} style={styles.webview} />
+      {onLocate ? <Pressable accessibilityRole="button" accessibilityLabel="تحديد موقعي الحالي" onPress={onLocate} style={styles.locateButton}><Feather name="crosshair" size={21} color="#183D36" /></Pressable> : null}
       {mapWarning ? <View pointerEvents="none" style={styles.warning}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View> : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, webview: { flex: 1, backgroundColor: "transparent" }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
+const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, webview: { flex: 1, backgroundColor: "transparent" }, locateButton: { position: "absolute", top: 12, right: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, elevation: 4 }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
