@@ -319,7 +319,7 @@ export default function Checkout() {
             </Pressable>
           </View>
           <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
-            <InteractiveMap center={manualMapCenter} zoom={15} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
+            <InteractiveMap center={manualMapCenter} zoom={15} onLocate={detectLocation} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
             <View pointerEvents="none" style={styles.manualPickerPin}>
               <View style={styles.manualPickerPinDot} />
               <Feather name="map-pin" size={42} color={colors.error} />
