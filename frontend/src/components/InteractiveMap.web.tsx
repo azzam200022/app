@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useCallback } from "react";
-import { View, StyleSheet, ViewStyle, Text } from "react-native";
+import { View, StyleSheet, ViewStyle, Text, Pressable } from "react-native";
 
 export type MapRegion = { lat: number; lng: number; zoom: number };
 export type MapPoint = { lat: number; lng: number; at?: string | null };
@@ -11,6 +11,7 @@ type Props = {
   followAgent?: boolean;
   onRegionChange?: (region: MapRegion) => void;
   style?: ViewStyle;
+  onLocate?: () => void;
 };
 
 type MarkerPayload = { destination?: MapPoint | null; agent?: MapPoint | null; followAgent?: boolean };
@@ -60,10 +61,10 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "const sendRegion = () => { const c = map.getCenter(); postMapMessage('region', { lat: c.lat, lng: c.lng, zoom: map.getZoom() }); };",
     "map.on('moveend zoomend', sendRegion); map.whenReady(() => { updateMarkers(markerSeed, true); postMapMessage('map-ready'); sendRegion(); });",
     "</script></body></html>",
-  ].join("\\n");
+  ].join("\n");
 }
 
-export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style }: Props) {
+export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style, onLocate }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Keep the embedded document stable; viewport and markers are synchronized without reloading it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,7 +89,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
     } catch {}
   }, [onRegionChange, zoom]);
   useEffect(() => { window.addEventListener("message", handleMessage); return () => window.removeEventListener("message", handleMessage); }, [handleMessage]);
-  return <View style={[styles.root, style]}><iframe ref={frameRef} title="خريطة حقيقية لاختيار موقع التوصيل" srcDoc={html} onLoad={syncMap} style={{ width: "100%", height: "100%", border: 0 }} /><View pointerEvents="none" style={[styles.warning, !mapWarning && styles.hidden]}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View></View>
+  return <View style={[styles.root, style]}><iframe ref={frameRef} title="خريطة حقيقية لاختيار موقع التوصيل" srcDoc={html} onLoad={syncMap} style={{ width: "100%", height: "100%", border: 0 }} />{onLocate ? <Pressable accessibilityRole="button" accessibilityLabel="تحديد موقعي الحالي" onPress={onLocate} style={styles.locateButton}><Feather name="crosshair" size={21} color="#183D36" /></Pressable> : null}<View pointerEvents="none" style={[styles.warning, !mapWarning && styles.hidden]}><Text style={styles.warningText}>تعذر تحميل بلاطات الخريطة. تحقق من اتصال الإنترنت.</Text></View></View>
 }
 
-const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, hidden: { display: "none" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
+const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, locateButton: { position: "absolute", top: 12, right: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, elevation: 4 }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, hidden: { display: "none" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
