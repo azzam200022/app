@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { View, StyleSheet, ViewStyle, Text } from "react-native";
 import { WebView } from "react-native-webview";
 
@@ -66,14 +66,17 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
 
 export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style }: Props) {
   const webRef = useRef<WebView>(null);
+  // Keep the embedded document stable; viewport and markers are synchronized without reloading it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const markerPayload = useMemo(() => JSON.stringify({ destination: destination || null, agent: agent || null, followAgent }), [destination?.lat, destination?.lng, destination?.at, agent?.lat, agent?.lng, agent?.at, followAgent]);
   const viewportPayload = useMemo(() => JSON.stringify({ lat: center.lat, lng: center.lng, zoom }), [center.lat, center.lng, zoom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => createMapHtml(center, zoom, { destination: destination || null, agent: agent || null, followAgent }), []);
   const [mapWarning, setMapWarning] = React.useState(false);
-  const syncMap = () => {
+  const syncMap = useCallback(() => {
     webRef.current?.injectJavaScript("(function(){if(window.updateMapViewport)window.updateMapViewport(" + viewportPayload + ");if(window.updateMapMarkers)window.updateMapMarkers(" + markerPayload + ");})(); true;");
-  };
-  useEffect(() => { const timer = setTimeout(syncMap, 0); return () => clearTimeout(timer); }, [markerPayload, viewportPayload]);
+  }, [markerPayload, viewportPayload]);
+  useEffect(() => { const timer = setTimeout(syncMap, 0); return () => clearTimeout(timer); }, [syncMap]);
   return (
     <View style={[styles.root, style]}>
       <WebView ref={webRef} source={{ html }} originWhitelist={["*"]} javaScriptEnabled domStorageEnabled onLoadEnd={syncMap} onError={() => setMapWarning(true)} onMessage={(event) => {
