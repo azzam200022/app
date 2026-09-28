@@ -204,7 +204,7 @@ export default function Home() {
       {/* Categories */}
       <View style={styles.sectionHead}>
         <View>
-          <T weight="displayBold" size={type.xl}>تسوّق حسب التصنيف</T>
+          <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>تسوّق حسب التصنيف</T>
           <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات مرتبة لتصل لما تحب أسرع</T>
         </View>
         <View style={styles.sectionRule} />
@@ -216,7 +216,7 @@ export default function Home() {
         <View>
           <View style={styles.sectionHead}>
             <View>
-              <T weight="displayBold" size={type.xl}>الأكثر شراءً</T>
+              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>الأكثر شراءً</T>
               <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات العملاء هذا الأسبوع</T>
             </View>
             <View style={styles.sectionRule} />
@@ -240,7 +240,7 @@ export default function Home() {
         <View>
           <View style={styles.sectionHead}>
             <View>
-              <T weight="displayBold" size={type.xl}>عروض مميزة</T>
+              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>عروض مميزة</T>
               <T color={colors.muted} size={type.sm} style={styles.sectionHint}>خصومات تستحق التجربة</T>
             </View>
             <Pressable onPress={() => router.push("/offers")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
@@ -260,7 +260,7 @@ export default function Home() {
       )}
 
       <View style={styles.sectionHead}>
-        <T weight="displayBold" size={type.xl}>{selected === "الكل" ? "كل المنتجات" : selected}</T>
+        <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>{selected === "الكل" ? "كل المنتجات" : selected}</T>
       </View>
     </View>
   );
@@ -362,7 +362,8 @@ const styles = StyleSheet.create({
   heroContent: { flex: 1, padding: spacing.md, paddingBottom: spacing.md, justifyContent: "flex-end", alignItems: "flex-start" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
-  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.xs },
+  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionTitle: { lineHeight: 30, letterSpacing: -0.2 },
   sectionHint: { marginTop: 2 },
   sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: spacing.md, borderRadius: 1 },
   loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
