@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   categoryRow: { flexDirection: "row-reverse", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md },
   categoryChip: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   categoryChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.onSurface, backgroundColor: colors.surface, fontFamily: "System", fontSize: type.md },
+  input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.onSurface, backgroundColor: colors.surface, fontFamily: "System", fontSize: type.base },
   multilineInput: { minHeight: 120, textAlignVertical: "top" },
   formActions: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, gap: spacing.md },
   composerCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginTop: spacing.lg },
