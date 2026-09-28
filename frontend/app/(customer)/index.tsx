@@ -304,10 +304,10 @@ export default function Home() {
            ref={listRef}
            data={products}
            keyExtractor={(i) => i.id}
-           numColumns={2}
+           numColumns={3}
            ListHeaderComponent={header}
-           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.sm }}
+           columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
+           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
            initialNumToRender={12}
            maxToRenderPerBatch={8}
            windowSize={5}
@@ -332,10 +332,10 @@ export default function Home() {
 }
 
 function ProductGridSkeleton() {
-  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2;
+  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm * 2) / 3;
   return (
     <View style={styles.loadingGrid}>
-      {[0, 1, 2, 3].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
+      {[0, 1, 2, 3, 4, 5].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
     </View>
   );
 }
@@ -346,25 +346,25 @@ const styles = StyleSheet.create({
   fullHeader: { overflow: "hidden" },
   topRow: { height: 38, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  searchPrompt: { height: 48, marginHorizontal: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  iconBtn: { width: 38, height: 38, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
+  searchPrompt: { height: 44, marginHorizontal: spacing.md, marginTop: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  iconBtn: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
   compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
   compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
   brandLogo: { width: 118, height: 34 },
-  hero: { height: 180, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
-  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 180 },
+  hero: { height: 158, marginHorizontal: spacing.md, marginTop: spacing.sm, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surfaceInverse, shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  heroSlide: { width: Dimensions.get("window").width - spacing.md * 2, height: 158 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.gold },
-  heroContent: { flex: 1, padding: spacing.lg, paddingBottom: spacing.lg, justifyContent: "flex-end", alignItems: "flex-start" },
+  heroContent: { flex: 1, padding: spacing.md, paddingBottom: spacing.md, justifyContent: "flex-end", alignItems: "flex-start" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
-  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.xs },
   sectionHint: { marginTop: 2 },
   sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: spacing.md, borderRadius: 1 },
-  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing["2xl"] },
+  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
