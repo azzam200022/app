@@ -43,14 +43,12 @@ export default function Home() {
   const [isCompactHeader, setIsCompactHeader] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const collapseDistance = 96;
-  const fullBarHeight = insets.top + spacing.xs + 40 + spacing.sm;
+  const fullBarHeight = insets.top + spacing.xs + 56 + spacing.sm;
   const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, 0], extrapolate: "clamp" });
-  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [40, 0], extrapolate: "clamp" });
+  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [56, 0], extrapolate: "clamp" });
   const fullRowOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [1, 0.35, 0], extrapolate: "clamp" });
   const compactSearchOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
   const compactSearchScale = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [0.8, 1], extrapolate: "clamp" });
-  const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
-  const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
   const barPadBottom = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.sm, 0], extrapolate: "clamp" });
   const barPadTop = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [insets.top + spacing.xs, 0], extrapolate: "clamp" });
   const handleScroll = useMemo(() => Animated.event(
@@ -275,9 +273,15 @@ export default function Home() {
         <LinearGradient colors={["#FBFAF7", "#F3EEE5"]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
           <View style={styles.topRow}>
-            <Animated.View style={[styles.logoFrame, { width: logoW, height: logoH }]}>
-              <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
-            </Animated.View>
+            <View style={styles.brandLockup} testID="home-brand" accessibilityRole="image" accessibilityLabel="شعار بن سليم سوبرماركت">
+              <View style={styles.brandMarkFrame}>
+                <Image source={require("../../assets/images/bin-saleem-mark.png")} style={styles.brandMark} contentFit="contain" />
+              </View>
+              <View style={styles.brandType}>
+                <T weight="displayBold" size={type.sm} color={colors.brandPrimary} style={styles.brandEnglish}>BIN SALEEM</T>
+                <T weight="bold" size={type.xs} color={colors.brandSecondary} style={styles.brandSubline}>SUPERMARKET</T>
+              </View>
+            </View>
             <View style={styles.topActions}>
             <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
               <Feather name="shopping-bag" size={19} color={colors.onSurface} />
@@ -350,8 +354,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   fullHeader: { overflow: "hidden" },
-  topRow: { height: 38, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
-  logoFrame: { justifyContent: "center", alignItems: "center" },
+  topRow: { height: 56, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  brandLockup: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  brandMarkFrame: { width: 50, height: 46, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: colors.surface },
+  brandMark: { width: 48, height: 42 },
+  brandType: { alignItems: "flex-start", justifyContent: "center" },
+  brandEnglish: { textAlign: "left", writingDirection: "ltr", lineHeight: 16, letterSpacing: 0.25 },
+  brandSubline: { textAlign: "left", writingDirection: "ltr", fontSize: 8, lineHeight: 11, letterSpacing: 1.8 },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   searchPrompt: { height: 44, marginHorizontal: spacing.md, marginTop: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   searchIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
@@ -362,7 +371,6 @@ const styles = StyleSheet.create({
   compactSearchBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.98)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
-  brandLogo: { width: 118, height: 34 },
   hero: { height: 158, marginHorizontal: spacing.md, marginTop: spacing.sm, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surfaceInverse, shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
   heroSlide: { width: Dimensions.get("window").width - spacing.md * 2, height: 158 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },

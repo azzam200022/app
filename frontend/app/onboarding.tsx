@@ -14,19 +14,19 @@ const slides = [
     id: "offers",
     title: "عروض ومنتجات متنوعة",
     description: "أجود المنتجات من أفضل الماركات وبأسعار مميزة",
-    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1000&q=85",
+    image: require("../assets/images/onboarding-products.jpg"),
   },
   {
     id: "delivery",
     title: "طلبك يوصل لبابك",
     description: "نوصل طلبك بسرعة وأمان إلى باب منزلك",
-    image: "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1000&q=85",
+    image: require("../assets/images/onboarding-delivery.jpg"),
   },
   {
     id: "everything",
     title: "كل ما تحتاجه.. في مكان واحد",
     description: "تسوق منتجاتك المفضلة بسهولة، واستلم طلبك حتى باب المنزل.",
-    image: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1000&q=85",
+    image: { uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1000&q=85" },
   },
 ];
 
@@ -68,7 +68,7 @@ export default function Onboarding() {
       </View>
 
       <View style={styles.imageFrame}>
-        <Image source={{ uri: slide.image }} style={StyleSheet.absoluteFill} contentFit="cover" transition={220} />
+        <Image source={slide.image} style={StyleSheet.absoluteFill} contentFit="cover" transition={220} />
         <View style={styles.imageShade} />
         <View style={styles.imageBadge}>
           <Feather name={isLast ? "shopping-cart" : index === 1 ? "truck" : "percent"} size={18} color={colors.brandPrimary} />
