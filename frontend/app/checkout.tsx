@@ -319,19 +319,26 @@ export default function Checkout() {
               <T weight="bold" color={colors.brandPrimary}>{quoteLoading ? "جارٍ الحفظ..." : "حفظ"}</T>
             </Pressable>
           </View>
-          <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
+          <View style={styles.manualPickerMap} accessibilityLabel="خريطة تفاعلية لاختيار موقع التوصيل">
             <InteractiveMap center={manualMapCenter} zoom={15} onLocate={detectLocation} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
+            <View pointerEvents="none" style={styles.manualPickerCoordinates}>
+              <View style={styles.manualPickerCoordinatesIcon}><Feather name="map-pin" size={16} color={colors.brandPrimary} /></View>
+              <View style={{ flex: 1 }}>
+                <T weight="bold" size={type.sm}>موقع التوصيل</T>
+                <T color={colors.muted} size={type.xs}>{manualMapCenter.lat.toFixed(5)}، {manualMapCenter.lng.toFixed(5)}</T>
+              </View>
+            </View>
             <View pointerEvents="none" style={styles.manualPickerPin}>
+              <View style={styles.manualPickerPinIcon}><Feather name="map-pin" size={42} color={colors.error} /></View>
               <View style={styles.manualPickerPinDot} />
-              <Feather name="map-pin" size={42} color={colors.error} />
             </View>
           </View>
           <View style={[styles.manualPickerFooter, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.mapFootRow}>
               <Feather name="map-pin" size={20} color={colors.brandPrimary} />
-              <T weight="bold">حرّك الخريطة لوضع الدبوس في المنتصف</T>
+              <T weight="bold">حرّك الخريطة حتى يستقر الدبوس على موقعك</T>
             </View>
-            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>اسحب الخريطة الحقيقية تحت الدبوس حتى تصل للموقع الصحيح، ثم احفظه للعودة إلى العنوان.</T>
+            <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>الدبوس ثابت في منتصف الخريطة. اسحب الخريطة لتحديد المكان بدقة، ثم احفظ الموقع.</T>
             <Pressable onPress={confirmManualLocation} disabled={quoteLoading} style={styles.manualPickerSave}>
               {quoteLoading ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={18} color="#fff" />}
               <T weight="bold" color="#fff">{quoteLoading ? "جارٍ حفظ الموقع..." : "حفظ الموقع والعودة"}</T>
@@ -383,9 +390,12 @@ const styles = StyleSheet.create({
   saveAddressBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 48, marginBottom: spacing.md },
   manualPicker: { flex: 1, backgroundColor: colors.surface },
   manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
-  manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
-  manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 52, marginLeft: -26, marginTop: -44, alignItems: "center", justifyContent: "center" },
-  manualPickerPinDot: { position: "absolute", bottom: 3, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
+  manualPickerMap: { flex: 1, minHeight: 280, backgroundColor: colors.surfaceSecondary, overflow: "hidden", position: "relative" },
+  manualPickerCoordinates: { position: "absolute", left: spacing.md, bottom: spacing.md, maxWidth: "74%", flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: "rgba(255,254,252,0.97)", borderWidth: 1, borderColor: colors.border, shadowColor: colors.onSurface, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
+  manualPickerCoordinatesIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 58, marginLeft: -26, marginTop: -54, alignItems: "center", justifyContent: "flex-start", zIndex: 1 },
+  manualPickerPinIcon: { width: 48, height: 50, alignItems: "center", justifyContent: "center", shadowColor: colors.error, shadowOpacity: 0.28, shadowRadius: 5, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  manualPickerPinDot: { position: "absolute", bottom: 0, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
   manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   manualPickerHint: { textAlign: "right" },
   manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.lg, minHeight: 52, marginTop: spacing.sm, shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
