@@ -167,6 +167,7 @@ export const api = {
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
+  inventoryPdfLogs: () => req("/admin/inventory/pdf/logs"),
   products: (params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}, force = false) => {
     const key = productsCacheKey(params);
     const suffix = key.slice("products:".length);
