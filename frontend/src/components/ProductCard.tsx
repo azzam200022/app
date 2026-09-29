@@ -37,6 +37,10 @@ export const ProductCard = React.memo(function ProductCard({
     ? Math.round((1 - product.price / product.old_price) * 100)
     : 0;
 
+  React.useEffect(() => {
+    setFav(!!product.is_favorite);
+  }, [product.is_favorite]);
+
   const toggleFav = async () => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
     const next = !fav;
@@ -83,22 +87,18 @@ export const ProductCard = React.memo(function ProductCard({
             )}
           </View>
         )}
-        <Pressable testID={`fav-${product.id}`} accessibilityLabel={fav ? "إزالة من المفضلة" : "إضافة إلى المفضلة"} onPress={(event) => { event.stopPropagation(); toggleFav(); }} style={styles.favBtn} hitSlop={8}>
-          <Feather name="heart" size={16} color={fav ? colors.error : colors.onSurfaceTertiary} fill={fav ? colors.error : "transparent"} />
+        <Pressable
+          testID={`fav-${product.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={fav ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+          accessibilityState={{ selected: fav }}
+          onPress={(event) => { event.stopPropagation(); toggleFav(); }}
+          style={[styles.favBtn, fav && styles.favBtnActive]}
+          hitSlop={8}
+        >
+          <Feather name="heart" size={18} color={fav ? colors.onError : colors.onSurfaceTertiary} fill={fav ? colors.onError : "transparent"} />
         </Pressable>
-      </View>
-      <View style={styles.body}>
-        <T weight="semi" size={type.sm} numberOfLines={2} style={styles.name}>{product.name}</T>
-        {product.category ? <T numberOfLines={1} size={type.xs} color={colors.muted} style={styles.category}>{product.category}</T> : null}
-        <View style={[styles.priceRow, quantity > 0 && styles.quantityPriceRow]}>
-          <View style={[styles.priceBlock, quantity > 0 && styles.quantityPriceBlock]}>
-            <View style={styles.priceHighlight}>
-              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.onBrandPrimary}>{formatPrice(product.price)}</T>
-            </View>
-            {product.old_price ? (
-              <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
-            ) : null}
-          </View>
+        <View style={styles.cartAction}>
           {quantity > 0 && !unavailable ? (
             <View style={styles.quantityControls}>
               <Pressable
@@ -147,6 +147,20 @@ export const ProductCard = React.memo(function ProductCard({
           )}
         </View>
       </View>
+      <View style={styles.body}>
+        <T weight="semi" size={type.sm} numberOfLines={2} style={styles.name}>{product.name}</T>
+        {product.category ? <T numberOfLines={1} size={type.xs} color={colors.muted} style={styles.category}>{product.category}</T> : null}
+        <View style={styles.priceRow}>
+          <View style={styles.priceBlock}>
+            <View style={styles.priceHighlight}>
+              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.onBrandPrimary}>{formatPrice(product.price)}</T>
+            </View>
+            {product.old_price ? (
+              <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
+            ) : null}
+          </View>
+        </View>
+      </View>
     </Pressable>
   );
 });
@@ -175,21 +189,21 @@ const styles = StyleSheet.create({
   imageFallback: { alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: colors.surfaceSecondary },
   badgeStack: { position: "absolute", top: spacing.xs, insetInlineStart: spacing.xs, alignItems: "flex-start", gap: 3 },
   lowStockBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: "#FFF3D6", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  favBtn: { position: "absolute", top: spacing.xs, insetInlineEnd: spacing.xs, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.divider, alignItems: "center", justifyContent: "center" },
-  body: { padding: spacing.sm, minHeight: 116 },
-  name: { minHeight: 36, lineHeight: 18, color: colors.onSurface, letterSpacing: -0.1 },
-  category: { marginTop: 2, minHeight: 14 },
-  priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: 4, minHeight: 36 },
-  quantityPriceRow: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm },
+  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", zIndex: 2 },
+  favBtnActive: { backgroundColor: colors.error, borderColor: colors.error },
+  cartAction: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2 },
+  body: { padding: spacing.sm, height: 142 },
+  name: { height: 40, lineHeight: 19, color: colors.onSurface, letterSpacing: -0.1 },
+  category: { marginTop: 2, height: 18 },
+  priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: spacing.xs, minHeight: 42 },
   priceBlock: { flex: 1, minWidth: 0 },
-  quantityPriceBlock: { minHeight: 50 },
-  priceHighlight: { alignSelf: "flex-start", backgroundColor: colors.brandPrimary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 7 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  quantityControls: { width: "100%", height: 36, minWidth: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
-  quantityBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  quantityText: { minWidth: 24, textAlign: "center", color: colors.onSurface },
+  quantityControls: { width: 76, height: 36, flexShrink: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
+  quantityBtn: { width: 26, height: 28, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  quantityText: { minWidth: 18, textAlign: "center", color: colors.onSurface },
   skeletonCard: { overflow: "hidden" },
   skeletonBlock: { backgroundColor: colors.surfaceSecondary },
   skeletonLine: { height: 12, borderRadius: 6, backgroundColor: colors.surfaceSecondary },
@@ -198,6 +212,6 @@ const styles = StyleSheet.create({
   skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg },
   skeletonPrice: { width: "34%" },
   skeletonAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary },
-  outOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  outOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   outPill: { backgroundColor: "rgba(21,48,46,0.82)", paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
 });
