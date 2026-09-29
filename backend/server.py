@@ -800,6 +800,8 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
     updated = 0
     not_found = []
     duplicate_products = []
+    price_changes = []
+    became_unavailable = []
     for row in rows:
         products = await db.products.find({"barcode": row["barcode"], "deleted_at": None}, {"_id": 0}).to_list(2)
         if not products:
@@ -808,11 +810,59 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
         if len(products) > 1:
             duplicate_products.append(row["barcode"])
             continue
-        setd = {"price": row["price"], "stock": row["quantity"], "coming_soon": row["quantity"] == 1}
-        await db.products.update_one({"id": products[0]["id"], "deleted_at": None}, {"$set": setd})
-        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": row["price"]}})
+
+        product = products[0]
+        old_price_raw = product.get("price")
+        try:
+            old_price = float(old_price_raw) if old_price_raw is not None else None
+        except (TypeError, ValueError):
+            old_price = old_price_raw
+        try:
+            old_stock = float(product.get("stock", 0) or 0)
+        except (TypeError, ValueError):
+            old_stock = 0
+        new_price = float(row["price"])
+        new_stock = row["quantity"]
+        new_coming_soon = new_stock == 1
+        was_available = old_stock > 0 and not bool(product.get("coming_soon"))
+        will_be_available = new_stock > 0 and not new_coming_soon
+
+        if old_price != new_price:
+            price_changes.append({
+                "barcode": row["barcode"],
+                "product_id": product["id"],
+                "name": product.get("name", ""),
+                "old_price": old_price_raw,
+                "new_price": new_price,
+            })
+        if was_available and not will_be_available:
+            became_unavailable.append({
+                "barcode": row["barcode"],
+                "product_id": product["id"],
+                "name": product.get("name", ""),
+                "stock": new_stock,
+                "reason": "نفد المخزون" if new_stock <= 0 else "قيد الوصول",
+            })
+
+        setd = {"price": new_price, "stock": new_stock, "coming_soon": new_coming_soon}
+        await db.products.update_one({"id": product["id"], "deleted_at": None}, {"$set": setd})
+        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": new_price}})
         updated += 1
-    return {"updated": updated, "count": len(rows), "not_found": sorted(set(not_found)), "duplicate_barcodes": sorted(set(duplicate_barcodes + duplicate_products)), "invalid_rows": invalid_rows}
+    logger.info(
+        "Inventory PDF applied: updated=%s price_changes=%s became_unavailable=%s",
+        updated,
+        len(price_changes),
+        len(became_unavailable),
+    )
+    return {
+        "updated": updated,
+        "count": len(rows),
+        "not_found": sorted(set(not_found)),
+        "duplicate_barcodes": sorted(set(duplicate_barcodes + duplicate_products)),
+        "invalid_rows": invalid_rows,
+        "price_changes": price_changes,
+        "became_unavailable": became_unavailable,
+    }
 
 
 # ---------------- Catalog ----------------
