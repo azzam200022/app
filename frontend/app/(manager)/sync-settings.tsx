@@ -18,6 +18,15 @@ export default function SyncSettings() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [report, setReport] = useState<any>(null);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const loadInventoryLogs = async () => {
+    setLogsLoading(true);
+    try { setLogs(await api.inventoryPdfLogs()); }
+    catch (e: any) { show(e.message, "error"); }
+    finally { setLogsLoading(false); }
+  };
 
   useEffect(() => {
     (async () => {
@@ -25,6 +34,7 @@ export default function SyncSettings() {
       catch (e: any) { show(e.message, "error"); }
       finally { setLoading(false); }
     })();
+    loadInventoryLogs();
   }, []); // eslint-disable-line
 
   const fullUrl = cfg ? `${BACKEND}${cfg.path}` : "";
@@ -38,6 +48,7 @@ export default function SyncSettings() {
     try {
       const summary = await uploadInventoryPdf(asset.uri, asset.name || "inventory.pdf", Platform.OS === "web");
       setReport(summary);
+      await loadInventoryLogs();
       show("تم تحديث " + summary.updated + " منتج من الملف");
     } catch (e: any) {
       show(e.message, "error");
@@ -117,6 +128,46 @@ export default function SyncSettings() {
             )}
           </View>
 
+          <View style={styles.historyCard}>
+            <View style={styles.historyHeader}>
+              <Feather name="clock" size={18} color={colors.brandPrimary} />
+              <T weight="displayBold" size={type.lg}>سجل رفع ملفات PDF</T>
+            </View>
+            <T size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 4 }}>يتم الاحتفاظ بسجلات آخر 31 يومًا فقط.</T>
+            {logsLoading ? (
+              <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.md }} />
+            ) : logs.length === 0 ? (
+              <T size={type.sm} color={colors.onSurfaceTertiary} style={{ marginTop: spacing.md }}>لا توجد عمليات رفع محفوظة.</T>
+            ) : logs.map((log) => (
+              <View key={log.id} style={styles.historyItem}>
+                <T weight="semi">{formatInventoryLogDate(log.created_at)}</T>
+                <T size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 3 }}>
+                  {log.filename || "ملف PDF"} • تم تطبيق {log.updated} منتج
+                </T>
+                {log.price_changes?.length > 0 && (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <T weight="semi" color={colors.brandPrimary}>تغيّر السعر ({log.price_changes.length})</T>
+                    {log.price_changes.map((item: any) => (
+                      <T key={log.id + "-price-" + item.product_id} size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 3 }}>
+                        • {item.name || item.barcode}: {item.old_price ?? "غير محدد"} ← {item.new_price}
+                      </T>
+                    ))}
+                  </View>
+                )}
+                {log.became_unavailable?.length > 0 && (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <T weight="semi" color={colors.error}>أصبح غير متوفر ({log.became_unavailable.length})</T>
+                    {log.became_unavailable.map((item: any) => (
+                      <T key={log.id + "-out-" + item.product_id} size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 3 }}>
+                        • {item.name || item.barcode}: {item.reason}
+                      </T>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+
           <Field label="رابط المزامنة (Endpoint)" value={fullUrl} onCopy={() => copy(fullUrl, "الرابط")} />
           <Field label="طريقة الطلب (Method)" value={cfg.method} mono />
           <Field label={`اسم الترويسة (Header)`} value={cfg.header_name} mono onCopy={() => copy(cfg.header_name, "اسم الترويسة")} />
@@ -141,6 +192,11 @@ export default function SyncSettings() {
       )}
     </View>
   );
+}
+
+function formatInventoryLogDate(value?: string) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("ar-IQ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function Field({ label, value, onCopy, mono, secretable }: { label: string; value: string; onCopy?: () => void; mono?: boolean; secretable?: boolean }) {
@@ -183,6 +239,9 @@ const styles = StyleSheet.create({
   uploadIcon: { width: 42, height: 42, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   uploadBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 48, borderRadius: radius.md, backgroundColor: colors.brandPrimary, marginTop: spacing.lg },
   reportBox: { backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  historyCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+  historyHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  historyItem: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   copyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.md },
   noteBox: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, backgroundColor: "#FBF6EA", borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.xl },
 });
