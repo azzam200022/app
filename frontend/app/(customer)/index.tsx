@@ -44,7 +44,7 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const collapseDistance = 96;
   const fullBarHeight = insets.top + spacing.xs + 40 + spacing.sm;
-  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, insets.top + 36], extrapolate: "clamp" });
+  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, 0], extrapolate: "clamp" });
   const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [40, 0], extrapolate: "clamp" });
   const fullRowOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [1, 0.35, 0], extrapolate: "clamp" });
   const compactSearchOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
@@ -52,7 +52,7 @@ export default function Home() {
   const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
   const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
   const barPadBottom = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.sm, 0], extrapolate: "clamp" });
-  const barPadTopExtra = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
+  const barPadTop = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [insets.top + spacing.xs, 0], extrapolate: "clamp" });
   const handleScroll = useMemo(() => Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     {
@@ -271,7 +271,7 @@ export default function Home() {
   return (
     <View style={styles.root}>
       {/* Collapses to a small search control while scrolling */}
-      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
+      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: barPadTop, paddingBottom: barPadBottom }]}>
         <LinearGradient colors={["#FBFAF7", "#F3EEE5"]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
           <View style={styles.topRow}>
@@ -297,14 +297,16 @@ export default function Home() {
           </View>
         </Animated.View>
 
-        <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { top: insets.top + 2, opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
+
+      </Animated.View>
+
+      <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
           <Pressable testID="compact-search-btn" onPress={() => router.push("/search")} style={styles.compactSearchBtn} accessibilityLabel="البحث">
             <Feather name="search" size={17} color={colors.onSurface} />
           </Pressable>
         </Animated.View>
-      </Animated.View>
 
-      <Animated.FlatList
+          <Animated.FlatList
            ref={listRef}
            data={products}
            keyExtractor={(i) => i.id}
@@ -356,8 +358,8 @@ const styles = StyleSheet.create({
   searchLabel: { flex: 1 },
   iconBtn: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.9)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative", shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
-  compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
-  compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  compactSearch: { position: "absolute", right: spacing.lg, bottom: spacing.lg + 56, width: 40, height: 40, zIndex: 20 },
+  compactSearchBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.98)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
   brandLogo: { width: 118, height: 34 },
