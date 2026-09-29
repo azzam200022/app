@@ -110,7 +110,7 @@ export default function Support() {
 
   const uploadAttachment = async (uri: string | null) => {
     if (!uri) return undefined;
-    const uploaded = await uploadImage(uri, Platform.OS === "web");
+    const uploaded = await uploadImage(uri, Platform.OS === "web", "/api/support/upload");
     return uploaded.url || uploaded.path;
   };
 

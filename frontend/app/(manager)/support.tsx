@@ -69,7 +69,8 @@ export default function ManagerSupport() {
       setSelected((current) => current ? { ...current, messages: [...current.messages, message], ticket: { ...current.ticket, status: "pending" } } : current);
       setReply("");
       show("تم إرسال الرد للزبون");
-      await load(filter);
+      // Refreshing the list is best-effort; it must not make a sent reply look failed.
+      void load(filter).catch(() => undefined);
     } catch (error: any) {
       show(error.message, "error");
     } finally {

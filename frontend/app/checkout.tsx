@@ -174,15 +174,16 @@ export default function Checkout() {
   };
 
   const submit = async () => {
-    if (!name || !phone || !address) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
+    if (!name.trim() || !phone.trim() || !address.trim()) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
     if (!coords) return show("حدد موقع التوصيل عبر GPS أو من العنوان أولاً", "error");
     if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
     if (!deliveryQuote) return show("تعذر التحقق من منطقة التوصيل. أعد تحديد الموقع وحاول مجدداً.", "error");
     if (deliveryQuote.area_id === "default_delivery") return show("عنوانك خارج نطاق التوصيل الحالي. غيّر موقع التسليم.", "error");
     setLoading(true);
     try {
-      const order = await api.createOrder({ name, phone, address, notes, saved_address_id: selectedAddressId || undefined, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
-      await reload();
+      const order = await api.createOrder({ name: name.trim(), phone: phone.trim(), address: address.trim(), notes: notes.trim(), saved_address_id: selectedAddressId || undefined, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
+      // The order is already committed; a cart refresh must not turn a successful order into an error.
+      void reload().catch(() => undefined);
       router.replace(`/order/${order.id}?new=1`);
     } catch (e: any) { show(e.message, "error"); }
     finally { setLoading(false); }

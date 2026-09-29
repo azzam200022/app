@@ -305,19 +305,32 @@ export async function removeBackgroundImage(uri: string, platformWeb: boolean): 
   } finally { clearTimeout(timeout); }
 }
 
-export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string }> {
+export async function uploadImage(uri: string, platformWeb: boolean, endpoint = "/api/upload"): Promise<{ path: string; url: string }> {
   let token = authToken;
   if (!token) token = await storage.secureGet(TOKEN_KEY, "");
+  const extension = (uri.split("?")[0].split(".").pop() || "jpg").toLowerCase();
+  const mime = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+  const safeExtension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
   const form = new FormData();
-  const name = "photo_" + Date.now() + ".jpg";
-  if (platformWeb) { const blob = await (await fetch(uri)).blob(); form.append("file", blob, name); }
-  else form.append("file", { uri, name, type: "image/jpeg" } as any);
+  const name = "photo_" + Date.now() + "." + safeExtension;
+  if (platformWeb) {
+    const source = await fetch(uri);
+    if (!source.ok) throw new Error("تعذر قراءة الصورة المختارة");
+    const blob = await source.blob();
+    form.append("file", blob, name);
+  } else {
+    form.append("file", { uri, name, type: mime } as any);
+  }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const res = await fetch(BACKEND + "/api/upload", { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
-    if (!res.ok) throw new Error("فشل رفع الصورة");
-    return res.json();
+    const res = await fetch(BACKEND + endpoint, { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
+    const text = await res.text();
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) throw new Error(data?.detail || "تعذر رفع الصورة");
+    if (!data?.url && !data?.path) throw new Error("لم يتم حفظ الصورة، حاول اختيارها مرة أخرى");
+    return data;
   } catch (error: any) {
     if (error?.name === "AbortError") throw new Error("انتهت مهلة رفع الصورة");
     throw error;

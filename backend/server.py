@@ -398,13 +398,13 @@ class DeliveryQuoteIn(BaseModel):
 class SupportTicketIn(BaseModel):
     category: str = Field("other", min_length=2, max_length=40)
     subject: str = Field(..., min_length=3, max_length=120)
-    message: str = Field(..., min_length=1, max_length=4000)
+    message: str = Field("", max_length=4000)
     order_id: Optional[str] = Field(None, max_length=120)
     attachment_url: Optional[str] = Field(None, max_length=1000)
 
 
 class SupportMessageIn(BaseModel):
-    message: str = Field(..., min_length=1, max_length=4000)
+    message: str = Field("", max_length=4000)
     attachment_url: Optional[str] = Field(None, max_length=1000)
 
 
@@ -3054,21 +3054,40 @@ async def remove_background(file: UploadFile = File(...), user=Depends(require_m
     return {"path": path, "url": f"/api/files/{path}", "processed": True}
 
 
-@api.post("/upload")
-async def upload(file: UploadFile = File(...), user=Depends(require_manager)):
-    ext = (file.filename or "img.jpg").rsplit(".", 1)[-1].lower()
-    if ext not in ("jpg", "jpeg", "png", "webp"):
-        ext = "jpg"
-    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+async def _store_uploaded_image(file: UploadFile, user, folder: str = "uploads"):
     data = await file.read()
-    ct = file.content_type or "image/jpeg"
+    if not data:
+        raise HTTPException(status_code=400, detail="الصورة فارغة")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم الصورة كبير جداً")
+    content_type = (file.content_type or "").lower()
+    allowed_types = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+    ext = allowed_types.get(content_type)
+    if not ext:
+        ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+        if ext == "jpeg":
+            ext = "jpg"
+        if ext not in ("jpg", "png", "webp"):
+            raise HTTPException(status_code=415, detail="صيغة الصورة غير مدعومة")
+        content_type = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[ext]
+    path = f"{APP_NAME}/{folder}/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     try:
-        await run_in_threadpool(put_object, path, data, ct)
+        await run_in_threadpool(put_object, path, data, content_type)
     except Exception as e:
         logger.error(f"upload failed: {e}")
-        raise HTTPException(status_code=502, detail="فشل رفع الصورة")
-    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "created_at": now_utc().isoformat()})
+        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة. تحقق من إعداد تخزين الملفات ثم حاول مرة أخرى")
+    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": folder, "created_at": now_utc().isoformat()})
     return {"path": path, "url": f"/api/files/{path}"}
+
+
+@api.post("/upload")
+async def upload(file: UploadFile = File(...), user=Depends(require_manager)):
+    return await _store_uploaded_image(file, user)
+
+
+@api.post("/support/upload")
+async def support_upload(file: UploadFile = File(...), user=Depends(require_user)):
+    return await _store_uploaded_image(file, user, "support")
 
 
 @api.get("/files/{path:path}")
