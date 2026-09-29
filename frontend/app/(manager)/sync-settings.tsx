@@ -91,6 +91,28 @@ export default function SyncSettings() {
               <View style={styles.reportBox}>
                 <T weight="semi" color={colors.brandPrimary}>تمت معالجة {report.count} صف وتحديث {report.updated} منتج</T>
                 <T size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 4 }}>غير موجود: {report.not_found?.length || 0} • مكرر: {report.duplicate_barcodes?.length || 0} • غير صالح: {report.invalid_rows?.length || 0}</T>
+                {report.price_changes?.length > 0 && (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <T weight="semi" color={colors.onSurface}>سجل تغيّر الأسعار ({report.price_changes.length})</T>
+                    {report.price_changes.slice(0, 20).map((item: any) => (
+                      <T key={item.product_id} size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 3 }}>
+                        {item.name || item.barcode}: {item.old_price ?? "غير محدد"} ← {item.new_price}
+                      </T>
+                    ))}
+                    {report.price_changes.length > 20 && <T size={type.sm} color={colors.onSurfaceTertiary} style={{ marginTop: 3 }}>تم عرض أول 20 تغييرًا</T>}
+                  </View>
+                )}
+                {report.became_unavailable?.length > 0 && (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <T weight="semi" color={colors.error}>أصبح غير متوفر ({report.became_unavailable.length})</T>
+                    {report.became_unavailable.slice(0, 20).map((item: any) => (
+                      <T key={item.product_id} size={type.sm} color={colors.onSurfaceSecondary} style={{ marginTop: 3 }}>
+                        {item.name || item.barcode}: {item.reason}
+                      </T>
+                    ))}
+                    {report.became_unavailable.length > 20 && <T size={type.sm} color={colors.onSurfaceTertiary} style={{ marginTop: 3 }}>تم عرض أول 20 منتجًا</T>}
+                  </View>
+                )}
               </View>
             )}
           </View>
