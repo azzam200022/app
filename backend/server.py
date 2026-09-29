@@ -784,6 +784,17 @@ def parse_inventory_pdf(content: bytes):
     return unique_rows, sorted(duplicate_barcodes), invalid_rows
 
 
+async def _cleanup_inventory_sync_logs():
+    cutoff = (now_utc() - timedelta(days=31)).isoformat()
+    await db.inventory_sync_logs.delete_many({"created_at": {"$lt": cutoff}})
+
+
+@api.get("/admin/inventory/pdf/logs")
+async def inventory_pdf_logs(user=Depends(require_manager)):
+    await _cleanup_inventory_sync_logs()
+    return await db.inventory_sync_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
 @api.post("/admin/inventory/pdf")
 async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manager)):
     if not (file.filename or "").lower().endswith(".pdf"):
@@ -797,6 +808,7 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
         logger.exception("Inventory PDF parsing failed")
         raise HTTPException(status_code=400, detail="تعذر قراءة ملف PDF. تأكد أنه يحتوي على نص واضح وبيانات الباركود والسعر والكمية")
 
+    await _cleanup_inventory_sync_logs()
     updated = 0
     not_found = []
     duplicate_products = []
@@ -848,6 +860,16 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
         await db.products.update_one({"id": product["id"], "deleted_at": None}, {"$set": setd})
         await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": new_price}})
         updated += 1
+
+    if updated > 0:
+        await db.inventory_sync_logs.insert_one({
+            "id": "inventory_log_" + uuid.uuid4().hex[:12],
+            "created_at": now_utc().isoformat(),
+            "filename": file.filename or "inventory.pdf",
+            "updated": updated,
+            "price_changes": price_changes,
+            "became_unavailable": became_unavailable,
+        })
     logger.info(
         "Inventory PDF applied: updated=%s price_changes=%s became_unavailable=%s",
         updated,
@@ -3203,6 +3225,7 @@ async def seed():
     await db.user_sessions.create_index("session_token", unique=True)
     await db.catalog.create_index("barcode")
     await db.products.create_index("barcode")
+    await db.inventory_sync_logs.create_index("created_at")
 
     # Reset catalog if version changed (v2 adds real selling prices)
     meta = await db.meta.find_one({"key": "catalog_version"})
