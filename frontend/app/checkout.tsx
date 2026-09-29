@@ -339,7 +339,7 @@ export default function Checkout() {
               <T weight="bold">حرّك الخريطة حتى يستقر الدبوس على موقعك</T>
             </View>
             <T color={colors.muted} size={type.sm} style={styles.manualPickerHint}>الدبوس ثابت في منتصف الخريطة. اسحب الخريطة لتحديد المكان بدقة، ثم احفظ الموقع.</T>
-            <Pressable onPress={confirmManualLocation} disabled={quoteLoading} style={styles.manualPickerSave}>
+            <Pressable testID="co-manual-map-save" onPress={confirmManualLocation} disabled={quoteLoading} style={styles.manualPickerSave}>
               {quoteLoading ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={18} color="#fff" />}
               <T weight="bold" color="#fff">{quoteLoading ? "جارٍ حفظ الموقع..." : "حفظ الموقع والعودة"}</T>
             </Pressable>
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 58, marginLeft: -26, marginTop: -54, alignItems: "center", justifyContent: "flex-start", zIndex: 1 },
   manualPickerPinIcon: { width: 48, height: 50, alignItems: "center", justifyContent: "center", shadowColor: colors.error, shadowOpacity: 0.28, shadowRadius: 5, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   manualPickerPinDot: { position: "absolute", bottom: 0, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
-  manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, flexShrink: 0, zIndex: 2 },
   manualPickerHint: { textAlign: "right" },
   manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.lg, minHeight: 52, marginTop: spacing.sm, shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   footer: { backgroundColor: colors.surface, padding: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 0, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 5, zIndex: 3 },
