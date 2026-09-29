@@ -163,7 +163,7 @@ export default function CategoryDetail() {
         <FlatList
           data={products}
           keyExtractor={(item) => item.id}
-          numColumns={3}
+          numColumns={2}
           ListHeaderComponent={header}
           columnWrapperStyle={styles.column}
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing["2xl"] }]}
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   cartDot: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 3, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.surface },
   content: { paddingTop: spacing.sm, gap: spacing.sm },
   hero: { height: 160, marginHorizontal: spacing.md, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.brandPrimary },
-  heroScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(14,35,23,0.64)" },
+  heroScrim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(14,35,23,0.64)" },
   heroContent: { flex: 1, justifyContent: "flex-end", alignItems: "flex-start", padding: spacing.lg },
   heroTitle: { marginTop: spacing.xs },
   branchSection: { marginTop: spacing.lg },
