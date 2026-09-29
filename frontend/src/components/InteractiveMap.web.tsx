@@ -33,7 +33,7 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
     "const map = L.map(\"map\", { zoomControl: true, attributionControl: true, tap: true, zoomAnimation: true, fadeAnimation: true, markerZoomAnimation: true, inertia: true, inertiaDeceleration: 3000, wheelPxPerZoomLevel: 120, zoomSnap: 0.25, zoomDelta: 0.5 }).setView([initial.lat, initial.lng], initial.zoom);",
     "const postMapMessage = (type, payload = {}) => { const message = JSON.stringify({ type, ...payload }); if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(message); else if (window.parent) window.parent.postMessage(message, '*'); };",
     "let tileErrorReported = false;",
-    "const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 20, maxNativeZoom: 19, detectRetina: true, crossOrigin: true, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' });",
+    "const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, detectRetina: false, crossOrigin: true, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors' });",
     "tiles.on('tileerror', () => { if (!tileErrorReported) { tileErrorReported = true; postMapMessage('map-error', { code: 'tiles' }); } });",
     "tiles.on('load', () => { tileErrorReported = false; postMapMessage('map-ready'); });",
     "tiles.addTo(map);",
