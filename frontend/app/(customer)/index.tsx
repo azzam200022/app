@@ -159,8 +159,11 @@ export default function Home() {
   const header = (
     <View>
       <Pressable testID="home-search-prompt" onPress={() => router.push("/search")} style={styles.searchPrompt}>
-        <Feather name="search" size={18} color={colors.muted} />
-        <T color={colors.muted} size={type.sm}>ابحث عن منتج أو تصنيف</T>
+        <View style={styles.searchIconWrap}>
+          <Feather name="search" size={16} color={colors.brandPrimary} />
+        </View>
+        <T color={colors.muted} size={type.sm} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
+        <Feather name="arrow-left" size={16} color={colors.brandSecondary} />
       </Pressable>
 
       {/* Offers banner carousel */}
@@ -269,9 +272,10 @@ export default function Home() {
     <View style={styles.root}>
       {/* Collapses to a small search control while scrolling */}
       <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
+        <LinearGradient colors={["#FBFAF7", "#F3EEE5"]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
           <View style={styles.topRow}>
-            <Animated.View style={{ width: logoW, height: logoH }}>
+            <Animated.View style={[styles.logoFrame, { width: logoW, height: logoH }]}>
               <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
             </Animated.View>
             <View style={styles.topActions}>
@@ -342,12 +346,15 @@ function ProductGridSkeleton() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   fullHeader: { overflow: "hidden" },
   topRow: { height: 38, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  logoFrame: { justifyContent: "center", alignItems: "center" },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  searchPrompt: { height: 44, marginHorizontal: spacing.md, marginTop: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  iconBtn: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
+  searchPrompt: { height: 44, marginHorizontal: spacing.md, marginTop: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  searchIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  searchLabel: { flex: 1 },
+  iconBtn: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.9)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative", shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
   compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
   compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
