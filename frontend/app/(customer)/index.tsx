@@ -229,7 +229,7 @@ export default function Home() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 156 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
             )}
           />
         </View>
@@ -253,7 +253,7 @@ export default function Home() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 156 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
             )}
           />
         </View>
@@ -304,7 +304,7 @@ export default function Home() {
            ref={listRef}
            data={products}
            keyExtractor={(i) => i.id}
-           numColumns={3}
+           numColumns={2}
            ListHeaderComponent={header}
            columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
            contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
@@ -332,7 +332,7 @@ export default function Home() {
 }
 
 function ProductGridSkeleton() {
-  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm * 2) / 3;
+  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm) / 2;
   return (
     <View style={styles.loadingGrid}>
       {[0, 1, 2, 3, 4, 5].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
