@@ -149,7 +149,6 @@ export const ProductCard = React.memo(function ProductCard({
       </View>
       <View style={styles.body}>
         <T weight="semi" size={type.sm} numberOfLines={2} style={styles.name}>{product.name}</T>
-        {product.category ? <T numberOfLines={1} size={type.xs} color={colors.muted} style={styles.category}>{product.category}</T> : null}
         <View style={styles.priceRow}>
           <View style={styles.priceBlock}>
             <View style={styles.priceHighlight}>
@@ -192,9 +191,8 @@ const styles = StyleSheet.create({
   favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", zIndex: 2 },
   favBtnActive: { backgroundColor: colors.error, borderColor: colors.error },
   cartAction: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2 },
-  body: { padding: spacing.sm, height: 142 },
+  body: { padding: spacing.sm, height: 124 },
   name: { height: 40, lineHeight: 19, color: colors.onSurface, letterSpacing: -0.1 },
-  category: { marginTop: 2, height: 18 },
   priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: spacing.xs, minHeight: 42 },
   priceBlock: { flex: 1, minWidth: 0 },
   priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 7 },
