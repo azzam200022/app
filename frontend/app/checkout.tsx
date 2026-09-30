@@ -275,15 +275,6 @@ export default function Checkout() {
           </Pressable>
           {deliveryQuote?.area_id === "default_delivery" ? <T color={colors.error} size={type.sm} style={{ marginTop: spacing.xs }}>هذه المنطقة خارج نطاق التوصيل؛ لن يُرسل الطلب قبل اختيار موقع مدعوم.</T> : null}
 
-          <View style={styles.codBox}>
-            <View style={styles.codIcon}><Feather name="dollar-sign" size={20} color={colors.brandPrimary} /></View>
-            <View style={{ flex: 1 }}>
-              <T weight="bold">الدفع عند الاستلام</T>
-              <T color={colors.muted} size={type.sm}>ادفع نقداً عند وصول طلبك</T>
-            </View>
-            <Feather name="check-circle" size={22} color={colors.brandPrimary} />
-          </View>
-
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>كود الخصم</T>
           <View style={styles.couponRow}>
             <View style={{ flex: 1 }}>
@@ -362,7 +353,6 @@ const styles = StyleSheet.create({
   back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFEFC", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 52 },
-  codBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.md, marginTop: spacing.md },
   locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#FFFEFC", borderWidth: 1.5, borderColor: colors.brandSecondary, borderStyle: "dashed", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64 },
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
@@ -371,7 +361,6 @@ const styles = StyleSheet.create({
   mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.sm, lineHeight: 18 },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md, paddingTop: spacing.sm },
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  codIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: "#FFFEFC", alignItems: "center", justifyContent: "center" },
   summary: { backgroundColor: "#FFFEFC", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   summaryHint: { marginTop: spacing.xs, textAlign: "right" },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
