@@ -40,6 +40,8 @@ export default function Checkout() {
   const [locating, setLocating] = useState(false);
   const [manualMapOpen, setManualMapOpen] = useState(false);
   const [manualMapCenter, setManualMapCenter] = useState(DEFAULT_MAP_CENTER);
+  const [deliveryMapZoom, setDeliveryMapZoom] = useState(16);
+  const [manualMapZoom, setManualMapZoom] = useState(15);
   const [deliveryQuote, setDeliveryQuote] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const deliveryFee = Number(deliveryQuote?.fee || 0);
@@ -229,9 +231,11 @@ export default function Checkout() {
             <View style={styles.mapCard}>
               <InteractiveMap
                 center={coords}
+                zoom={deliveryMapZoom}
                 destination={coords}
                 followAgent
                 onRegionChange={(region) => {
+                  setDeliveryMapZoom(region.zoom);
                   if (quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
                   void setLocationAndQuote({ lat: region.lat, lng: region.lng }, "manual");
                 }}
@@ -320,7 +324,7 @@ export default function Checkout() {
             </Pressable>
           </View>
           <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
-            <InteractiveMap center={manualMapCenter} zoom={15} onLocate={detectLocation} onRegionChange={(region) => setManualMapCenter({ lat: region.lat, lng: region.lng })} />
+            <InteractiveMap center={manualMapCenter} zoom={manualMapZoom} onLocate={detectLocation} onRegionChange={(region) => { setManualMapCenter({ lat: region.lat, lng: region.lng }); setManualMapZoom(region.zoom); }} />
             <View pointerEvents="none" style={styles.manualPickerPin}>
               <View style={styles.manualPickerPinDot} />
               <Feather name="map-pin" size={42} color={colors.error} />
