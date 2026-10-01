@@ -160,34 +160,36 @@ export default function DeliveryHome() {
     }
   };
 
+  const returnItemKey = (item: any) => `${item.product_id}:${item.sale_unit || "piece"}`;
+
   const openReturn = (order: any) => {
     if (order.status !== "out_for_delivery") {
       show("يجب تسجيل المرتجع قبل تأكيد التسليم", "error");
       return;
     }
     setReturnFor(order);
-    setReturnQuantities(Object.fromEntries(order.items.map((item: any) => [item.product_id, 0])));
+    setReturnQuantities(Object.fromEntries(order.items.map((item: any) => [returnItemKey(item), 0])));
   };
 
-  const adjustReturnQuantity = (productId: string, delta: number) => {
-    const source = returnFor?.items.find((item: any) => item.product_id === productId);
+  const adjustReturnQuantity = (lineKey: string, delta: number) => {
+    const source = returnFor?.items.find((item: any) => returnItemKey(item) === lineKey);
     if (!source) return;
     setReturnQuantities((current) => ({
       ...current,
-      [productId]: Math.max(0, Math.min(source.quantity, (current[productId] || 0) + delta)),
+      [lineKey]: Math.max(0, Math.min(source.quantity, (current[lineKey] || 0) + delta)),
     }));
   };
 
   const selectAllReturnQuantities = () => {
     if (!returnFor) return;
-    setReturnQuantities(Object.fromEntries(returnFor.items.map((item: any) => [item.product_id, item.quantity])));
+    setReturnQuantities(Object.fromEntries(returnFor.items.map((item: any) => [returnItemKey(item), item.quantity])));
   };
 
   const submitReturn = async () => {
     if (!returnFor) return;
     const items = returnFor.items
-      .filter((item: any) => (returnQuantities[item.product_id] || 0) > 0)
-      .map((item: any) => ({ product_id: item.product_id, quantity: returnQuantities[item.product_id] }));
+      .filter((item: any) => (returnQuantities[returnItemKey(item)] || 0) > 0)
+      .map((item: any) => ({ product_id: item.product_id, sale_unit: item.sale_unit || "piece", quantity: returnQuantities[returnItemKey(item)] }));
     if (!items.length) {
       show("حدد كمية منتج واحد على الأقل", "error");
       return;
@@ -238,11 +240,6 @@ export default function DeliveryHome() {
       try {
         let sent = 0;
         let failed = 0;
-        let agentLocationSent = false;
-        try {
-          await api.deliverySetCurrentLocation(coords.latitude, coords.longitude);
-          agentLocationSent = true;
-        } catch {}
         for (const id of activeIds.split(",")) {
           if (cancelled) break;
           try {
@@ -252,7 +249,7 @@ export default function DeliveryHome() {
             failed += 1;
           }
         }
-        if (!agentLocationSent || (failed > 0 && sent === 0)) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
+        if (failed > 0 && sent === 0) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
         else if (sent > 0) setLocationWarning(null);
       } catch {
         if (!cancelled) setLocationWarning("تعذر إرسال موقعك الحالي؛ تحقق من الاتصال وحاول مرة أخرى");
@@ -556,17 +553,18 @@ export default function DeliveryHome() {
             </View>
             <ScrollView style={styles.returnList} showsVerticalScrollIndicator={false}>
               {(returnFor?.items || []).map((item: any) => {
-                const quantity = returnQuantities[item.product_id] || 0;
+                const lineKey = returnItemKey(item);
+                const quantity = returnQuantities[lineKey] || 0;
                 return (
-                  <View key={item.product_id} style={styles.returnItem}>
+                  <View key={lineKey} style={styles.returnItem}>
                     <View style={{ flex: 1 }}>
                       <T weight="semi" numberOfLines={2}>{item.name}</T>
-                      <T color={colors.muted} size={type.sm}>المطلوب: {item.quantity} • {formatPrice(item.price)}</T>
+                      <T color={colors.muted} size={type.sm}>المطلوب: {item.quantity} {item.unit_label || "قطعة"} • {formatPrice(item.price)}</T>
                     </View>
                     <View style={styles.quantityControls}>
-                      <Pressable onPress={() => adjustReturnQuantity(item.product_id, -1)} style={styles.qtyBtn}><Feather name="minus" size={16} color={colors.brandPrimary} /></Pressable>
+                      <Pressable onPress={() => adjustReturnQuantity(lineKey, -1)} style={styles.qtyBtn}><Feather name="minus" size={16} color={colors.brandPrimary} /></Pressable>
                       <T weight="bold" style={styles.qtyValue}>{quantity}</T>
-                      <Pressable onPress={() => adjustReturnQuantity(item.product_id, 1)} style={styles.qtyBtn}><Feather name="plus" size={16} color={colors.brandPrimary} /></Pressable>
+                      <Pressable onPress={() => adjustReturnQuantity(lineKey, 1)} style={styles.qtyBtn}><Feather name="plus" size={16} color={colors.brandPrimary} /></Pressable>
                     </View>
                   </View>
                 );

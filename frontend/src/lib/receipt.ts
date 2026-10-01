@@ -42,7 +42,7 @@ export function buildReceiptHTML(order: any, logoSrc = ""): string {
       <tr>
         <td class="c">${i + 1}</td>
         <td class="r">${escapeHtml(it.name || "منتج")}</td>
-        <td class="c">${Number(it.quantity || 0)}</td>
+        <td class="c">${Number(it.quantity || 0)} ${escapeHtml(it.unit_label || "قطعة")}</td>
         <td class="c">${money(it.price)}</td>
         <td class="c b">${money(it.line_total ?? (Number(it.price || 0) * Number(it.quantity || 0)))}</td>
       </tr>`

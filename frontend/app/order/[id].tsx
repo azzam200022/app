@@ -167,11 +167,11 @@ export default function OrderDetail() {
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
           {orderItems.map((it: any, idx: number) => (
-            <View key={it.product_id} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
+            <View key={`${it.product_id}:${it.sale_unit || "piece"}`} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
               <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{it.name}</T>
-                <T color={colors.muted} size={type.sm}>{it.quantity} × {formatPrice(it.price)}</T>
+                <T color={colors.muted} size={type.sm}>{it.quantity} × {formatPrice(it.price)} / {it.unit_label || "قطعة"}{it.sale_unit === "wholesale" && it.units_per_unit ? ` (${it.units_per_unit} قطع)` : ""}</T>
               </View>
               <T weight="bold" color={colors.brandPrimary}>{formatPrice(it.line_total)}</T>
             </View>

@@ -124,6 +124,11 @@ PRODUCT_LIST_PROJECTION = {
     "branch_id": 1,
     "price": 1,
     "old_price": 1,
+    "wholesale_enabled": 1,
+    "wholesale_unit_name": 1,
+    "wholesale_quantity": 1,
+    "wholesale_price": 1,
+    "wholesale_old_price": 1,
     "image_url": 1,
     "stock": 1,
     "is_published": 1,
@@ -135,6 +140,12 @@ CART_PRODUCT_PROJECTION = {
     "id": 1,
     "name": 1,
     "price": 1,
+    "old_price": 1,
+    "wholesale_enabled": 1,
+    "wholesale_unit_name": 1,
+    "wholesale_quantity": 1,
+    "wholesale_price": 1,
+    "wholesale_old_price": 1,
     "image_url": 1,
     "stock": 1,
     "coming_soon": 1,
@@ -214,6 +225,11 @@ class ProductIn(BaseModel):
     branch_id: Optional[str] = None
     price: float
     old_price: Optional[float] = None
+    wholesale_enabled: bool = False
+    wholesale_unit_name: Optional[str] = Field(None, max_length=40)
+    wholesale_quantity: Optional[int] = Field(None, ge=2, le=100000)
+    wholesale_price: Optional[float] = Field(None, gt=0)
+    wholesale_old_price: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
     description: Optional[str] = ""
     stock: int = 100
@@ -228,6 +244,11 @@ class ProductUpdate(BaseModel):
     branch_id: Optional[str] = None
     price: Optional[float] = None
     old_price: Optional[float] = None
+    wholesale_enabled: Optional[bool] = None
+    wholesale_unit_name: Optional[str] = Field(None, max_length=40)
+    wholesale_quantity: Optional[int] = Field(None, ge=2, le=100000)
+    wholesale_price: Optional[float] = Field(None, gt=0)
+    wholesale_old_price: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
     description: Optional[str] = None
     stock: Optional[int] = None
@@ -269,6 +290,7 @@ class CategoryBranchUpdate(BaseModel):
 
 class CartItemIn(BaseModel):
     product_id: str
+    sale_unit: str = "piece"
     # Zero is allowed for set_cart_item so the client can clear a line item.
     quantity: int = Field(1, ge=0, le=1000)
 
@@ -321,14 +343,9 @@ class AgentUpdateIn(BaseModel):
     phone: Optional[str] = Field(None, max_length=30)
 
 
-class AgentCashReceiptIn(BaseModel):
-    amount: float = Field(..., gt=0, le=100000000)
-    settlement_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    note: Optional[str] = Field(None, max_length=200)
-
-
 class ReturnItemIn(BaseModel):
     product_id: str
+    sale_unit: str = "piece"
     quantity: int = Field(..., ge=1)
 
 
@@ -1429,6 +1446,64 @@ async def delete_category_branch(branch_id: str, user=Depends(require_manager)):
     return {"ok": True}
 
 
+def normalize_wholesale_fields(data):
+    if not bool(data.get("wholesale_enabled")):
+        return {
+            "wholesale_enabled": False,
+            "wholesale_unit_name": None,
+            "wholesale_quantity": None,
+            "wholesale_price": None,
+            "wholesale_old_price": None,
+        }
+    unit_name = str(data.get("wholesale_unit_name") or "").strip()
+    try:
+        quantity = int(data.get("wholesale_quantity") or 0)
+        price = float(data.get("wholesale_price") or 0)
+        old_price = data.get("wholesale_old_price")
+        old_price = float(old_price) if old_price not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="بيانات سعر الجملة أو عدد القطع غير صحيحة")
+    if not unit_name or len(unit_name) > 40:
+        raise HTTPException(status_code=400, detail="أدخل اسم وحدة الجملة بحد أقصى 40 حرفاً")
+    if quantity < 2 or quantity > 100000:
+        raise HTTPException(status_code=400, detail="يجب أن تحتوي وحدة الجملة على قطعتين على الأقل")
+    if price <= 0 or (old_price is not None and old_price <= 0):
+        raise HTTPException(status_code=400, detail="أدخل سعراً صحيحاً للجملة")
+    return {
+        "wholesale_enabled": True,
+        "wholesale_unit_name": unit_name,
+        "wholesale_quantity": quantity,
+        "wholesale_price": price,
+        "wholesale_old_price": old_price,
+    }
+
+
+def product_sale_unit(product, sale_unit="piece"):
+    sale_unit = sale_unit or "piece"
+    if sale_unit == "piece":
+        return 1, "قطعة", float(product.get("price", 0) or 0), product.get("old_price")
+    if sale_unit != "wholesale" or not product.get("wholesale_enabled"):
+        raise HTTPException(status_code=400, detail="البيع بالجملة غير متاح لهذا المنتج")
+    unit_name = str(product.get("wholesale_unit_name") or "").strip()
+    quantity = int(product.get("wholesale_quantity", 0) or 0)
+    price = float(product.get("wholesale_price", 0) or 0)
+    if not unit_name or quantity < 2 or price <= 0:
+        raise HTTPException(status_code=400, detail="بيانات البيع بالجملة لهذا المنتج غير مكتملة")
+    return quantity, unit_name, price, product.get("wholesale_old_price")
+
+
+def cart_line_key(item):
+    return (str(item.get("product_id") or ""), str(item.get("sale_unit") or "piece"))
+
+
+def order_item_stock_quantity(item):
+    if item.get("stock_quantity") is not None:
+        return max(int(item.get("stock_quantity", 0) or 0), 0)
+    quantity = max(int(item.get("quantity", 0) or 0), 0)
+    units_per_unit = max(int(item.get("units_per_unit", 1) or 1), 1)
+    return quantity * units_per_unit
+
+
 @api.post("/products")
 async def create_product(body: ProductIn, user=Depends(require_manager)):
     barcode = normalize_barcode(body.barcode)
@@ -1446,6 +1521,7 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         )
         if not branch:
             raise HTTPException(status_code=400, detail="الفرع لا ينتمي إلى القسم المختار")
+    wholesale = normalize_wholesale_fields(body.dict())
     pid = "prod_" + uuid.uuid4().hex[:12]
     doc = {
         "id": pid,
@@ -1455,6 +1531,7 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         "branch_id": body.branch_id or None,
         "price": body.price,
         "old_price": body.old_price,
+        **wholesale,
         "image_url": body.image_url or CATEGORY_IMAGES.get(body.category, DEFAULT_IMG),
         "description": body.description or "",
         "stock": body.stock,
@@ -1472,7 +1549,8 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
 @api.put("/products/{pid}")
 async def update_product(pid: str, body: ProductUpdate, user=Depends(require_manager)):
     raw_updates = body.dict(exclude_unset=True)
-    upd = {k: v for k, v in raw_updates.items() if v is not None or k == "branch_id"}
+    wholesale_keys = {"wholesale_enabled", "wholesale_unit_name", "wholesale_quantity", "wholesale_price", "wholesale_old_price"}
+    upd = {k: v for k, v in raw_updates.items() if v is not None or k == "branch_id" or k in wholesale_keys}
     if body.barcode is not None:
         barcode = normalize_barcode(body.barcode)
         if not re.fullmatch(r"\d{8,14}", barcode):
@@ -1481,11 +1559,17 @@ async def update_product(pid: str, body: ProductUpdate, user=Depends(require_man
         if duplicate:
             raise HTTPException(status_code=409, detail="هذا الباركود مستخدم لمنتج آخر")
         upd["barcode"] = barcode
-    if not upd:
-        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
-    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0, "coming_soon": 1, "category": 1, "branch_id": 1})
+    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if any(key in raw_updates for key in wholesale_keys):
+        merged_wholesale = dict(existing)
+        for key in wholesale_keys:
+            if key in raw_updates:
+                merged_wholesale[key] = raw_updates[key]
+        upd.update(normalize_wholesale_fields(merged_wholesale))
+    if not upd:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
     if "category" in upd and "branch_id" not in upd and existing.get("branch_id"):
         upd["branch_id"] = None
     if upd.get("branch_id"):
@@ -1866,16 +1950,25 @@ def cart_from_items(items, products_by_id):
         quantity = max(int(item.get("quantity", 0) or 0), 0)
         if not product or quantity <= 0:
             continue
-        line_total = float(product.get("price", 0) or 0) * quantity
+        sale_unit = item.get("sale_unit") or "piece"
+        units_per_unit, unit_label, unit_price, old_price = product_sale_unit(product, sale_unit)
+        line_total = unit_price * quantity
+        stock = max(int(product.get("stock", 0) or 0), 0)
         total += line_total
         out.append(
             {
                 "product_id": product["id"],
                 "name": product.get("name", ""),
-                "price": product.get("price", 0),
+                "price": unit_price,
+                "old_price": old_price,
                 "image_url": product.get("image_url", ""),
+                "sale_unit": sale_unit,
+                "unit_label": unit_label,
+                "units_per_unit": units_per_unit,
                 "quantity": quantity,
-                "stock": max(int(product.get("stock", 0) or 0), 0),
+                "stock": stock,
+                "stock_quantity": quantity * units_per_unit,
+                "available_quantity": stock // units_per_unit,
                 "line_total": line_total,
             }
         )
@@ -1907,26 +2000,28 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon"):
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
-    available_stock = max(int(prod.get("stock", 0) or 0), 0)
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="يجب أن تكون الكمية أكبر من صفر")
+    available_stock = max(int(prod.get("stock", 0) or 0), 0)
     if available_stock <= 0:
         raise HTTPException(status_code=400, detail="نفدت الكمية")
+    sale_unit = body.sale_unit or "piece"
+    units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
     items = list((cart or {}).get("items", []))
-    found = False
-    for it in items:
-        if it["product_id"] == body.product_id:
-            current_quantity = max(int(it.get("quantity", 0) or 0), 0)
-            if current_quantity + body.quantity > available_stock:
-                raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-            it["quantity"] = current_quantity + body.quantity
-            found = True
-            break
-    if not found:
-        if body.quantity > available_stock:
-            raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-        items.append({"product_id": body.product_id, "quantity": body.quantity})
-    items = [i for i in items if i["quantity"] > 0]
+    used_stock = 0
+    for item in items:
+        if str(item.get("product_id")) == body.product_id:
+            factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
+            used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
+    if used_stock + body.quantity * units_per_unit > available_stock:
+        capacity = max((available_stock - used_stock) // units_per_unit, 0)
+        raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
+    line = next((item for item in items if cart_line_key(item) == (body.product_id, sale_unit)), None)
+    if line:
+        line["quantity"] = max(int(line.get("quantity", 0) or 0), 0) + body.quantity
+    else:
+        items.append({"product_id": body.product_id, "sale_unit": sale_unit, "quantity": body.quantity})
+    items = [item for item in items if int(item.get("quantity", 0) or 0) > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
     products = await load_cart_products(items, {prod["id"]: prod})
     return cart_from_items(items, products)
@@ -1944,22 +2039,42 @@ async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon") and body.quantity > 0:
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
-    available_stock = max(int(prod.get("stock", 0) or 0), 0)
-    if body.quantity > available_stock:
-        raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-    items = list((cart or {}).get("items", []))
-    items = [i for i in items if i["product_id"] != body.product_id]
+    sale_unit = body.sale_unit or "piece"
+    if sale_unit not in {"piece", "wholesale"}:
+        raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
     if body.quantity > 0:
-        items.append({"product_id": body.product_id, "quantity": body.quantity})
-    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
-    products = await load_cart_products(items)
-    return cart_from_items(items, products)
+        units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
+    else:
+        units_per_unit, unit_label = 1, "قطعة"
+    items = list((cart or {}).get("items", []))
+    target_key = (body.product_id, sale_unit)
+    remaining = [item for item in items if cart_line_key(item) != target_key]
+    if body.quantity > 0:
+        used_stock = 0
+        for item in remaining:
+            if str(item.get("product_id")) == body.product_id:
+                factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
+                used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
+        stock = max(int(prod.get("stock", 0) or 0), 0)
+        if body.quantity * units_per_unit + used_stock > stock:
+            capacity = max((stock - used_stock) // units_per_unit, 0)
+            raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
+        remaining.append({"product_id": body.product_id, "sale_unit": sale_unit, "quantity": body.quantity})
+    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": remaining}}, upsert=True)
+    products = await load_cart_products(remaining, {prod["id"]: prod})
+    return cart_from_items(remaining, products)
 
 
 @api.delete("/cart/items/{pid}")
-async def remove_cart_item(pid: str, user=Depends(require_user)):
+async def remove_cart_item(pid: str, sale_unit: Optional[str] = None, user=Depends(require_user)):
+    if sale_unit is not None and sale_unit not in {"piece", "wholesale"}:
+        raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
     cart = await db.carts.find_one({"user_id": user["user_id"]})
-    items = [item for item in (cart or {}).get("items", []) if item["product_id"] != pid]
+    items = list((cart or {}).get("items", []))
+    if sale_unit is None:
+        items = [item for item in items if str(item.get("product_id")) != pid]
+    else:
+        items = [item for item in items if cart_line_key(item) != (pid, sale_unit)]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
     products = await load_cart_products(items)
     return cart_from_items(items, products)
@@ -1967,21 +2082,21 @@ async def remove_cart_item(pid: str, user=Depends(require_user)):
 
 # ---------------- Orders ----------------
 async def reserve_order_stock(items):
-    """Atomically reserve every item, rolling back partial reservations on failure."""
+    """Atomically reserve the base-piece quantity for every order line."""
     reserved = []
     try:
         for item in items:
-            quantity = max(int(item.get("quantity", 0) or 0), 0)
-            if quantity <= 0:
+            stock_quantity = order_item_stock_quantity(item)
+            if stock_quantity <= 0:
                 continue
             product_id = item["product_id"]
             updated = await db.products.find_one_and_update(
-                {"id": product_id, "deleted_at": None, "stock": {"$gte": quantity}},
-                {"$inc": {"stock": -quantity}},
+                {"id": product_id, "deleted_at": None, "stock": {"$gte": stock_quantity}},
+                {"$inc": {"stock": -stock_quantity}},
             )
             if not updated:
                 raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
-            reserved.append({"product_id": product_id, "quantity": quantity})
+            reserved.append({"product_id": product_id, "stock_quantity": stock_quantity})
     except Exception:
         try:
             await release_order_stock(reserved)
@@ -1993,32 +2108,39 @@ async def reserve_order_stock(items):
 
 async def release_order_stock(items):
     for item in items:
-        quantity = max(int(item.get("quantity", 0) or 0), 0)
-        if quantity <= 0:
+        stock_quantity = order_item_stock_quantity(item)
+        if stock_quantity <= 0:
             continue
         await db.products.find_one_and_update(
             {"id": item["product_id"]},
-            {"$inc": {"stock": quantity}},
+            {"$inc": {"stock": stock_quantity}},
         )
 
 
 async def remaining_stock_items(order):
-    """Return only units that have not already been restored by a partial return."""
+    """Return base pieces not already restored by partial returns."""
     items = list(order.get("items") or [])
     if not items or not order.get("stock_reserved") or order.get("stock_released"):
         return []
+    source_by_key = {cart_line_key(item): item for item in items}
     returned_docs = await db.returns.find({"order_id": order.get("id")}, {"_id": 0, "items": 1}).to_list(200)
-    returned_by_product = {}
+    returned_stock_by_line = {}
     for returned in returned_docs:
         for item in returned.get("items", []):
-            product_id = str(item.get("product_id"))
-            returned_by_product[product_id] = returned_by_product.get(product_id, 0) + int(item.get("quantity", 0) or 0)
+            key = cart_line_key(item)
+            source = source_by_key.get(key)
+            if item.get("stock_quantity") is not None:
+                stock_quantity = order_item_stock_quantity(item)
+            else:
+                factor = max(int((source or {}).get("units_per_unit", 1) or 1), 1)
+                stock_quantity = max(int(item.get("quantity", 0) or 0), 0) * factor
+            returned_stock_by_line[key] = returned_stock_by_line.get(key, 0) + stock_quantity
     remaining = []
     for item in items:
-        product_id = str(item.get("product_id"))
-        quantity = max(int(item.get("quantity", 0) or 0) - returned_by_product.get(product_id, 0), 0)
-        if quantity:
-            remaining.append({"product_id": product_id, "quantity": quantity})
+        key = cart_line_key(item)
+        stock_quantity = max(order_item_stock_quantity(item) - returned_stock_by_line.get(key, 0), 0)
+        if stock_quantity:
+            remaining.append({"product_id": item.get("product_id"), "stock_quantity": stock_quantity})
     return remaining
 
 
@@ -2162,7 +2284,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         raise HTTPException(status_code=400, detail="السلة فارغة")
     for item in cart["items"]:
         available_stock = max(int(item.get("stock", 0) or 0), 0)
-        if int(item.get("quantity", 0) or 0) > available_stock:
+        if order_item_stock_quantity(item) > available_stock:
             raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
     saved_address = None
     order_name = body.name.strip()
@@ -2214,7 +2336,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "notes": body.notes or "",
         "location": ({"lat": order_lat, "lng": order_lng} if (order_lat is not None and order_lng is not None) else None),
         "items": [
-            {key: value for key, value in item.items() if key != "stock"}
+            {key: value for key, value in item.items() if key not in {"stock", "available_quantity"}}
             for item in cart["items"]
         ],
         "subtotal": subtotal,
@@ -2257,7 +2379,6 @@ async def reorder_order(oid: str, user=Depends(require_user)):
     order = await db.orders.find_one({"id": oid, "user_id": user["user_id"]}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
-
     source_items = list(order.get("items") or [])
     if not source_items:
         raise HTTPException(status_code=400, detail="لا توجد منتجات في هذا الطلب")
@@ -2270,42 +2391,55 @@ async def reorder_order(oid: str, user=Depends(require_user)):
         quantity = max(int(item.get("quantity", 0) or 0), 0)
         if not product_id or quantity <= 0:
             continue
-        if product_id in positions:
-            merged_items[positions[product_id]]["quantity"] += quantity
+        key = cart_line_key(item)
+        if key in positions:
+            merged_items[positions[key]]["quantity"] += quantity
         else:
-            positions[product_id] = len(merged_items)
-            merged_items.append({"product_id": product_id, "quantity": quantity})
+            positions[key] = len(merged_items)
+            merged_items.append({"product_id": product_id, "sale_unit": key[1], "quantity": quantity})
 
     products = await load_cart_products(source_items + merged_items)
     added_items = []
     unavailable_items = []
     for item in source_items:
         product_id = str(item.get("product_id") or "")
+        sale_unit = item.get("sale_unit") or "piece"
+        line_key = (product_id, sale_unit)
         requested = max(int(item.get("quantity", 0) or 0), 0)
         if not product_id or requested <= 0:
             continue
         product = products.get(product_id)
         name = (product or {}).get("name") or item.get("name") or "منتج"
         if not product:
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
             continue
         if product.get("coming_soon"):
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
+            continue
+        try:
+            units_per_unit, unit_label, _, _ = product_sale_unit(product, sale_unit)
+        except HTTPException as exc:
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": str(exc.detail)})
             continue
         stock = max(int(product.get("stock", 0) or 0), 0)
-        current_quantity = merged_items[positions[product_id]]["quantity"] if product_id in positions else 0
-        capacity = max(stock - current_quantity, 0)
+        used_stock = 0
+        for current_item in merged_items:
+            if str(current_item.get("product_id")) == product_id:
+                factor, _, _, _ = product_sale_unit(product, current_item.get("sale_unit") or "piece")
+                used_stock += max(int(current_item.get("quantity", 0) or 0), 0) * factor
+        capacity = max((stock - used_stock) // units_per_unit, 0)
         added_quantity = min(requested, capacity)
-        if product_id in positions:
-            merged_items[positions[product_id]]["quantity"] += added_quantity
-        elif added_quantity > 0:
-            positions[product_id] = len(merged_items)
-            merged_items.append({"product_id": product_id, "quantity": added_quantity})
         if added_quantity > 0:
-            added_items.append({"product_id": product_id, "name": name, "quantity": added_quantity})
+            if line_key in positions:
+                merged_items[positions[line_key]]["quantity"] += added_quantity
+            else:
+                positions[line_key] = len(merged_items)
+                merged_items.append({"product_id": product_id, "sale_unit": sale_unit, "quantity": added_quantity})
+            added_items.append({"product_id": product_id, "sale_unit": sale_unit, "unit_label": unit_label, "name": name, "quantity": added_quantity})
         if added_quantity < requested:
-            reason = "نفدت الكمية" if stock <= 0 else "المتاح حالياً: " + str(capacity)
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
+            remaining_capacity = max((stock - used_stock) // units_per_unit, 0)
+            reason = "نفدت الكمية" if stock <= 0 else f"المتاح حالياً من {unit_label}: {remaining_capacity}"
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
 
     merged_items = [item for item in merged_items if item["quantity"] > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": merged_items}}, upsert=True)
@@ -2379,42 +2513,53 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         raise HTTPException(status_code=400, detail="يجب تسجيل المرتجع قبل تأكيد التسليم")
 
     previous_returns = await db.returns.find({"order_id": oid}, {"_id": 0}).to_list(200)
-    returned_by_product = {}
+    returned_by_line = {}
     for previous in previous_returns:
         for item in previous.get("items", []):
-            pid = str(item.get("product_id"))
-            returned_by_product[pid] = returned_by_product.get(pid, 0) + int(item.get("quantity", 0) or 0)
+            key = cart_line_key(item)
+            returned_by_line[key] = returned_by_line.get(key, 0) + int(item.get("quantity", 0) or 0)
 
-    order_items = {str(item.get("product_id")): item for item in order.get("items", [])}
-    requested_by_product = {}
+    order_items = {cart_line_key(item): item for item in order.get("items", [])}
+    requested_by_line = {}
     return_items = []
     for requested in body.items:
         pid = str(requested.product_id)
-        if pid in requested_by_product:
-            raise HTTPException(status_code=400, detail="لا يمكن تكرار المنتج في نفس المرتجع")
-        source = order_items.get(pid)
+        sale_unit = requested.sale_unit or "piece"
+        if sale_unit not in {"piece", "wholesale"}:
+            raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
+        key = (pid, sale_unit)
+        if key in requested_by_line:
+            raise HTTPException(status_code=400, detail="لا يمكن تكرار المنتج ووحدة البيع في نفس المرتجع")
+        source = order_items.get(key)
         if not source:
-            raise HTTPException(status_code=400, detail="المنتج غير موجود في هذا الطلب")
+            raise HTTPException(status_code=400, detail="المنتج ووحدة البيع غير موجودين في هذا الطلب")
         ordered_qty = int(source.get("quantity", 0) or 0)
-        available_qty = ordered_qty - returned_by_product.get(pid, 0)
+        available_qty = ordered_qty - returned_by_line.get(key, 0)
         if requested.quantity > available_qty:
             raise HTTPException(status_code=400, detail=f"الكمية المتاحة للإرجاع من {source.get('name', 'المنتج')} هي {max(available_qty, 0)}")
-        requested_by_product[pid] = requested.quantity
+        requested_by_line[key] = requested.quantity
+        units_per_unit = max(int(source.get("units_per_unit", 1) or 1), 1)
+        unit_label = source.get("unit_label") or ("قطعة" if sale_unit == "piece" else "وحدة")
+        price = float(source.get("price", 0) or 0)
         return_items.append({
             "product_id": pid,
             "name": source.get("name", ""),
             "image_url": source.get("image_url"),
-            "price": float(source.get("price", 0) or 0),
+            "sale_unit": sale_unit,
+            "unit_label": unit_label,
+            "units_per_unit": units_per_unit,
+            "price": price,
             "quantity": requested.quantity,
-            "line_total": float(source.get("price", 0) or 0) * requested.quantity,
+            "stock_quantity": requested.quantity * units_per_unit,
+            "line_total": price * requested.quantity,
         })
 
     if not return_items:
         raise HTTPException(status_code=400, detail="حدد كمية الإرجاع")
     total = sum(item["line_total"] for item in return_items)
     is_full = all(
-        returned_by_product.get(pid, 0) + requested_by_product.get(pid, 0) >= int(source.get("quantity", 0) or 0)
-        for pid, source in order_items.items()
+        returned_by_line.get(key, 0) + requested_by_line.get(key, 0) >= int(source.get("quantity", 0) or 0)
+        for key, source in order_items.items()
     )
     created_at = now_utc().isoformat()
     return_id = "RET" + uuid.uuid4().hex[:8].upper()
@@ -2434,9 +2579,6 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "stock_released": False,
     }
     should_restore_stock = bool(order.get("stock_reserved") and not order.get("stock_released"))
-    # Claim the order while it is still out for delivery. The Firestore
-    # transaction makes the status check atomic with the return bookkeeping,
-    # so a return cannot race with delivery confirmation.
     order_update = {
         "return_status": "full" if is_full else "partial",
         "returned_total": float(order.get("returned_total", 0) or 0) + total,
@@ -2855,257 +2997,6 @@ async def admin_update_agent(user_id: str, body: AgentUpdateIn, user=Depends(req
     return agent
 
 
-def agent_date_matches(value, target_date, tz_offset_minutes):
-    if not value:
-        return False
-    try:
-        event_dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return False
-    if event_dt.tzinfo is None:
-        event_dt = event_dt.replace(tzinfo=timezone.utc)
-    local_date = event_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes))).date()
-    return local_date == target_date
-
-
-def agent_order_earnings(order):
-    try:
-        return float(order.get("agent_fee", order.get("delivery_fee", 0)) or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes):
-    delivered = [order for order in orders if order.get("status") == "delivered"]
-    today_delivered = [
-        order for order in delivered
-        if agent_date_matches(order.get("delivered_at"), target_date, tz_offset_minutes)
-    ]
-
-    def invoice_total(order):
-        try:
-            return order_amounts(order)[1]
-        except (TypeError, ValueError):
-            return 0.0
-
-    def receipt_amount(receipt):
-        try:
-            return max(0.0, float(receipt.get("amount", 0) or 0))
-        except (TypeError, ValueError):
-            return 0.0
-
-    today_receipts = [
-        receipt for receipt in receipts
-        if receipt.get("settlement_date") == target_date.isoformat()
-        or agent_date_matches(receipt.get("received_at"), target_date, tz_offset_minutes)
-    ]
-    total_invoice_amount = sum(invoice_total(order) for order in delivered)
-    total_earnings = sum(agent_order_earnings(order) for order in delivered)
-    total_received = sum(receipt_amount(receipt) for receipt in receipts)
-    today_location = agent.get("last_location")
-    location_is_live = False
-    if isinstance(today_location, dict) and today_location.get("at"):
-        try:
-            location_at = datetime.fromisoformat(str(today_location["at"]).replace("Z", "+00:00"))
-            if location_at.tzinfo is None:
-                location_at = location_at.replace(tzinfo=timezone.utc)
-            location_age_seconds = (now_utc() - location_at).total_seconds()
-            location_is_live = 0 <= location_age_seconds <= 180
-        except (TypeError, ValueError):
-            pass
-
-    return {
-        "user_id": agent.get("user_id"),
-        "name": agent.get("name") or "مندوب",
-        "email": agent.get("email"),
-        "phone": agent.get("phone") or agent.get("phone_number"),
-        "today_delivered_count": len(today_delivered),
-        "today_invoice_total": round(sum(invoice_total(order) for order in today_delivered), 2),
-        "today_earnings": round(sum(agent_order_earnings(order) for order in today_delivered), 2),
-        "all_time_delivered_count": len(delivered),
-        "all_time_invoice_total": round(total_invoice_amount, 2),
-        "all_time_earnings": round(total_earnings, 2),
-        "today_cash_received": round(sum(receipt_amount(receipt) for receipt in today_receipts), 2),
-        "total_cash_received": round(total_received, 2),
-        "cash_outstanding": round(max(0.0, total_invoice_amount - total_received), 2),
-        "active_orders": sum(1 for order in orders if order.get("status") == "out_for_delivery"),
-        "last_location": today_location if isinstance(today_location, dict) else None,
-        "location_is_live": location_is_live,
-    }
-
-
-async def load_agent_financials(agent_id: str):
-    orders = await db.orders.find(
-        {"agent_id": agent_id},
-        {
-            "_id": 0,
-            "id": 1,
-            "status": 1,
-            "total": 1,
-            "returned_total": 1,
-            "return_status": 1,
-            "delivery_fee": 1,
-            "agent_fee": 1,
-            "created_at": 1,
-            "delivered_at": 1,
-            "delivery_failed_at": 1,
-            "agent_location": 1,
-        },
-    ).to_list(2000)
-    receipts = await db.agent_cash_receipts.find(
-        {"agent_id": agent_id},
-        {"_id": 0},
-    ).to_list(2000)
-    return orders, receipts
-
-
-def parse_agent_summary_date(date_text):
-    try:
-        return datetime.strptime(date_text, "%Y-%m-%d").date()
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="التاريخ غير صالح")
-
-
-@api.get("/admin/agents/overview")
-async def admin_agent_overview(
-    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    tz_offset_minutes: int = Query(0, ge=-840, le=840),
-    user=Depends(require_manager),
-):
-    target_date = parse_agent_summary_date(date or now_utc().date().isoformat())
-    agents = await db.users.find(
-        {"role": "delivery"},
-        {"_id": 0, "password_hash": 0},
-    ).to_list(200)
-    rows = []
-    for start in range(0, len(agents), 10):
-        agent_batch = agents[start : start + 10]
-        financials = await asyncio.gather(
-            *(load_agent_financials(agent["user_id"]) for agent in agent_batch)
-        )
-        rows.extend(
-            agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes)
-            for agent, (orders, receipts) in zip(agent_batch, financials)
-        )
-    rows.sort(
-        key=lambda item: (
-            -item["cash_outstanding"],
-            -item["active_orders"],
-            (item["name"] or "").casefold(),
-        )
-    )
-    return {
-        "date": target_date.isoformat(),
-        "agents": rows,
-        "totals": {
-            "agents_count": len(rows),
-            "active_agents": sum(1 for agent in rows if agent["active_orders"] > 0),
-            "delivered_today": sum(agent["today_delivered_count"] for agent in rows),
-            "invoices_today": round(sum(agent["today_invoice_total"] for agent in rows), 2),
-            "earnings_today": round(sum(agent["today_earnings"] for agent in rows), 2),
-            "cash_received_today": round(sum(agent["today_cash_received"] for agent in rows), 2),
-            "cash_outstanding": round(sum(agent["cash_outstanding"] for agent in rows), 2),
-        },
-        "currency": "IQD",
-    }
-
-
-@api.get("/admin/agents/{user_id}/summary")
-async def admin_agent_summary(
-    user_id: str,
-    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    tz_offset_minutes: int = Query(0, ge=-840, le=840),
-    user=Depends(require_manager),
-):
-    agent = await db.users.find_one(
-        {"user_id": user_id, "role": "delivery"},
-        {"_id": 0, "password_hash": 0},
-    )
-    if not agent:
-        raise HTTPException(status_code=404, detail="المندوب غير موجود")
-    target_date = parse_agent_summary_date(date or now_utc().date().isoformat())
-    orders, receipts = await load_agent_financials(user_id)
-    summary = agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes)
-    recent_orders = sorted(
-        orders,
-        key=lambda item: item.get("delivered_at") or item.get("created_at") or "",
-        reverse=True,
-    )[:100]
-    recent_receipts = sorted(
-        receipts,
-        key=lambda item: item.get("received_at") or "",
-        reverse=True,
-    )[:100]
-    return {
-        "date": target_date.isoformat(),
-        "agent": summary,
-        "orders": [
-            {
-                "id": order.get("id"),
-                "status": order.get("status"),
-                "invoice_total": round(order_amounts(order)[1], 2),
-                "earnings": round(agent_order_earnings(order), 2),
-                "created_at": order.get("created_at"),
-                "delivered_at": order.get("delivered_at"),
-                "delivery_failed_at": order.get("delivery_failed_at"),
-                "location": order.get("agent_location"),
-            }
-            for order in recent_orders
-        ],
-        "receipts": [
-            {
-                "id": receipt.get("id"),
-                "amount": receipt.get("amount", 0),
-                "settlement_date": receipt.get("settlement_date"),
-                "received_at": receipt.get("received_at"),
-                "receiver_name": receipt.get("receiver_name"),
-                "note": receipt.get("note"),
-            }
-            for receipt in recent_receipts
-        ],
-        "currency": "IQD",
-    }
-
-
-@api.post("/admin/agents/{user_id}/cash-receipts")
-async def admin_receive_agent_cash(
-    user_id: str,
-    body: AgentCashReceiptIn,
-    user=Depends(require_manager),
-):
-    agent = await db.users.find_one(
-        {"user_id": user_id, "role": "delivery"},
-        {"_id": 0, "password_hash": 0},
-    )
-    if not agent:
-        raise HTTPException(status_code=404, detail="المندوب غير موجود")
-    settlement_date = parse_agent_summary_date(body.settlement_date or now_utc().date().isoformat())
-    orders, receipts = await load_agent_financials(user_id)
-    current = agent_financial_summary(agent, orders, receipts, settlement_date, 0)
-    amount = round(float(body.amount), 2)
-    if amount <= 0:
-        raise HTTPException(status_code=422, detail="يجب أن يكون المبلغ أكبر من صفر")
-    if amount > current["cash_outstanding"] + 0.009:
-        raise HTTPException(
-            status_code=409,
-            detail=f"المبلغ يتجاوز الرصيد النقدي المستحق ({current['cash_outstanding']:.2f} د.ع)",
-        )
-    received_at = now_utc().isoformat()
-    receipt = {
-        "id": "CASH" + uuid.uuid4().hex[:12].upper(),
-        "agent_id": user_id,
-        "agent_name": agent.get("name") or "مندوب",
-        "amount": amount,
-        "settlement_date": settlement_date.isoformat(),
-        "received_at": received_at,
-        "receiver_id": user.get("user_id"),
-        "receiver_name": user.get("name") or user.get("email") or "مدير",
-        "note": (body.note or "").strip() or None,
-    }
-    await db.agent_cash_receipts.insert_one(receipt)
-    return {"receipt": receipt, "cash_outstanding": round(current["cash_outstanding"] - amount, 2)}
-
-
 @api.get("/admin/sync-config")
 async def admin_sync_config(user=Depends(require_manager)):
     """POS/cashier integration config: endpoint path + sync key + sample payload."""
@@ -3336,26 +3227,6 @@ async def delivery_location(oid: str, body: LocationIn, user=Depends(require_del
         raise HTTPException(status_code=409, detail="لا يمكن تحديث موقع طلب غير نشط")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
     return {"ok": True}
-
-
-@api.post("/delivery/location")
-async def delivery_agent_location(body: LocationIn, user=Depends(require_delivery)):
-    if user.get("role") != "delivery":
-        raise HTTPException(status_code=403, detail="مخصص لمندوب التوصيل")
-    active_order = await db.orders.find_one(
-        {"agent_id": user["user_id"], "status": "out_for_delivery"},
-        {"_id": 0, "id": 1},
-    )
-    if not active_order:
-        raise HTTPException(status_code=409, detail="يتم تحديث الموقع أثناء وجود طلب نشط فقط")
-    location = {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}
-    await db.users.update_one(
-        {"user_id": user["user_id"], "role": "delivery"},
-        {"$set": {"last_location": location}},
-    )
-    return {"ok": True, "last_location": location}
-
-
 def init_storage():
     if FIREBASE_BUCKET is None:
         raise RuntimeError("Firebase Storage is not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON.")

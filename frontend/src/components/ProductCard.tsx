@@ -76,8 +76,9 @@ export const ProductCard = React.memo(function ProductCard({
             <View style={styles.outPill}><T weight="bold" size={type.sm} color="#fff">{outLabel}</T></View>
           </View>
         )}
-        {(discount > 0 || lowStock) && !unavailable && (
+        {(discount > 0 || lowStock || product.wholesale_enabled) && !unavailable && (
           <View style={styles.badgeStack}>
+            {product.wholesale_enabled && <Badge text="جملة" color={colors.brandTertiary} textColor={colors.brandPrimary} />}
             {discount > 0 && <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />}
             {lowStock && (
               <View style={styles.lowStockBadge}>

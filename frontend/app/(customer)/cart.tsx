@@ -20,13 +20,13 @@ export default function CartScreen() {
 
   useFocusEffect(useCallback(() => { void reload(true); }, [reload]));
 
-  const changeQty = (id: string, qty: number) => {
+  const changeQty = (id: string, qty: number, saleUnit: "piece" | "wholesale") => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    void setQty(id, qty).catch((error: any) => show(error.message, "error"));
+    void setQty(id, qty, saleUnit).catch((error: any) => show(error.message, "error"));
   };
 
-  const removeItem = (id: string) => {
-    void remove(id).catch((error: any) => show(error.message, "error"));
+  const removeItem = (id: string, saleUnit: "piece" | "wholesale") => {
+    void remove(id, saleUnit).catch((error: any) => show(error.message, "error"));
   };
 
   return (
@@ -47,25 +47,26 @@ export default function CartScreen() {
         <>
           <FlatList
             data={cart.items}
-            keyExtractor={(i) => i.product_id}
+            keyExtractor={(i) => `${i.product_id}:${i.sale_unit || "piece"}`}
             contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={styles.item} testID={`cart-item-${item.product_id}`}>
+              <View style={styles.item} testID={`cart-item-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`}>
                 <Image source={{ uri: resolveImage(item.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
                 <View style={{ flex: 1 }}>
                   <T weight="semi" numberOfLines={2}>{item.name}</T>
-                  <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 4 }}>{formatPrice(item.price)}</T>
+                  <T color={colors.muted} size={type.xs} style={{ marginTop: 2 }}>{item.unit_label || "قطعة"}{item.sale_unit === "wholesale" && item.units_per_unit ? ` • ${item.units_per_unit} قطع` : ""}</T>
+                  <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 4 }}>{formatPrice(item.price)} / {item.unit_label || "قطعة"}</T>
                   <View style={styles.qtyRow}>
                     <View style={styles.stepper}>
-                      <Pressable testID={`dec-${item.product_id}`} onPress={() => changeQty(item.product_id, item.quantity - 1)} style={styles.stepBtn}>
+                      <Pressable testID={`dec-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => changeQty(item.product_id, item.quantity - 1, item.sale_unit || "piece")} style={styles.stepBtn}>
                         <Feather name="minus" size={16} color={colors.onSurface} />
                       </Pressable>
                       <T weight="bold" style={{ minWidth: 24, textAlign: "center" }}>{item.quantity}</T>
-                      <Pressable testID={`inc-${item.product_id}`} onPress={() => changeQty(item.product_id, item.quantity + 1)} style={styles.stepBtn}>
+                      <Pressable testID={`inc-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => changeQty(item.product_id, item.quantity + 1, item.sale_unit || "piece")} style={styles.stepBtn}>
                         <Feather name="plus" size={16} color={colors.onSurface} />
                       </Pressable>
                     </View>
-                    <Pressable testID={`remove-${item.product_id}`} onPress={() => removeItem(item.product_id)} hitSlop={8}>
+                    <Pressable testID={`remove-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => removeItem(item.product_id, item.sale_unit || "piece")} hitSlop={8}>
                       <Feather name="trash-2" size={18} color={colors.error} />
                     </Pressable>
                   </View>

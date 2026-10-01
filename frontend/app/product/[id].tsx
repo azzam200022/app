@@ -23,6 +23,7 @@ export default function ProductDetail() {
   const initialProduct = id ? getCachedProduct(id) : undefined;
   const [product, setProduct] = useState<any>(initialProduct || null);
   const [qty, setQty] = useState(1);
+  const [saleUnit, setSaleUnit] = useState<"piece" | "wholesale">("piece");
   const [fav, setFav] = useState(false);
   const [loading, setLoading] = useState(!initialProduct);
   const [adding, setAdding] = useState(false);
@@ -31,6 +32,8 @@ export default function ProductDetail() {
 
   useEffect(() => {
     let active = true;
+    setSaleUnit("piece");
+    setQty(1);
     const cached = id ? getCachedProduct(id) : undefined;
     if (cached) {
       setProduct(cached);
@@ -85,7 +88,7 @@ export default function ProductDetail() {
   const addToCart = async () => {
     setAdding(true);
     try {
-      await add(id!, qty);
+      await add(id!, qty, saleUnit);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       show("تمت الإضافة إلى السلة");
     } catch (e: any) { show(e.message, "error"); }
@@ -114,7 +117,12 @@ export default function ProductDetail() {
     return <View style={styles.center}><T color={colors.muted}>تعذر تحميل المنتج</T></View>;
   }
 
-  const discount = product.old_price && product.old_price > product.price ? Math.round((1 - product.price / product.old_price) * 100) : 0;
+  const hasWholesale = !!(product.wholesale_enabled && product.wholesale_unit_name && Number(product.wholesale_quantity) >= 2 && Number(product.wholesale_price) > 0);
+  const unitsPerSaleUnit = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_quantity) : 1;
+  const activePrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_price) : Number(product.price);
+  const activeOldPrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_old_price || 0) : Number(product.old_price || 0);
+  const maxSaleQuantity = Math.max(1, Math.floor(Number(product.stock || 0) / unitsPerSaleUnit));
+  const discount = activeOldPrice > activePrice ? Math.round((1 - activePrice / activeOldPrice) * 100) : 0;
 
   return (
     <View style={styles.root}>
@@ -139,9 +147,19 @@ export default function ProductDetail() {
           </View>
           <T weight="displayBold" size={type["2xl"]} style={{ marginTop: spacing.sm }}>{product.name}</T>
 
+          {hasWholesale && (
+            <View style={styles.saleUnitRow}>
+              <Pressable testID="pd-unit-piece" onPress={() => { setSaleUnit("piece"); setQty(1); }} style={[styles.saleUnitButton, saleUnit === "piece" && styles.saleUnitButtonActive]}>
+                <T size={type.sm} weight="semi" color={saleUnit === "piece" ? colors.brandPrimary : colors.onSurfaceSecondary}>قطعة</T>
+              </Pressable>
+              <Pressable testID="pd-unit-wholesale" disabled={Number(product.stock || 0) < Number(product.wholesale_quantity)} onPress={() => { setSaleUnit("wholesale"); setQty(1); }} style={[styles.saleUnitButton, saleUnit === "wholesale" && styles.saleUnitButtonActive, Number(product.stock || 0) < Number(product.wholesale_quantity) && styles.saleUnitButtonDisabled]}>
+                <T size={type.sm} weight="semi" color={saleUnit === "wholesale" ? colors.brandPrimary : colors.onSurfaceSecondary}>{product.wholesale_unit_name} • {product.wholesale_quantity} قطع</T>
+              </Pressable>
+            </View>
+          )}
           <View style={styles.priceRow}>
-            <T weight="displayBold" size={type["3xl"]} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
-            {product.old_price ? <T size={type.lg} color={colors.muted} style={{ textDecorationLine: "line-through" }}>{formatPrice(product.old_price)}</T> : null}
+            <T weight="displayBold" size={type["3xl"]} color={colors.brandPrimary}>{formatPrice(activePrice)}</T>
+            {activeOldPrice > activePrice ? <T size={type.lg} color={colors.muted} style={{ textDecorationLine: "line-through" }}>{formatPrice(activeOldPrice)}</T> : null}
           </View>
 
           {product.available === false ? (
@@ -175,7 +193,7 @@ export default function ProductDetail() {
       {product.available !== false && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.stepper}>
-            <Pressable testID="pd-inc" onPress={() => setQty((q) => q + 1)} style={styles.stepBtn}><Feather name="plus" size={18} color={colors.onSurface} /></Pressable>
+            <Pressable testID="pd-inc" onPress={() => setQty((q) => Math.min(maxSaleQuantity, q + 1))} style={styles.stepBtn}><Feather name="plus" size={18} color={colors.onSurface} /></Pressable>
             <T weight="bold" size={type.lg} style={{ minWidth: 28, textAlign: "center" }}>{qty}</T>
             <Pressable testID="pd-dec" onPress={() => setQty((q) => Math.max(1, q - 1))} style={styles.stepBtn}><Feather name="minus" size={18} color={colors.onSurface} /></Pressable>
           </View>
@@ -198,6 +216,10 @@ const styles = StyleSheet.create({
   circleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.92)", alignItems: "center", justifyContent: "center" },
   body: { padding: spacing.lg, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -24 },
   badgeRow: { flexDirection: "row-reverse", gap: spacing.sm },
+  saleUnitRow: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.md },
+  saleUnitButton: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.sm, backgroundColor: "#fff" },
+  saleUnitButtonActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
+  saleUnitButtonDisabled: { opacity: 0.4 },
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", gap: spacing.md, marginTop: spacing.md },
   stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   unavailableBox: { marginTop: spacing.md, backgroundColor: "#FFF8F0", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: "#F2D39A" },
