@@ -26,7 +26,7 @@ const slides = [
     id: "everything",
     title: "كل ما تحتاجه.. في مكان واحد",
     description: "تسوق منتجاتك المفضلة بسهولة، واستلم طلبك حتى باب المنزل.",
-    image: { uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1000&q=85" },
+    image: require("../assets/images/onboarding-easy.jpg"),
   },
 ];
 
