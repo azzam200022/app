@@ -33,7 +33,7 @@ export default function ManagerDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, products, support] = await Promise.all([
+      const [s, o, products, support, agentsData] = await Promise.all([
         api.adminStats(),
         api.adminOrders({ page: 1, page_size: 100 }),
         api.products({}, true),
@@ -43,7 +43,7 @@ export default function ManagerDashboard() {
       setStats(s);
       setOrders(Array.isArray(o) ? o : (o?.items || []));
       setSupportUnread(Number(support?.count ?? 0));
-      setAgents(Array.isArray(agents) ? agents : []);
+      setAgents(Array.isArray(agentsData) ? agentsData : []);
       setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
       show(e.message, "error");
@@ -141,7 +141,7 @@ export default function ManagerDashboard() {
       title: "الفريق والدعم",
       hint: "المتابعة والتواصل اليومي",
       actions: [
-        { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
+        { icon: "users", label: "إحصاءات المندوبين", onPress: () => router.push("/(manager)/agent-statistics"), testID: "qa-agents" },
         { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
         { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
         { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
@@ -308,7 +308,7 @@ export default function ManagerDashboard() {
               <T weight="displayBold" size={type.lg}>إحصائيات المندوبين</T>
               <T color={colors.muted} size={type.sm}>{agentOverview.total} مندوب مسجل</T>
             </View>
-            <Pressable testID="agent-view-all" onPress={() => router.push("/(manager)/agents")}>
+            <Pressable testID="agent-view-all" onPress={() => router.push("/(manager)/agent-statistics")}>
               <T color={colors.brandPrimary} weight="semi" size={type.sm}>إدارة المندوبين ‹</T>
             </Pressable>
           </View>

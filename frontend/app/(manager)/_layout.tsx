@@ -32,7 +32,8 @@ export default function ManagerLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "لوحة التحكم", tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} /> }} />
-      <Tabs.Screen name="products" options={{ title: "المنتجات", tabBarIcon: ({ color, size }) => <Feather name="box" size={size} color={color} /> }} />
+      <Tabs.Screen name="agent-statistics" options={{ title: "إحصاءات المندوبين", tabBarIcon: ({ color, size }) => <Feather name="bar-chart-2" size={size} color={color} /> }} />
+      <Tabs.Screen name="products" options={{ href: null }} />
       <Tabs.Screen name="scan" options={{ title: "إضافة", tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} /> }} />
       <Tabs.Screen name="orders" options={{ title: "الطلبات", tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} /> }} />
       <Tabs.Screen name="support" options={{ title: "الدعم", tabBarBadge: supportUnread > 0 ? (supportUnread > 99 ? "99+" : supportUnread) : undefined, tabBarBadgeStyle: { backgroundColor: colors.gold, color: "#1A1A1A", fontFamily: font.bodyBold }, tabBarIcon: ({ color, size }) => <Feather name="headphones" size={size} color={color} /> }} />

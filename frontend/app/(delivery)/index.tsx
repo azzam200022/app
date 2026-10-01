@@ -238,6 +238,11 @@ export default function DeliveryHome() {
       try {
         let sent = 0;
         let failed = 0;
+        let agentLocationSent = false;
+        try {
+          await api.deliverySetCurrentLocation(coords.latitude, coords.longitude);
+          agentLocationSent = true;
+        } catch {}
         for (const id of activeIds.split(",")) {
           if (cancelled) break;
           try {
@@ -247,7 +252,7 @@ export default function DeliveryHome() {
             failed += 1;
           }
         }
-        if (failed > 0 && sent === 0) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
+        if (!agentLocationSent || (failed > 0 && sent === 0)) setLocationWarning("تعذر تحديث موقع التوصيل؛ تحقق من الاتصال وحاول مرة أخرى");
         else if (sent > 0) setLocationWarning(null);
       } catch {
         if (!cancelled) setLocationWarning("تعذر إرسال موقعك الحالي؛ تحقق من الاتصال وحاول مرة أخرى");

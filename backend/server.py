@@ -321,6 +321,12 @@ class AgentUpdateIn(BaseModel):
     phone: Optional[str] = Field(None, max_length=30)
 
 
+class AgentCashReceiptIn(BaseModel):
+    amount: float = Field(..., gt=0, le=100000000)
+    settlement_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: Optional[str] = Field(None, max_length=200)
+
+
 class ReturnItemIn(BaseModel):
     product_id: str
     quantity: int = Field(..., ge=1)
@@ -2849,6 +2855,257 @@ async def admin_update_agent(user_id: str, body: AgentUpdateIn, user=Depends(req
     return agent
 
 
+def agent_date_matches(value, target_date, tz_offset_minutes):
+    if not value:
+        return False
+    try:
+        event_dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if event_dt.tzinfo is None:
+        event_dt = event_dt.replace(tzinfo=timezone.utc)
+    local_date = event_dt.astimezone(timezone(timedelta(minutes=-tz_offset_minutes))).date()
+    return local_date == target_date
+
+
+def agent_order_earnings(order):
+    try:
+        return float(order.get("agent_fee", order.get("delivery_fee", 0)) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes):
+    delivered = [order for order in orders if order.get("status") == "delivered"]
+    today_delivered = [
+        order for order in delivered
+        if agent_date_matches(order.get("delivered_at"), target_date, tz_offset_minutes)
+    ]
+
+    def invoice_total(order):
+        try:
+            return order_amounts(order)[1]
+        except (TypeError, ValueError):
+            return 0.0
+
+    def receipt_amount(receipt):
+        try:
+            return max(0.0, float(receipt.get("amount", 0) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    today_receipts = [
+        receipt for receipt in receipts
+        if receipt.get("settlement_date") == target_date.isoformat()
+        or agent_date_matches(receipt.get("received_at"), target_date, tz_offset_minutes)
+    ]
+    total_invoice_amount = sum(invoice_total(order) for order in delivered)
+    total_earnings = sum(agent_order_earnings(order) for order in delivered)
+    total_received = sum(receipt_amount(receipt) for receipt in receipts)
+    today_location = agent.get("last_location")
+    location_is_live = False
+    if isinstance(today_location, dict) and today_location.get("at"):
+        try:
+            location_at = datetime.fromisoformat(str(today_location["at"]).replace("Z", "+00:00"))
+            if location_at.tzinfo is None:
+                location_at = location_at.replace(tzinfo=timezone.utc)
+            location_age_seconds = (now_utc() - location_at).total_seconds()
+            location_is_live = 0 <= location_age_seconds <= 180
+        except (TypeError, ValueError):
+            pass
+
+    return {
+        "user_id": agent.get("user_id"),
+        "name": agent.get("name") or "مندوب",
+        "email": agent.get("email"),
+        "phone": agent.get("phone") or agent.get("phone_number"),
+        "today_delivered_count": len(today_delivered),
+        "today_invoice_total": round(sum(invoice_total(order) for order in today_delivered), 2),
+        "today_earnings": round(sum(agent_order_earnings(order) for order in today_delivered), 2),
+        "all_time_delivered_count": len(delivered),
+        "all_time_invoice_total": round(total_invoice_amount, 2),
+        "all_time_earnings": round(total_earnings, 2),
+        "today_cash_received": round(sum(receipt_amount(receipt) for receipt in today_receipts), 2),
+        "total_cash_received": round(total_received, 2),
+        "cash_outstanding": round(max(0.0, total_invoice_amount - total_received), 2),
+        "active_orders": sum(1 for order in orders if order.get("status") == "out_for_delivery"),
+        "last_location": today_location if isinstance(today_location, dict) else None,
+        "location_is_live": location_is_live,
+    }
+
+
+async def load_agent_financials(agent_id: str):
+    orders = await db.orders.find(
+        {"agent_id": agent_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "status": 1,
+            "total": 1,
+            "returned_total": 1,
+            "return_status": 1,
+            "delivery_fee": 1,
+            "agent_fee": 1,
+            "created_at": 1,
+            "delivered_at": 1,
+            "delivery_failed_at": 1,
+            "agent_location": 1,
+        },
+    ).to_list(2000)
+    receipts = await db.agent_cash_receipts.find(
+        {"agent_id": agent_id},
+        {"_id": 0},
+    ).to_list(2000)
+    return orders, receipts
+
+
+def parse_agent_summary_date(date_text):
+    try:
+        return datetime.strptime(date_text, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="التاريخ غير صالح")
+
+
+@api.get("/admin/agents/overview")
+async def admin_agent_overview(
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz_offset_minutes: int = Query(0, ge=-840, le=840),
+    user=Depends(require_manager),
+):
+    target_date = parse_agent_summary_date(date or now_utc().date().isoformat())
+    agents = await db.users.find(
+        {"role": "delivery"},
+        {"_id": 0, "password_hash": 0},
+    ).to_list(200)
+    rows = []
+    for start in range(0, len(agents), 10):
+        agent_batch = agents[start : start + 10]
+        financials = await asyncio.gather(
+            *(load_agent_financials(agent["user_id"]) for agent in agent_batch)
+        )
+        rows.extend(
+            agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes)
+            for agent, (orders, receipts) in zip(agent_batch, financials)
+        )
+    rows.sort(
+        key=lambda item: (
+            -item["cash_outstanding"],
+            -item["active_orders"],
+            (item["name"] or "").casefold(),
+        )
+    )
+    return {
+        "date": target_date.isoformat(),
+        "agents": rows,
+        "totals": {
+            "agents_count": len(rows),
+            "active_agents": sum(1 for agent in rows if agent["active_orders"] > 0),
+            "delivered_today": sum(agent["today_delivered_count"] for agent in rows),
+            "invoices_today": round(sum(agent["today_invoice_total"] for agent in rows), 2),
+            "earnings_today": round(sum(agent["today_earnings"] for agent in rows), 2),
+            "cash_received_today": round(sum(agent["today_cash_received"] for agent in rows), 2),
+            "cash_outstanding": round(sum(agent["cash_outstanding"] for agent in rows), 2),
+        },
+        "currency": "IQD",
+    }
+
+
+@api.get("/admin/agents/{user_id}/summary")
+async def admin_agent_summary(
+    user_id: str,
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz_offset_minutes: int = Query(0, ge=-840, le=840),
+    user=Depends(require_manager),
+):
+    agent = await db.users.find_one(
+        {"user_id": user_id, "role": "delivery"},
+        {"_id": 0, "password_hash": 0},
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="المندوب غير موجود")
+    target_date = parse_agent_summary_date(date or now_utc().date().isoformat())
+    orders, receipts = await load_agent_financials(user_id)
+    summary = agent_financial_summary(agent, orders, receipts, target_date, tz_offset_minutes)
+    recent_orders = sorted(
+        orders,
+        key=lambda item: item.get("delivered_at") or item.get("created_at") or "",
+        reverse=True,
+    )[:100]
+    recent_receipts = sorted(
+        receipts,
+        key=lambda item: item.get("received_at") or "",
+        reverse=True,
+    )[:100]
+    return {
+        "date": target_date.isoformat(),
+        "agent": summary,
+        "orders": [
+            {
+                "id": order.get("id"),
+                "status": order.get("status"),
+                "invoice_total": round(order_amounts(order)[1], 2),
+                "earnings": round(agent_order_earnings(order), 2),
+                "created_at": order.get("created_at"),
+                "delivered_at": order.get("delivered_at"),
+                "delivery_failed_at": order.get("delivery_failed_at"),
+                "location": order.get("agent_location"),
+            }
+            for order in recent_orders
+        ],
+        "receipts": [
+            {
+                "id": receipt.get("id"),
+                "amount": receipt.get("amount", 0),
+                "settlement_date": receipt.get("settlement_date"),
+                "received_at": receipt.get("received_at"),
+                "receiver_name": receipt.get("receiver_name"),
+                "note": receipt.get("note"),
+            }
+            for receipt in recent_receipts
+        ],
+        "currency": "IQD",
+    }
+
+
+@api.post("/admin/agents/{user_id}/cash-receipts")
+async def admin_receive_agent_cash(
+    user_id: str,
+    body: AgentCashReceiptIn,
+    user=Depends(require_manager),
+):
+    agent = await db.users.find_one(
+        {"user_id": user_id, "role": "delivery"},
+        {"_id": 0, "password_hash": 0},
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="المندوب غير موجود")
+    settlement_date = parse_agent_summary_date(body.settlement_date or now_utc().date().isoformat())
+    orders, receipts = await load_agent_financials(user_id)
+    current = agent_financial_summary(agent, orders, receipts, settlement_date, 0)
+    amount = round(float(body.amount), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=422, detail="يجب أن يكون المبلغ أكبر من صفر")
+    if amount > current["cash_outstanding"] + 0.009:
+        raise HTTPException(
+            status_code=409,
+            detail=f"المبلغ يتجاوز الرصيد النقدي المستحق ({current['cash_outstanding']:.2f} د.ع)",
+        )
+    received_at = now_utc().isoformat()
+    receipt = {
+        "id": "CASH" + uuid.uuid4().hex[:12].upper(),
+        "agent_id": user_id,
+        "agent_name": agent.get("name") or "مندوب",
+        "amount": amount,
+        "settlement_date": settlement_date.isoformat(),
+        "received_at": received_at,
+        "receiver_id": user.get("user_id"),
+        "receiver_name": user.get("name") or user.get("email") or "مدير",
+        "note": (body.note or "").strip() or None,
+    }
+    await db.agent_cash_receipts.insert_one(receipt)
+    return {"receipt": receipt, "cash_outstanding": round(current["cash_outstanding"] - amount, 2)}
+
+
 @api.get("/admin/sync-config")
 async def admin_sync_config(user=Depends(require_manager)):
     """POS/cashier integration config: endpoint path + sync key + sample payload."""
@@ -3079,6 +3336,26 @@ async def delivery_location(oid: str, body: LocationIn, user=Depends(require_del
         raise HTTPException(status_code=409, detail="لا يمكن تحديث موقع طلب غير نشط")
     await db.orders.update_one({"id": oid}, {"$set": {"agent_location": {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}}})
     return {"ok": True}
+
+
+@api.post("/delivery/location")
+async def delivery_agent_location(body: LocationIn, user=Depends(require_delivery)):
+    if user.get("role") != "delivery":
+        raise HTTPException(status_code=403, detail="مخصص لمندوب التوصيل")
+    active_order = await db.orders.find_one(
+        {"agent_id": user["user_id"], "status": "out_for_delivery"},
+        {"_id": 0, "id": 1},
+    )
+    if not active_order:
+        raise HTTPException(status_code=409, detail="يتم تحديث الموقع أثناء وجود طلب نشط فقط")
+    location = {"lat": body.lat, "lng": body.lng, "at": now_utc().isoformat()}
+    await db.users.update_one(
+        {"user_id": user["user_id"], "role": "delivery"},
+        {"$set": {"last_location": location}},
+    )
+    return {"ok": True, "last_location": location}
+
+
 def init_storage():
     if FIREBASE_BUCKET is None:
         raise RuntimeError("Firebase Storage is not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON.")

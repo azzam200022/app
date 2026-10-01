@@ -254,6 +254,9 @@ export const api = {
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
+  adminAgentOverview: (date: string, tzOffsetMinutes: number) => req("/admin/agents/overview?date=" + encodeURIComponent(date) + "&tz_offset_minutes=" + String(tzOffsetMinutes)),
+  adminAgentSummary: (id: string, date: string, tzOffsetMinutes: number) => req("/admin/agents/" + encodeURIComponent(id) + "/summary?date=" + encodeURIComponent(date) + "&tz_offset_minutes=" + String(tzOffsetMinutes)),
+  adminReceiveAgentCash: (id: string, body: { amount: number; settlement_date: string }) => req("/admin/agents/" + encodeURIComponent(id) + "/cash-receipts", { method: "POST", body: JSON.stringify(body) }),
   adminUpdateAgent: (id: string, body: any) => req("/admin/agents/" + id, { method: "PUT", body: JSON.stringify(body) }),
   adminUsers: () => req("/admin/users"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
@@ -281,6 +284,7 @@ export const api = {
   deliveryRetry: (id: string) => req("/delivery/orders/" + id + "/retry", { method: "POST" }),
   deliverySetStatus: (id: string, status: string, reason?: string, otp?: string) => req("/delivery/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status, ...(reason ? { reason } : {}), ...(otp ? { otp } : {}) }) }),
   deliverySetLocation: (id: string, lat: number, lng: number) => req("/delivery/orders/" + id + "/location", { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  deliverySetCurrentLocation: (lat: number, lng: number) => req("/delivery/location", { method: "POST", body: JSON.stringify({ lat, lng }) }),
   deliveryCreateReturn: (id: string, body: any) => req("/delivery/orders/" + id + "/returns", { method: "POST", body: JSON.stringify(body) }),
 };
 
