@@ -132,7 +132,7 @@ export default function Home() {
 
   const quantities = useMemo(() => {
     const result: Record<string, number> = {};
-    cart.items.forEach((item) => { result[item.product_id] = item.quantity; });
+    cart.items.forEach((item) => { if (!item.sale_unit || item.sale_unit === "piece") result[item.product_id] = item.quantity; });
     return result;
   }, [cart.items]);
 
@@ -145,10 +145,10 @@ export default function Home() {
   }, [add, show]);
 
   const onDecrease = useCallback(async (p: any) => {
-    const quantity = cart.items.find((item) => item.product_id === p.id)?.quantity || 0;
+    const quantity = cart.items.find((item) => item.product_id === p.id && (!item.sale_unit || item.sale_unit === "piece"))?.quantity || 0;
     try {
-      if (quantity <= 1) await remove(p.id);
-      else await setQty(p.id, quantity - 1);
+      if (quantity <= 1) await remove(p.id, "piece");
+      else await setQty(p.id, quantity - 1, "piece");
     } catch (e: any) {
       show(e.message, "error");
     }

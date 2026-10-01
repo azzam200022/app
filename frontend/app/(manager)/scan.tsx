@@ -29,6 +29,11 @@ export default function Scan() {
   const [branches, setBranches] = useState<any[]>([]);
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
+  const [wholesaleEnabled, setWholesaleEnabled] = useState(false);
+  const [wholesaleUnitName, setWholesaleUnitName] = useState("");
+  const [wholesaleQuantity, setWholesaleQuantity] = useState("");
+  const [wholesalePrice, setWholesalePrice] = useState("");
+  const [wholesaleOldPrice, setWholesaleOldPrice] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
   const [processingImage, setProcessingImage] = useState(false);
@@ -46,6 +51,7 @@ export default function Scan() {
   const pickResult = (r: any) => {
     setBarcode(r.barcode); setName(r.name); setCategory(r.category); setBranchId(""); setSuggestedImg(r.suggested_image);
     setPrice(r.price ? String(r.price) : ""); setOldPrice(r.old_price ? String(r.old_price) : ""); setImageUri(null); setProcessedImageUri(null);
+    setWholesaleEnabled(false); setWholesaleUnitName(""); setWholesaleQuantity(""); setWholesalePrice(""); setWholesaleOldPrice("");
     setMode("form");
   };
 
@@ -74,6 +80,7 @@ export default function Scan() {
     try {
       const res = await api.lookup(code.trim());
       setBarcode(code.trim());
+      setWholesaleEnabled(false); setWholesaleUnitName(""); setWholesaleQuantity(""); setWholesalePrice(""); setWholesaleOldPrice("");
       if (res.found) {
         setName(res.name);
         setCategory(res.category);
@@ -143,6 +150,12 @@ export default function Scan() {
   const save = async () => {
     if (!name.trim()) return show("أدخل اسم المنتج", "error");
     if (!price || Number(price) <= 0) return show("أدخل سعراً صحيحاً", "error");
+    if (wholesaleEnabled) {
+      if (!wholesaleUnitName.trim()) return show("أدخل اسم وحدة الجملة مثل كرتون أو صندوق", "error");
+      if (!Number.isInteger(Number(wholesaleQuantity)) || Number(wholesaleQuantity) < 2) return show("أدخل عدد القطع داخل وحدة الجملة (قطعتان على الأقل)", "error");
+      if (!wholesalePrice || !Number.isFinite(Number(wholesalePrice)) || Number(wholesalePrice) <= 0) return show("أدخل سعراً صحيحاً لوحدة الجملة", "error");
+      if (wholesaleOldPrice && (!Number.isFinite(Number(wholesaleOldPrice)) || Number(wholesaleOldPrice) <= 0)) return show("أدخل سعراً سابقاً صحيحاً أو اتركه فارغاً", "error");
+    }
     setSaving(true);
     try {
       if (processingImage) return show("انتظر حتى يكتمل تجهيز الصورة", "info");
@@ -153,10 +166,17 @@ export default function Scan() {
       }
       await api.createProduct({
         barcode, name: name.trim(), category, branch_id: branchId || null, price: Number(price),
-        old_price: oldPrice ? Number(oldPrice) : null, image_url, stock: 100, is_published: true,
+        old_price: oldPrice ? Number(oldPrice) : null,
+        wholesale_enabled: wholesaleEnabled,
+        wholesale_unit_name: wholesaleEnabled ? wholesaleUnitName.trim() : null,
+        wholesale_quantity: wholesaleEnabled ? Number(wholesaleQuantity) : null,
+        wholesale_price: wholesaleEnabled ? Number(wholesalePrice) : null,
+        wholesale_old_price: wholesaleEnabled && wholesaleOldPrice ? Number(wholesaleOldPrice) : null,
+        image_url, stock: 100, is_published: true,
       });
       show("تمت إضافة المنتج بنجاح 🎉");
       setMode("scan"); setManual(""); setName(""); setPrice(""); setOldPrice(""); setImageUri(null); setProcessedImageUri(null); setBarcode(""); setBranchId("");
+      setWholesaleEnabled(false); setWholesaleUnitName(""); setWholesaleQuantity(""); setWholesalePrice(""); setWholesaleOldPrice("");
     } catch (e: any) { show(e.message, "error"); }
     finally { setSaving(false); }
   };
@@ -243,6 +263,36 @@ export default function Scan() {
             </View>
           </View>
 
+          <Pressable testID="f-wholesale-toggle" accessibilityRole="checkbox" accessibilityState={{ checked: wholesaleEnabled }} onPress={() => setWholesaleEnabled((enabled) => !enabled)} style={[styles.wholesaleToggle, wholesaleEnabled && styles.wholesaleToggleActive]}>
+            <View style={{ flex: 1 }}>
+              <T weight="semi">إتاحة البيع بالجملة</T>
+              <T size={type.xs} color={colors.muted} style={{ marginTop: 3 }}>المخزون يُسجّل بالقطع ويُخصم حسب عدد القطع داخل الوحدة</T>
+            </View>
+            <Feather name={wholesaleEnabled ? "check-square" : "square"} size={22} color={wholesaleEnabled ? colors.brandPrimary : colors.muted} />
+          </Pressable>
+          {wholesaleEnabled && (
+            <View style={styles.wholesaleFields}>
+              <View style={{ flex: 1.2 }}>
+                <Label text="اسم وحدة الجملة" />
+                <TextInput testID="f-wholesale-unit" style={styles.input} value={wholesaleUnitName} onChangeText={setWholesaleUnitName} maxLength={40} placeholder="مثال: كرتون" placeholderTextColor={colors.muted} textAlign="right" />
+              </View>
+              <View style={{ flex: 0.8 }}>
+                <Label text="عدد القطع في الوحدة" />
+                <TextInput testID="f-wholesale-quantity" style={styles.input} value={wholesaleQuantity} onChangeText={setWholesaleQuantity} keyboardType="numeric" placeholder="مثال: 12" placeholderTextColor={colors.muted} textAlign="right" />
+              </View>
+              <View style={styles.priceGrid}>
+                <View style={{ flex: 1 }}>
+                  <Label text="سعر الجملة (د.ع)" />
+                  <TextInput testID="f-wholesale-price" style={styles.input} value={wholesalePrice} onChangeText={setWholesalePrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Label text="السعر السابق (اختياري)" />
+                  <TextInput testID="f-wholesale-oldprice" style={styles.input} value={wholesaleOldPrice} onChangeText={setWholesaleOldPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+                </View>
+              </View>
+            </View>
+          )}
+
           <View style={styles.noteBox}>
             <Feather name="info" size={16} color={colors.gold} />
             <T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>يُعبّأ السعر تلقائياً من جدول أسعار البيع، ويمكنك تعديله قبل الحفظ.</T>
@@ -315,7 +365,7 @@ export default function Scan() {
           </Pressable>
         ))}
 
-        <Pressable testID="manual-new" onPress={() => { setBarcode(""); setName(""); setCategory("أخرى"); setSuggestedImg(null); setImageUri(null); setProcessedImageUri(null); setPrice(""); setOldPrice(""); setMode("form"); }} style={styles.manualNew}>
+        <Pressable testID="manual-new" onPress={() => { setBarcode(""); setName(""); setCategory("أخرى"); setSuggestedImg(null); setImageUri(null); setProcessedImageUri(null); setPrice(""); setOldPrice(""); setWholesaleEnabled(false); setWholesaleUnitName(""); setWholesaleQuantity(""); setWholesalePrice(""); setWholesaleOldPrice(""); setMode("form"); }} style={styles.manualNew}>
           <Feather name="edit-3" size={16} color={colors.brandPrimary} />
           <T color={colors.brandPrimary} weight="semi">إضافة منتج بدون باركود</T>
         </Pressable>
@@ -364,5 +414,8 @@ const styles = StyleSheet.create({
   catActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   catIdle: { backgroundColor: "#fff", borderColor: colors.border },
   priceGrid: { flexDirection: "row-reverse", gap: spacing.md },
+  wholesaleToggle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
+  wholesaleToggleActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
+  wholesaleFields: { marginTop: spacing.sm, backgroundColor: "#F8FBF7", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
   noteBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FBF6EA", borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
 });
