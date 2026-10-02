@@ -156,14 +156,6 @@ export default function Home() {
 
   const header = (
     <View>
-      <Pressable testID="home-search-prompt" onPress={() => router.push("/search")} style={styles.searchPrompt}>
-        <View style={styles.searchIconWrap}>
-          <Feather name="search" size={16} color={colors.brandPrimary} />
-        </View>
-        <T color={colors.muted} size={type.sm} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
-        <Feather name="arrow-left" size={16} color={colors.brandSecondary} />
-      </Pressable>
-
       {/* Offers banner carousel */}
       {banners.length > 0 ? (
         <View style={styles.hero}>
@@ -282,6 +274,16 @@ export default function Home() {
                 <T weight="bold" size={type.xs} color={colors.brandSecondary} style={styles.brandSubline}>SUPERMARKET</T>
               </View>
             </View>
+            <Pressable
+              testID="home-search-prompt"
+              onPress={() => router.push("/search")}
+              style={styles.topSearchPrompt}
+              accessibilityRole="button"
+              accessibilityLabel="ابحث عن منتج أو تصنيف"
+            >
+              <Feather name="search" size={16} color={colors.brandPrimary} />
+              <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
+            </Pressable>
             <View style={styles.topActions}>
             <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
               <Feather name="shopping-bag" size={19} color={colors.onSurface} />
@@ -291,9 +293,6 @@ export default function Home() {
                 </View>
               )}
             </Pressable>
-              <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
-                <Feather name="search" size={19} color={colors.onSurface} />
-              </Pressable>
               <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
                 <Feather name="heart" size={19} color={colors.onSurface} />
               </Pressable>
@@ -362,8 +361,7 @@ const styles = StyleSheet.create({
   brandEnglish: { textAlign: "left", writingDirection: "ltr", lineHeight: 16, letterSpacing: 0.25 },
   brandSubline: { textAlign: "left", writingDirection: "ltr", fontSize: 8, lineHeight: 11, letterSpacing: 1.8 },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  searchPrompt: { height: 44, marginHorizontal: spacing.md, marginTop: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  searchIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  topSearchPrompt: { flex: 1, minWidth: 0, height: 40, marginHorizontal: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   searchLabel: { flex: 1 },
   iconBtn: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.9)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative", shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
