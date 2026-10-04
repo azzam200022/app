@@ -17,7 +17,9 @@ export interface ReceiptItem {
 
 export interface ReceiptData {
   id: string;
+  orderNumber: string;
   date: string;
+  time: string;
   customerName: string;
   phone: string;
   address: string;
@@ -26,6 +28,7 @@ export interface ReceiptData {
   discount: number;
   delivery: number;
   tax: number;
+  taxRatePercent: number | null;
   total: number;
 }
 
@@ -105,13 +108,34 @@ export function formatReceiptMoney(value: number): string {
   return `${Math.round(value).toLocaleString("en-US")} د.ع`;
 }
 
-function formatDate(value: unknown): string {
+export function formatReceiptNumber(value: number): string {
+  return Math.round(value).toLocaleString("en-US");
+}
+
+export function formatReceiptQuantity(item: ReceiptItem): string {
+  const unit = item.unitLabel.trim();
+  return unit && !["قطعة", "piece", "pieces", "pc"].includes(unit.toLowerCase())
+    ? `${item.quantity} ${unit}`
+    : String(item.quantity);
+}
+
+export function formatReceiptTaxLabel(receipt: Pick<ReceiptData, "taxRatePercent">): string {
+  return receipt.taxRatePercent && receipt.taxRatePercent > 0
+    ? `قيمة الضريبة (${formatReceiptNumber(receipt.taxRatePercent)}%)`
+    : "قيمة الضريبة";
+}
+
+function formatDateParts(value: unknown): { date: string; time: string } {
   const date = value ? new Date(String(value)) : new Date();
-  if (Number.isNaN(date.getTime())) return "—";
-  return `${date.toLocaleDateString("en-GB")} ${date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  if (Number.isNaN(date.getTime())) return { date: "—", time: "—" };
+  const dateLabel = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+  const hour = date.getHours();
+  const timeLabel = `${hour % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")} ${hour >= 12 ? "م" : "ص"}`;
+  return { date: dateLabel, time: timeLabel };
 }
 
 export function normalizeReceiptOrder(order: any): ReceiptData {
@@ -131,10 +155,17 @@ export function normalizeReceiptOrder(order: any): ReceiptData {
   const discount = numberOr(order?.discount_amount ?? order?.discount ?? order?.coupon_discount, 0);
   const delivery = numberOr(order?.delivery_fee ?? order?.delivery_charge, 0);
   const tax = numberOr(order?.tax_amount ?? order?.tax, 0);
+  const taxRatePercent = order?.tax_rate_percent == null
+    ? null
+    : numberOr(order.tax_rate_percent, 0);
+  const id = String(order?.id ?? order?.order_id ?? "—");
+  const dateParts = formatDateParts(order?.created_at ?? order?.createdAt ?? order?.date);
 
   return {
-    id: String(order?.id ?? order?.order_id ?? "—"),
-    date: formatDate(order?.created_at ?? order?.createdAt ?? order?.date),
+    id,
+    orderNumber: id.replace(/^ORD/i, ""),
+    date: dateParts.date,
+    time: dateParts.time,
     customerName: String(order?.customer_name ?? order?.name ?? "—"),
     phone: String(order?.phone ?? order?.phone_number ?? "—"),
     address: String(order?.address ?? "—"),
@@ -143,6 +174,7 @@ export function normalizeReceiptOrder(order: any): ReceiptData {
     discount,
     delivery,
     tax,
+    taxRatePercent,
     total: numberOr(order?.total, subtotal - discount + delivery + tax),
   };
 }
@@ -196,25 +228,26 @@ export function buildReceiptHTML(
   const receipt = normalizeReceiptOrder(order);
   const width = options.width ?? 80;
   const qr = svgDataUri(makeReceiptQrSvg(receipt.id));
-  const barcode = svgDataUri(makeReceiptBarcodeSvg(receipt.id));
+  const barcode = svgDataUri(makeReceiptBarcodeSvg(receipt.orderNumber));
   const rows = receipt.items
     .map(
       (item, index) => `
       <tr>
         <td class="c">${index + 1}</td>
         <td class="r">${escapeHtml(item.name)}</td>
-        <td class="c">${item.quantity} ${escapeHtml(item.unitLabel)}</td>
-        <td class="c">${formatReceiptMoney(item.price)}</td>
-        <td class="c b">${formatReceiptMoney(item.lineTotal)}</td>
+        <td class="c">${escapeHtml(formatReceiptQuantity(item))}</td>
+        <td class="c">${formatReceiptNumber(item.price)}</td>
+        <td class="c b">${formatReceiptNumber(item.lineTotal)}</td>
       </tr>`,
     )
     .join("");
   const summaryRow = (label: string, value: number) =>
-    `<div class="summary"><span>${label}</span><span>${formatReceiptMoney(value)}</span></div>`;
+    `<div class="summary"><span>${label}</span><span>${formatReceiptNumber(value)}</span></div>`;
   const fontFace = options.regularFont && options.boldFont
     ? `@font-face{font-family:Cairo;src:url(data:font/ttf;base64,${options.regularFont}) format('truetype');font-weight:400}
        @font-face{font-family:Cairo;src:url(data:font/ttf;base64,${options.boldFont}) format('truetype');font-weight:700}`
     : "";
+  const deliveryRow = receipt.delivery > 0 ? summaryRow("التوصيل", receipt.delivery) : "";
 
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -223,38 +256,51 @@ export function buildReceiptHTML(
     * { font-family: Cairo, Tahoma, Arial, sans-serif; box-sizing: border-box; }
     @page { size: ${width}mm auto; margin: 0; }
     body { width: ${width}mm; margin: 0 auto; padding: 4mm 3mm; color: #171b18; direction: rtl; font-size: ${width === 58 ? "9px" : "11px"}; }
-    .head { text-align: center; border-bottom: 1px dashed #777; padding-bottom: 7px; margin-bottom: 7px; }
+    .head { text-align: center; border-bottom: 1px solid #777; padding-bottom: 7px; margin-bottom: 7px; }
     .logo { width: ${width === 58 ? "34mm" : "42mm"}; max-height: 22mm; object-fit: contain; display: block; margin: 0 auto 4px; }
-    .brand { font-size: ${width === 58 ? "15px" : "18px"}; font-weight: 700; color: #145b50; margin: 0; }
+    .brand { font-size: ${width === 58 ? "15px" : "18px"}; font-weight: 700; color: #111; margin: 0; }
+    .tagline { margin: 3px 0 0; font-size: ${width === 58 ? "8px" : "10px"}; font-weight: 400; }
     .meta, .summary { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; }
-    .customer { border: 1px solid #c8cec9; padding: 6px 7px; margin: 7px 0; line-height: 1.55; overflow-wrap: anywhere; }
+    .details { display: grid; grid-template-columns: ${width === 58 ? "1fr" : "1fr 1fr"}; gap: 8px; border-bottom: 1px solid #777; padding: 2px 0 7px; margin-bottom: 7px; }
+    .detail-column { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
+    .detail-column + .detail-column { border-right: ${width === 58 ? "0" : "1px solid #bbb"}; padding-right: ${width === 58 ? "0" : "7px"}; }
+    .detail-title { font-weight: 700; margin-bottom: 3px; }
     table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 7px; font-size: ${width === 58 ? "8px" : "10px"}; }
-    th { background: #145b50; color: #fff; padding: 5px 2px; font-weight: 700; }
+    th { background: #ededed; color: #111; padding: 5px 2px; font-weight: 700; }
     td { padding: 5px 2px; border-bottom: 1px solid #e5e7e5; overflow-wrap: anywhere; }
     th:nth-child(1), td:nth-child(1) { width: 7%; }
-    th:nth-child(2), td:nth-child(2) { width: 35%; }
-    th:nth-child(3), td:nth-child(3) { width: 17%; }
-    th:nth-child(4), td:nth-child(4) { width: 20%; }
-    th:nth-child(5), td:nth-child(5) { width: 21%; }
+    th:nth-child(2), td:nth-child(2) { width: 39%; }
+    th:nth-child(3), td:nth-child(3) { width: 14%; }
+    th:nth-child(4), td:nth-child(4) { width: 18%; }
+    th:nth-child(5), td:nth-child(5) { width: 22%; }
     .c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; }
     .totals { border-top: 1px dashed #777; margin-top: 8px; padding-top: 5px; }
-    .total { background: #e8eee9; padding: 8px; margin-top: 5px; font-size: 13px; font-weight: 700; }
-    .codes { text-align: center; margin: 10px auto 7px; }
-    .qr { width: ${width === 58 ? "25mm" : "31mm"}; height: auto; display: block; margin: 0 auto 4px; }
-    .barcode { width: 92%; height: 17mm; display: block; margin: 0 auto; }
-    .footer { text-align: center; border-top: 1px dashed #777; padding-top: 8px; margin-top: 8px; font-weight: 700; color: #145b50; }
+    .total { background: #e6e6e6; padding: 8px; margin-top: 5px; font-size: 13px; font-weight: 700; }
+    .codes { display: grid; grid-template-columns: ${width === 58 ? "1fr" : "1fr 1fr 1.2fr"}; align-items: center; gap: 5px; margin: 9px auto 4px; text-align: center; }
+    .qr { width: ${width === 58 ? "24mm" : "22mm"}; height: auto; display: block; margin: 0 auto 3px; }
+    .barcode { width: 100%; height: ${width === 58 ? "12mm" : "14mm"}; display: block; margin: 0 auto; }
+    .code-label { font-size: ${width === 58 ? "7px" : "8px"}; }
+    .thanks { font-weight: 700; font-size: ${width === 58 ? "8px" : "9px"}; line-height: 1.45; }
+    .heart { font-size: 12px; }
   </style></head>
   <body>
     <div class="head">
       ${options.logoSrc ? `<img class="logo" src="${escapeHtml(options.logoSrc)}" />` : ""}
       <h1 class="brand">بن سليم سوبرماركت</h1>
+      <p class="tagline">كل ما تحتاجه .. في مكان واحد</p>
     </div>
-    <div class="meta"><span>رقم الطلب</span><b>#${escapeHtml(receipt.id)}</b></div>
-    <div class="meta"><span>التاريخ والوقت</span><b dir="ltr">${escapeHtml(receipt.date)}</b></div>
-    <div class="customer">
-      <div><b>الزبون:</b> ${escapeHtml(receipt.customerName)}</div>
-      <div><b>الهاتف:</b> <span dir="ltr">${escapeHtml(receipt.phone)}</span></div>
-      <div><b>العنوان:</b> ${escapeHtml(receipt.address)}</div>
+    <div class="details">
+      <div class="detail-column">
+        <div class="detail-title">بيانات الزبون</div>
+        <div><b>الاسم:</b> ${escapeHtml(receipt.customerName)}</div>
+        <div><b>الجوال:</b> <span dir="ltr">${escapeHtml(receipt.phone)}</span></div>
+        <div><b>العنوان:</b> ${escapeHtml(receipt.address)}</div>
+      </div>
+      <div class="detail-column">
+        <div class="meta"><span>رقم الطلب</span><b>#${escapeHtml(receipt.orderNumber)}</b></div>
+        <div class="meta"><span>التاريخ</span><b dir="ltr">${escapeHtml(receipt.date)}</b></div>
+        <div class="meta"><span>الوقت</span><b>${escapeHtml(receipt.time)}</b></div>
+      </div>
     </div>
     <table>
       <thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
@@ -263,15 +309,15 @@ export function buildReceiptHTML(
     <div class="totals">
       ${summaryRow("المجموع الفرعي", receipt.subtotal)}
       ${summaryRow("الخصم", receipt.discount)}
-      ${summaryRow("التوصيل", receipt.delivery)}
-      ${summaryRow("الضريبة", receipt.tax)}
+      ${deliveryRow}
+      ${summaryRow(formatReceiptTaxLabel(receipt), receipt.tax)}
       <div class="summary total"><span>المجموع النهائي</span><span>${formatReceiptMoney(receipt.total)}</span></div>
     </div>
     <div class="codes">
-      <img class="qr" src="${qr}" alt="QR ${escapeHtml(receipt.id)}" />
-      <img class="barcode" src="${barcode}" alt="Barcode ${escapeHtml(receipt.id)}" />
+      <div class="code-label">الباركود<img class="barcode" src="${barcode}" alt="Barcode ${escapeHtml(receipt.orderNumber)}" /><span dir="ltr">${escapeHtml(receipt.orderNumber)}</span></div>
+      <div class="code-label"><img class="qr" src="${qr}" alt="QR ${escapeHtml(receipt.id)}" />امسح الكود لمتابعة طلبك</div>
+      <div class="thanks">شكراً لتسوقكم من<br />بن سليم<br /><span class="heart">♥</span><br />نتمنى لكم يوماً سعيداً</div>
     </div>
-    <div class="footer">شكراً لتسوقكم من بن سليم</div>
   </body></html>`;
 }
 
@@ -284,7 +330,7 @@ export async function printOrder(
   const receipt = normalizeReceiptOrder(order);
   const assets = await getReceiptAssets();
   const qrSvg = makeReceiptQrSvg(receipt.id);
-  const barcodeSvg = makeReceiptBarcodeSvg(receipt.id);
+  const barcodeSvg = makeReceiptBarcodeSvg(receipt.orderNumber);
   const html = buildReceiptHTML(order, { width, ...assets });
 
   if (Platform.OS === "android" && options.rasterize) {
