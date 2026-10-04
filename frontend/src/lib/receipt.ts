@@ -27,8 +27,6 @@ export interface ReceiptData {
   subtotal: number;
   discount: number;
   delivery: number;
-  tax: number;
-  taxRatePercent: number | null;
   total: number;
 }
 
@@ -119,12 +117,6 @@ export function formatReceiptQuantity(item: ReceiptItem): string {
     : String(item.quantity);
 }
 
-export function formatReceiptTaxLabel(receipt: Pick<ReceiptData, "taxRatePercent">): string {
-  return receipt.taxRatePercent && receipt.taxRatePercent > 0
-    ? `قيمة الضريبة (${formatReceiptNumber(receipt.taxRatePercent)}%)`
-    : "قيمة الضريبة";
-}
-
 function formatDateParts(value: unknown): { date: string; time: string } {
   const date = value ? new Date(String(value)) : new Date();
   if (Number.isNaN(date.getTime())) return { date: "—", time: "—" };
@@ -154,10 +146,6 @@ export function normalizeReceiptOrder(order: any): ReceiptData {
   const subtotal = numberOr(order?.subtotal, calculatedSubtotal);
   const discount = numberOr(order?.discount_amount ?? order?.discount ?? order?.coupon_discount, 0);
   const delivery = numberOr(order?.delivery_fee ?? order?.delivery_charge, 0);
-  const tax = numberOr(order?.tax_amount ?? order?.tax, 0);
-  const taxRatePercent = order?.tax_rate_percent == null
-    ? null
-    : numberOr(order.tax_rate_percent, 0);
   const id = String(order?.id ?? order?.order_id ?? "—");
   const dateParts = formatDateParts(order?.created_at ?? order?.createdAt ?? order?.date);
 
@@ -173,9 +161,7 @@ export function normalizeReceiptOrder(order: any): ReceiptData {
     subtotal,
     discount,
     delivery,
-    tax,
-    taxRatePercent,
-    total: numberOr(order?.total, subtotal - discount + delivery + tax),
+    total: numberOr(order?.total, subtotal - discount + delivery),
   };
 }
 
@@ -310,7 +296,6 @@ export function buildReceiptHTML(
       ${summaryRow("المجموع الفرعي", receipt.subtotal)}
       ${summaryRow("الخصم", receipt.discount)}
       ${deliveryRow}
-      ${summaryRow(formatReceiptTaxLabel(receipt), receipt.tax)}
       <div class="summary total"><span>المجموع النهائي</span><span>${formatReceiptMoney(receipt.total)}</span></div>
     </div>
     <div class="codes">
