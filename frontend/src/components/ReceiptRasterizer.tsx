@@ -64,88 +64,187 @@ window.renderReceipt = async function(request) {
     const operations = [];
     let y = 14;
     const center = width / 2;
-    function text(value, x, align, maxWidth, size, bold) {
+    function addTextAt(value, x, startY, align, maxWidth, size, bold, direction) {
       const lines = wrap(value, maxWidth, size, bold);
+      let lineY = startY;
       for (const line of lines) {
-        operations.push({ kind: "text", value: line, x: x, y: y, align: align, size: size, bold: bold });
-        y += Math.round(size * 1.48);
+        operations.push({
+          kind: "text",
+          value: line,
+          x: x,
+          y: lineY,
+          align: align,
+          maxWidth: maxWidth,
+          size: size,
+          bold: bold,
+          direction: direction || "rtl",
+        });
+        lineY += Math.round(size * 1.48);
       }
+      return lineY;
     }
-    function rule() {
+    function text(value, x, align, maxWidth, size, bold) {
+      y = addTextAt(value, x, y, align, maxWidth, size, bold);
+    }
+    function rule(solid) {
       y += 3;
-      operations.push({ kind: "rule", y: y });
+      operations.push({ kind: "rule", y: y, solid: !!solid });
       y += 10;
     }
-    function pair(label, value) {
-      setMeasureFont(regularSize, false);
-      const lines = wrap(label + ":", width * 0.42, regularSize, false);
-      operations.push({ kind: "text", value: lines[0], x: width - padding, y: y, align: "right", size: regularSize, bold: false });
-      operations.push({ kind: "text", value: String(value || "—"), x: padding, y: y, align: "left", size: regularSize, bold: false });
+    function pair(label, value, bold) {
+      operations.push({ kind: "text", value: label, x: width - padding, y: y, align: "right", maxWidth: width * 0.58, size: regularSize, bold: !!bold, direction: "rtl" });
+      operations.push({ kind: "text", value: String(value == null ? "—" : value), x: padding, y: y, align: "left", maxWidth: width * 0.36, size: regularSize, bold: !!bold, direction: "ltr" });
       y += lineHeight;
+    }
+    function detailColumn(title, rows, x, startY, align, maxWidth) {
+      let columnY = addTextAt(title, x, startY, align, maxWidth, boldSize, true);
+      for (const row of rows) {
+        columnY = addTextAt(row.value, x, columnY, align, maxWidth, regularSize, false, row.direction);
+      }
+      return columnY;
     }
 
     if (logo && logo.width && logo.height) {
-      const logoWidth = Math.min(width * 0.58, request.width === 58 ? 180 : 270);
+      const logoWidth = Math.min(width * 0.32, request.width === 58 ? 125 : 185);
       const logoHeight = logoWidth * (logo.height / logo.width);
       operations.push({ kind: "image", image: logo, x: center - logoWidth / 2, y: y, width: logoWidth, height: logoHeight });
       y += logoHeight + 3;
     }
     text("بن سليم سوبرماركت", center, "center", width - padding * 2, boldSize + 2, true);
-    text("فاتورة شراء", center, "center", width - padding * 2, regularSize, false);
-    rule();
-    pair("رقم الطلب", "#" + request.receipt.id);
-    pair("التاريخ والوقت", request.receipt.date);
-    rule();
-    text("بيانات الزبون", width - padding, "right", width - padding * 2, boldSize, true);
-    text("الاسم: " + request.receipt.customerName, width - padding, "right", width - padding * 2, regularSize, false);
-    text("الهاتف: " + request.receipt.phone, width - padding, "right", width - padding * 2, regularSize, false);
-    text("العنوان: " + request.receipt.address, width - padding, "right", width - padding * 2, regularSize, false);
-    rule();
+    text("كل ما تحتاجه .. في مكان واحد", center, "center", width - padding * 2, regularSize, false);
+    const detailTop = y + 3;
+    const contentWidth = width - padding * 2;
+    if (request.width === 80) {
+      const columnGap = 14;
+      const columnWidth = (contentWidth - columnGap) / 2;
+      const customerBottom = detailColumn(
+        "بيانات الزبون",
+        [
+          { value: "الاسم: " + request.receipt.customerName },
+          { value: "الجوال: " + request.receipt.phone },
+          { value: "العنوان: " + request.receipt.address },
+        ],
+        width - padding,
+        detailTop,
+        "right",
+        columnWidth,
+      );
+      const orderBottom = detailColumn(
+        "بيانات الطلب",
+        [
+          { value: "رقم الطلب: #" + request.receipt.orderNumber },
+          { value: "التاريخ: " + request.receipt.date },
+          { value: "الوقت: " + request.receipt.time },
+        ],
+        padding,
+        detailTop,
+        "left",
+        columnWidth,
+      );
+      operations.push({ kind: "vline", x: center, y: detailTop - 2, height: Math.max(customerBottom, orderBottom) - detailTop + 3 });
+      y = Math.max(customerBottom, orderBottom) + 2;
+    } else {
+      y = detailColumn(
+        "بيانات الزبون",
+        [
+          { value: "الاسم: " + request.receipt.customerName },
+          { value: "الجوال: " + request.receipt.phone },
+          { value: "العنوان: " + request.receipt.address },
+        ],
+        width - padding,
+        detailTop,
+        "right",
+        contentWidth,
+      );
+      y = detailColumn(
+        "بيانات الطلب",
+        [
+          { value: "رقم الطلب: #" + request.receipt.orderNumber },
+          { value: "التاريخ: " + request.receipt.date },
+          { value: "الوقت: " + request.receipt.time },
+        ],
+        width - padding,
+        y + 2,
+        "right",
+        contentWidth,
+      );
+    }
+    rule(true);
 
-    const nameWidth = width * 0.36;
+    const numberWidth = contentWidth * 0.08;
+    const nameWidth = contentWidth * 0.38;
+    const quantityWidth = contentWidth * 0.14;
+    const priceWidth = contentWidth * 0.18;
+    const totalWidth = contentWidth - numberWidth - nameWidth - quantityWidth - priceWidth;
+    const rightEdge = width - padding;
+    const numberX = rightEdge - numberWidth / 2;
+    const nameX = rightEdge - numberWidth;
+    const quantityX = nameX - nameWidth - quantityWidth / 2;
+    const priceX = nameX - nameWidth - quantityWidth - priceWidth / 2;
+    const totalX = padding + totalWidth / 2;
+    const headerHeight = lineHeight + 5;
+    operations.push({ kind: "rect", x: padding, y: y - 2, width: contentWidth, height: headerHeight, color: "#e9e9e9" });
     const columns = [
-      { value: "المنتج", x: width - padding, align: "right", max: nameWidth },
-      { value: "الكمية", x: width * 0.61, align: "center", max: width * 0.15 },
-      { value: "السعر", x: width * 0.39, align: "center", max: width * 0.20 },
-      { value: "الإجمالي", x: padding, align: "left", max: width * 0.20 },
+      { value: "م", x: numberX, align: "center", max: numberWidth },
+      { value: "المنتج", x: nameX, align: "right", max: nameWidth },
+      { value: "الكمية", x: quantityX, align: "center", max: quantityWidth },
+      { value: "السعر", x: priceX, align: "center", max: priceWidth },
+      { value: "الإجمالي", x: totalX, align: "center", max: totalWidth },
     ];
     for (const column of columns) {
-      operations.push({ kind: "text", value: column.value, x: column.x, y: y, align: column.align, size: regularSize, bold: true });
+      operations.push({ kind: "text", value: column.value, x: column.x, y: y, align: column.align, maxWidth: column.max, size: regularSize, bold: true, direction: "rtl" });
     }
-    y += lineHeight + 3;
-    rule();
-    for (const item of request.receipt.items) {
+    y += headerHeight + 3;
+    operations.push({ kind: "rule", y: y, solid: true });
+    y += 7;
+    for (let itemIndex = 0; itemIndex < request.receipt.items.length; itemIndex++) {
+      const item = request.receipt.items[itemIndex];
       const nameLines = wrap(item.name, nameWidth, regularSize, false).slice(0, 2);
-      operations.push({ kind: "text", value: String(item.quantity) + " " + item.unitLabel, x: width * 0.61, y: y, align: "center", size: regularSize, bold: false });
-      operations.push({ kind: "text", value: formatMoney(item.price), x: width * 0.39, y: y, align: "center", size: regularSize, bold: false });
-      operations.push({ kind: "text", value: formatMoney(item.lineTotal), x: padding, y: y, align: "left", size: regularSize, bold: true });
+      const rowY = y;
+      operations.push({ kind: "text", value: String(itemIndex + 1), x: numberX, y: rowY, align: "center", maxWidth: numberWidth, size: regularSize, bold: false, direction: "ltr" });
+      operations.push({ kind: "text", value: formatQuantity(item), x: quantityX, y: rowY, align: "center", maxWidth: quantityWidth, size: regularSize, bold: false, direction: "ltr" });
+      operations.push({ kind: "text", value: formatNumber(item.price), x: priceX, y: rowY, align: "center", maxWidth: priceWidth, size: regularSize, bold: false, direction: "ltr" });
+      operations.push({ kind: "text", value: formatNumber(item.lineTotal), x: totalX, y: rowY, align: "center", maxWidth: totalWidth, size: regularSize, bold: true, direction: "ltr" });
       for (const line of nameLines) {
-        operations.push({ kind: "text", value: line, x: width - padding, y: y, align: "right", size: regularSize, bold: false });
+        operations.push({ kind: "text", value: line, x: nameX, y: y, align: "right", maxWidth: nameWidth, size: regularSize, bold: false, direction: "rtl" });
         y += lineHeight;
       }
-      y += 2;
-      operations.push({ kind: "rule", y: y });
+      y = Math.max(y, rowY + lineHeight) + 3;
+      operations.push({ kind: "rule", y: y, solid: false });
       y += 7;
     }
-    pair("المجموع الفرعي", formatMoney(request.receipt.subtotal));
-    pair("الخصم", formatMoney(request.receipt.discount));
-    pair("التوصيل", formatMoney(request.receipt.delivery));
-    pair("الضريبة", formatMoney(request.receipt.tax));
+    pair("المجموع الفرعي", formatNumber(request.receipt.subtotal));
+    pair("الخصم", formatNumber(request.receipt.discount));
+    if (request.receipt.delivery > 0) pair("التوصيل", formatNumber(request.receipt.delivery));
+    pair(taxLabel(request.receipt), formatNumber(request.receipt.tax));
     y += 3;
-    operations.push({ kind: "rule", y: y });
+    operations.push({ kind: "rule", y: y, solid: true });
     y += 7;
-    text("المجموع النهائي: " + formatMoney(request.receipt.total), center, "center", width - padding * 2, boldSize + 2, true);
-    y += 3;
+    const totalRowY = y;
+    const totalRowHeight = lineHeight + 12;
+    operations.push({ kind: "rect", x: padding, y: totalRowY - 3, width: contentWidth, height: totalRowHeight, color: "#e6e6e6" });
+    operations.push({ kind: "text", value: "المجموع النهائي", x: rightEdge - 8, y: totalRowY + 2, align: "right", maxWidth: contentWidth * 0.58, size: boldSize, bold: true, direction: "rtl" });
+    operations.push({ kind: "text", value: formatMoney(request.receipt.total), x: padding + 8, y: totalRowY + 2, align: "left", maxWidth: contentWidth * 0.38, size: boldSize, bold: true, direction: "ltr" });
+    y += totalRowHeight + 8;
 
-    const qrSize = request.width === 58 ? 112 : 148;
-    operations.push({ kind: "image", image: qr, x: center - qrSize / 2, y: y, width: qrSize, height: qrSize });
-    y += qrSize + 5;
-    const barcodeWidth = width - padding * 2;
-    const barcodeHeight = request.width === 58 ? 58 : 70;
-    operations.push({ kind: "image", image: barcode, x: padding, y: y, width: barcodeWidth, height: barcodeHeight });
-    y += barcodeHeight + 10;
-    text("شكراً لتسوقكم من بن سليم", center, "center", width - padding * 2, boldSize, true);
-    y += 12;
+    const footerY = y + 4;
+    const footerColumnWidth = contentWidth / 3;
+    const barcodeWidth = footerColumnWidth - 10;
+    const barcodeHeight = request.width === 58 ? 42 : 54;
+    const qrSize = request.width === 58 ? 78 : 104;
+    const barcodeX = width - padding - footerColumnWidth + 5;
+    const barcodeCenter = barcodeX + barcodeWidth / 2;
+    operations.push({ kind: "image", image: barcode, x: barcodeX, y: footerY + 4, width: barcodeWidth, height: barcodeHeight });
+    let barcodeBottom = addTextAt(request.receipt.orderNumber, barcodeCenter, footerY + barcodeHeight + 7, "center", barcodeWidth, regularSize - 2, false, "ltr");
+    const qrCenter = center;
+    operations.push({ kind: "image", image: qr, x: qrCenter - qrSize / 2, y: footerY, width: qrSize, height: qrSize });
+    const qrBottom = addTextAt("امسح الكود لمتابعة طلبك", qrCenter, footerY + qrSize + 3, "center", footerColumnWidth, regularSize - 4, false);
+    const thanksCenter = padding + footerColumnWidth / 2;
+    let thanksBottom = addTextAt("شكراً لتسوقكم من", thanksCenter, footerY + 2, "center", footerColumnWidth - 4, regularSize - 2, true);
+    thanksBottom = addTextAt("بن سليم", thanksCenter, thanksBottom, "center", footerColumnWidth - 4, regularSize - 2, true);
+    thanksBottom = addTextAt("♥", thanksCenter, thanksBottom - 2, "center", footerColumnWidth - 4, regularSize, true);
+    thanksBottom = addTextAt("نتمنى لكم يوماً سعيداً", thanksCenter, thanksBottom, "center", footerColumnWidth - 4, regularSize - 3, false);
+    y = Math.max(barcodeBottom, qrBottom, thanksBottom) + 10;
 
     const height = Math.max(1, Math.ceil(y));
     if (height > 40000) throw new Error("الفاتورة أطول من الحد المدعوم للطباعة.");
@@ -163,19 +262,30 @@ window.renderReceipt = async function(request) {
       if (operation.kind === "rule") {
         ctx.save();
         ctx.strokeStyle = "#000";
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash(operation.solid ? [] : [4, 4]);
         ctx.beginPath();
         ctx.moveTo(padding, operation.y);
         ctx.lineTo(width - padding, operation.y);
         ctx.stroke();
         ctx.restore();
+      } else if (operation.kind === "vline") {
+        ctx.save();
+        ctx.strokeStyle = "#777";
+        ctx.beginPath();
+        ctx.moveTo(operation.x, operation.y);
+        ctx.lineTo(operation.x, operation.y + operation.height);
+        ctx.stroke();
+        ctx.restore();
+      } else if (operation.kind === "rect") {
+        ctx.fillStyle = operation.color;
+        ctx.fillRect(operation.x, operation.y, operation.width, operation.height);
       } else if (operation.kind === "image") {
         ctx.drawImage(operation.image, operation.x, operation.y, operation.width, operation.height);
       } else {
         ctx.font = (operation.bold ? "700 " : "400 ") + operation.size + "px Cairo, sans-serif";
         ctx.textAlign = operation.align;
-        ctx.direction = "rtl";
-        ctx.fillText(operation.value, operation.x, operation.y, width - padding * 2);
+        ctx.direction = operation.direction || "rtl";
+        ctx.fillText(operation.value, operation.x, operation.y, operation.maxWidth || width - padding * 2);
       }
     }
 
@@ -222,6 +332,20 @@ function loadImage(src) {
 }
 function formatMoney(value) {
   return Math.round(Number(value || 0)).toLocaleString("en-US") + " د.ع";
+}
+function formatNumber(value) {
+  return Math.round(Number(value || 0)).toLocaleString("en-US");
+}
+function formatQuantity(item) {
+  const unit = String(item.unitLabel || "").trim();
+  return unit && !["قطعة", "piece", "pieces", "pc"].includes(unit.toLowerCase())
+    ? String(item.quantity) + " " + unit
+    : String(item.quantity);
+}
+function taxLabel(receipt) {
+  return Number(receipt.taxRatePercent) > 0
+    ? "قيمة الضريبة (" + formatNumber(receipt.taxRatePercent) + "%)"
+    : "قيمة الضريبة";
 }
 </script></body></html>`;
 
