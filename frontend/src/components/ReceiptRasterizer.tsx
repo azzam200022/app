@@ -216,7 +216,6 @@ window.renderReceipt = async function(request) {
     pair("المجموع الفرعي", formatNumber(request.receipt.subtotal));
     pair("الخصم", formatNumber(request.receipt.discount));
     if (request.receipt.delivery > 0) pair("التوصيل", formatNumber(request.receipt.delivery));
-    pair(taxLabel(request.receipt), formatNumber(request.receipt.tax));
     y += 3;
     operations.push({ kind: "rule", y: y, solid: true });
     y += 7;
@@ -341,11 +340,6 @@ function formatQuantity(item) {
   return unit && !["قطعة", "piece", "pieces", "pc"].includes(unit.toLowerCase())
     ? String(item.quantity) + " " + unit
     : String(item.quantity);
-}
-function taxLabel(receipt) {
-  return Number(receipt.taxRatePercent) > 0
-    ? "قيمة الضريبة (" + formatNumber(receipt.taxRatePercent) + "%)"
-    : "قيمة الضريبة";
 }
 </script></body></html>`;
 
