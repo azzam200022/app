@@ -35,6 +35,7 @@ export default function Checkout() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressesLoading, setAddressesLoading] = useState(true);
   const orderRequestId = useRef("order-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
+  const routeQuoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationSource, setLocationSource] = useState<"gps" | "address" | "manual" | "saved" | null>(null);
   const [locating, setLocating] = useState(false);
@@ -54,6 +55,10 @@ export default function Checkout() {
       : deliveryQuote
         ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
         : "يُحسب بعد تحديد الموقع";
+
+  useEffect(() => () => {
+    if (routeQuoteTimer.current) clearTimeout(routeQuoteTimer.current);
+  }, []);
 
   const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual" | "saved") => {
     setCoords(nextCoords);
@@ -237,7 +242,16 @@ export default function Checkout() {
                 onRegionChange={(region) => {
                   setDeliveryMapZoom(region.zoom);
                   if (quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
-                  void setLocationAndQuote({ lat: region.lat, lng: region.lng }, "manual");
+                  const nextCoords = { lat: region.lat, lng: region.lng };
+                  setCoords(nextCoords);
+                  setLocationSource("manual");
+                  setDeliveryQuote(null);
+                  if (appliedCoupon) setAppliedCoupon(null);
+                  if (routeQuoteTimer.current) clearTimeout(routeQuoteTimer.current);
+                  routeQuoteTimer.current = setTimeout(() => {
+                    routeQuoteTimer.current = null;
+                    void setLocationAndQuote(nextCoords, "manual");
+                  }, 600);
                 }}
                 style={styles.mapImg}
               />
@@ -292,6 +306,7 @@ export default function Checkout() {
             <View style={styles.sumRow}><T color={colors.muted}>المجموع الفرعي</T><T weight="semi">{formatPrice(subtotal)}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
+            {deliveryQuote?.road_distance_km != null ? <View style={styles.sumRow}><T color={colors.muted}>مسافة القيادة من المتجر</T><T weight="semi">{Number(deliveryQuote.road_distance_km).toFixed(2)} كم</T></View> : null}
             {!deliveryQuote && !quoteLoading ? <T color={colors.muted} size={type.xs} style={styles.summaryHint}>حدد موقعك لمعرفة رسوم التوصيل بدقة</T> : null}
             {deliveryQuote?.area_name && deliveryQuote.area_id !== "default_delivery" ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
