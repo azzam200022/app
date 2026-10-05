@@ -1108,6 +1108,12 @@ async def public_delivery_areas():
     return [delivery_area_public_view(area) for area in areas]
 
 
+async def configured_store_road_distance_km(lat: float, lng: float):
+    if not STORE_ROUTE_ORIGIN_CONFIGURED:
+        return None
+    return await calculate_driving_distance_km(STORE_LAT, STORE_LNG, lat, lng)
+
+
 @api.post("/delivery/quote")
 async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
     try:
@@ -1115,7 +1121,7 @@ async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
     except HTTPException as exc:
         if exc.status_code != 400 or exc.detail != "موقعك خارج مناطق التوصيل الحالية":
             raise
-        road_distance_km = await calculate_driving_distance_km(STORE_LAT, STORE_LNG, body.lat, body.lng)
+        road_distance_km = await configured_store_road_distance_km(body.lat, body.lng)
         return {
             "area_id": "default_delivery",
             "area_name": "خارج نطاق التوصيل",
@@ -1123,7 +1129,7 @@ async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
             "distance_km": None,
             "road_distance_km": road_distance_km,
         }
-    road_distance_km = await calculate_driving_distance_km(STORE_LAT, STORE_LNG, body.lat, body.lng)
+    road_distance_km = await configured_store_road_distance_km(body.lat, body.lng)
     if not area:
         return {
             "area_id": "default_delivery",
@@ -2235,6 +2241,7 @@ try:
     STORE_LNG = float(os.environ.get("STORE_LNG", "44.3661"))
 except (TypeError, ValueError):
     STORE_LAT, STORE_LNG = 33.3152, 44.3661
+STORE_ROUTE_ORIGIN_CONFIGURED = bool(os.environ.get("STORE_LAT", "").strip() and os.environ.get("STORE_LNG", "").strip())
 
 
 def infer_order_area(address: str) -> str:
