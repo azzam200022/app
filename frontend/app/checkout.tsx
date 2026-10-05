@@ -306,7 +306,6 @@ export default function Checkout() {
             <View style={styles.sumRow}><T color={colors.muted}>المجموع الفرعي</T><T weight="semi">{formatPrice(subtotal)}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
-            {deliveryQuote?.road_distance_km != null ? <View style={styles.sumRow}><T color={colors.muted}>مسافة القيادة من المتجر</T><T weight="semi">{Number(deliveryQuote.road_distance_km).toFixed(2)} كم</T></View> : null}
             {!deliveryQuote && !quoteLoading ? <T color={colors.muted} size={type.xs} style={styles.summaryHint}>حدد موقعك لمعرفة رسوم التوصيل بدقة</T> : null}
             {deliveryQuote?.area_name && deliveryQuote.area_id !== "default_delivery" ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
