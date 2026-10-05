@@ -48,12 +48,13 @@ export default function Checkout() {
   const deliveryFee = Number(deliveryQuote?.fee || 0);
   const subtotal = Number(appliedCoupon?.subtotal ?? cart.total);
   const displayedTotal = appliedCoupon?.total ?? (subtotal + deliveryFee);
+  const deliveryPriceLabel = deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني";
   const deliveryLabel = quoteLoading
     ? "جارٍ الحساب..."
     : deliveryQuote?.area_id === "default_delivery"
-      ? "خارج نطاق التوصيل"
+      ? `السعر العام · ${deliveryPriceLabel}`
       : deliveryQuote
-        ? deliveryFee > 0 ? formatPrice(deliveryFee) : "مجاني"
+        ? deliveryPriceLabel
         : "يُحسب بعد تحديد الموقع";
 
   useEffect(() => () => {
@@ -70,7 +71,7 @@ export default function Checkout() {
       const quote = await api.deliveryQuote(nextCoords.lat, nextCoords.lng);
       setDeliveryQuote(quote);
       if (quote.area_id === "default_delivery") {
-        show("موقعك خارج نطاق التوصيل الحالي. جرّب عنواناً آخر.", "error");
+        show(`تم تطبيق السعر العام للتوصيل (${formatPrice(quote.fee)}) ✓`);
       } else {
         show(source === "address" ? "تم تحديد الموقع من العنوان؛ راجع الخريطة واضغط لتعديل الدبوس" : source === "manual" ? "تم تحديث موقع التسليم وحساب الرسوم ✓" : source === "saved" ? "تم اختيار العنوان وحساب رسوم التوصيل ✓" : "تم تحديد الموقع وحساب رسوم التوصيل ✓");
       }
@@ -185,7 +186,6 @@ export default function Checkout() {
     if (!coords) return show("حدد موقع التوصيل عبر GPS أو من العنوان أولاً", "error");
     if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
     if (!deliveryQuote) return show("تعذر التحقق من منطقة التوصيل. أعد تحديد الموقع وحاول مجدداً.", "error");
-    if (deliveryQuote.area_id === "default_delivery") return show("عنوانك خارج نطاق التوصيل الحالي. غيّر موقع التسليم.", "error");
     setLoading(true);
     try {
       const order = await api.createOrder({ name: name.trim(), phone: phone.trim(), address: address.trim(), notes: notes.trim(), saved_address_id: selectedAddressId || undefined, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
@@ -287,7 +287,7 @@ export default function Checkout() {
               <T color={colors.muted} size={type.sm}>اختر موقع التوصيل مباشرة من الخريطة</T>
             </View>
           </Pressable>
-          {deliveryQuote?.area_id === "default_delivery" ? <T color={colors.error} size={type.sm} style={{ marginTop: spacing.xs }}>هذه المنطقة خارج نطاق التوصيل؛ لن يُرسل الطلب قبل اختيار موقع مدعوم.</T> : null}
+          {deliveryQuote?.area_id === "default_delivery" ? <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs }}>طُبّق السعر العام لأن الموقع لا يطابق منطقة ذات سعر خاص.</T> : null}
 
           <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>كود الخصم</T>
           <View style={styles.couponRow}>
@@ -307,7 +307,7 @@ export default function Checkout() {
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
             {!deliveryQuote && !quoteLoading ? <T color={colors.muted} size={type.xs} style={styles.summaryHint}>حدد موقعك لمعرفة رسوم التوصيل بدقة</T> : null}
-            {deliveryQuote?.area_name && deliveryQuote.area_id !== "default_delivery" ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
+            {deliveryQuote?.area_name ? <View style={styles.sumRow}><T color={colors.muted}>المنطقة</T><T weight="semi">{deliveryQuote.area_name}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.muted}>قبل الخصم</T><T weight="semi">{formatPrice(appliedCoupon.subtotal)}</T></View> : null}
             {appliedCoupon ? <View style={styles.sumRow}><T color={colors.success}>{appliedCoupon.applies_to === "delivery" ? "خصم التوصيل" : "الخصم"}</T><T weight="semi" color={colors.success}>-{formatPrice(appliedCoupon.discount_amount)}</T></View> : null}
             <View style={[styles.sumRow, styles.sumTotal]}><T weight="bold">الإجمالي</T><T weight="displayBold" size={type.xl} color={colors.brandPrimary}>{formatPrice(displayedTotal)}</T></View>
