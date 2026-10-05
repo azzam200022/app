@@ -2,3 +2,4 @@
 - [Workflow environment overrides](workflow-env-overrides.md) — pass current Replit service URLs through workflow commands when protected `.env` files cannot be edited.
 - [Manager role source of truth](manager-role-source-of-truth.md) — enforce manager permissions during backend Firebase-token synchronization, not only in frontend state.
 - [Catalog quota resilience](catalog-quota-resilience.md) — use the local catalog export for manager search and barcode lookup when Firestore quotas are unreliable.
+- [Optional OpenRouteService delivery distance](openrouteservice-delivery-distance.md) — set the route variables on the backend host; repository secrets do not reach the backend without a workflow.
