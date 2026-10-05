@@ -1,18 +1,7 @@
 import { storage } from "@/src/utils/storage";
-import { Platform } from "react-native";
-
-const configuredBackend = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
-
-function getBackendUrl() {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    const { hostname, protocol } = window.location;
-    const isReplitPreview = hostname.endsWith(".replit.dev") || hostname.endsWith(".repl.co");
-    if (isReplitPreview) return protocol + "//" + hostname;
-  }
-  return configuredBackend;
-}
-
-export const BACKEND = getBackendUrl();
+// Production API origin; request paths below add the /api prefix.
+const configuredBackend = "https://bin-salim.onrender.com";
+export const BACKEND = configuredBackend;
 export const TOKEN_KEY = "souq_auth_token";
 
 let authToken: string | null = null;
