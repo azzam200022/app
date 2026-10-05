@@ -7,14 +7,16 @@ import { T, Button } from "@/src/components/ui";
 import { api, formatPrice } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
-type DeliveryArea = { id: string; name: string; fee: number; center_lat: number; center_lng: number; radius_km: number; is_active: boolean };
+type DeliveryArea = { id: string; name: string; fee: number | null; uses_default_fee?: boolean; center_lat: number; center_lng: number; radius_km: number; is_active: boolean };
 
 export default function DeliveryAreas() {
   const insets = useSafeAreaInsets();
   const { show } = useToast();
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
+  const [defaultFee, setDefaultFee] = useState("2000");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDefaultFee, setSavingDefaultFee] = useState(false);
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<DeliveryArea | null>(null);
   const [name, setName] = useState("");
@@ -25,16 +27,34 @@ export default function DeliveryAreas() {
   const [radiusKm, setRadiusKm] = useState("2");
 
   const load = async () => {
-    try { setAreas(await api.adminDeliveryAreas()); }
+    try {
+      const [nextAreas, pricing] = await Promise.all([api.adminDeliveryAreas(), api.adminDeliveryPricing()]);
+      setAreas(nextAreas);
+      setDefaultFee(String(pricing.default_fee));
+    }
     catch (e: any) { show(e.message, "error"); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
+  const saveDefaultFee = async () => {
+    const amount = Number(defaultFee);
+    if (!defaultFee.trim() || !Number.isFinite(amount) || amount < 0 || amount > 1000000) {
+      return show("اكتب السعر العام بشكل صحيح", "error");
+    }
+    setSavingDefaultFee(true);
+    try {
+      const result = await api.updateAdminDeliveryPricing(amount);
+      setDefaultFee(String(result.default_fee));
+      show("تم حفظ السعر العام للتوصيل ✓");
+    } catch (e: any) { show(e.message, "error"); }
+    finally { setSavingDefaultFee(false); }
+  };
+
   const openForm = (area?: DeliveryArea) => {
     setEditing(area || null);
     setName(area?.name || "");
-    setFee(area ? String(area.fee) : "1000");
+    setFee(area?.fee == null ? "" : String(area.fee));
     setActive(area?.is_active ?? true);
     setCenterLat(area ? String(area.center_lat) : "");
     setCenterLng(area ? String(area.center_lng) : "");
@@ -44,8 +64,8 @@ export default function DeliveryAreas() {
 
   const save = async () => {
     if (!name.trim()) return show("اكتب اسم المنطقة", "error");
-    const amount = Number(fee);
-    if (!Number.isFinite(amount) || amount < 0) return show("اكتب سعر توصيل صحيح", "error");
+    const amount = fee.trim() === "" ? null : Number(fee);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1000000)) return show("اكتب سعر توصيل صحيح", "error");
     const lat = Number(centerLat), lng = Number(centerLng), radius = Number(radiusKm);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180 || !Number.isFinite(radius) || radius <= 0) return show("أدخل إحداثيات مركز المنطقة ونطاقاً صحيحاً", "error");
     setSaving(true);
@@ -73,14 +93,22 @@ export default function DeliveryAreas() {
       <View><T weight="displayBold" size={type.xl}>أسعار التوصيل</T><T color={colors.muted} size={type.sm}>تحكم بالسعر حسب المنطقة</T></View>
       <Pressable onPress={() => openForm()} style={styles.addBtn}><Feather name="plus" size={18} color="#fff" /><T weight="bold" color="#fff">إضافة</T></Pressable>
     </View>
-    {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View> : <FlatList data={areas} keyExtractor={(item) => item.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + spacing.xl }} ListEmptyComponent={<View style={styles.empty}><Feather name="truck" size={36} color={colors.muted} /><T color={colors.muted}>لم تتم إضافة مناطق بعد</T></View>} renderItem={({ item }) => <View style={styles.card}>
-      <View style={styles.cardTop}><View style={{ flex: 1 }}><T weight="bold" size={type.lg}>{item.name}</T><T color={colors.brandPrimary} weight="semi">{item.fee > 0 ? formatPrice(item.fee) : "توصيل مجاني"}</T></View><View style={[styles.pill, item.is_active ? styles.active : styles.inactive]}><T size={type.xs} color={item.is_active ? colors.success : colors.muted}>{item.is_active ? "فعالة" : "معطلة"}</T></View></View>
+    {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View> : <FlatList data={areas} keyExtractor={(item) => item.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + spacing.xl }} ListHeaderComponent={<View style={styles.defaultCard}>
+      <T weight="bold" size={type.lg}>السعر العام للمناطق غير المسعّرة</T>
+      <T color={colors.muted} size={type.sm}>يُطبق على كل موقع خارج المناطق ذات السعر الخاص، أو على أي منطقة تركت سعرها فارغاً.</T>
+      <View style={styles.defaultFeeRow}>
+        <TextInput value={defaultFee} onChangeText={setDefaultFee} keyboardType="decimal-pad" placeholder="2000" placeholderTextColor={colors.muted} style={[styles.input, styles.defaultFeeInput]} textAlign="right" />
+        <T weight="semi">د.ع</T>
+      </View>
+      <Button title={savingDefaultFee ? "جارٍ الحفظ..." : "حفظ السعر العام"} icon="check" onPress={saveDefaultFee} disabled={savingDefaultFee} />
+    </View>} ListEmptyComponent={<View style={styles.empty}><Feather name="truck" size={36} color={colors.muted} /><T color={colors.muted}>لم تتم إضافة مناطق بسعر خاص بعد</T></View>} renderItem={({ item }) => <View style={styles.card}>
+      <View style={styles.cardTop}><View style={{ flex: 1 }}><T weight="bold" size={type.lg}>{item.name}</T><T color={colors.brandPrimary} weight="semi">{item.fee == null || item.uses_default_fee ? `السعر العام · ${formatPrice(Number(defaultFee) || 0)}` : item.fee > 0 ? formatPrice(item.fee) : "توصيل مجاني"}</T></View><View style={[styles.pill, item.is_active ? styles.active : styles.inactive]}><T size={type.xs} color={item.is_active ? colors.success : colors.muted}>{item.is_active ? "فعالة" : "معطلة"}</T></View></View>
       <View style={styles.actions}><Pressable onPress={() => openForm(item)} style={styles.action}><Feather name="edit-2" size={16} color={colors.brandPrimary} /><T color={colors.brandPrimary}>تعديل</T></Pressable><Pressable onPress={() => remove(item)} style={[styles.action, styles.delete]}><Feather name="trash-2" size={16} color={colors.error} /><T color={colors.error}>حذف</T></Pressable></View>
     </View>} />}
     <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}><Pressable style={styles.modalBg} onPress={() => setModal(false)}><Pressable style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} onPress={(e) => e.stopPropagation()}>
       <View style={styles.modalTitle}><T weight="displayBold" size={type.xl}>{editing ? "تعديل المنطقة" : "إضافة منطقة"}</T><Pressable onPress={() => setModal(false)}><Feather name="x" size={24} color={colors.onSurface} /></Pressable></View>
       <T weight="semi" size={type.sm} style={styles.label}>اسم المنطقة</T><TextInput value={name} onChangeText={setName} placeholder="مثال: الكرادة" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
-      <T weight="semi" size={type.sm} style={styles.label}>سعر التوصيل</T><TextInput value={fee} onChangeText={setFee} keyboardType="numeric" placeholder="1000" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
+      <T weight="semi" size={type.sm} style={styles.label}>سعر خاص للمنطقة (اختياري)</T><T color={colors.muted} size={type.xs}>اتركه فارغاً لتطبيق السعر العام: {formatPrice(Number(defaultFee) || 0)}</T><TextInput value={fee} onChangeText={setFee} keyboardType="decimal-pad" placeholder="اتركه فارغاً للسعر العام" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
       <T weight="semi" size={type.sm} style={styles.label}>مركز المنطقة (خط العرض)</T><TextInput value={centerLat} onChangeText={setCenterLat} keyboardType="numeric" placeholder="33.3152" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
       <T weight="semi" size={type.sm} style={styles.label}>مركز المنطقة (خط الطول)</T><TextInput value={centerLng} onChangeText={setCenterLng} keyboardType="numeric" placeholder="44.3661" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
       <T weight="semi" size={type.sm} style={styles.label}>نطاق التوصيل بالكيلومتر</T><TextInput value={radiusKm} onChangeText={setRadiusKm} keyboardType="numeric" placeholder="2" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
@@ -96,6 +124,9 @@ const styles = StyleSheet.create({
   addBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandPrimary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", gap: spacing.sm, paddingTop: spacing["3xl"] },
+  defaultCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm },
+  defaultFeeRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  defaultFeeInput: { flex: 1 },
   card: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
   cardTop: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },
   pill: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },

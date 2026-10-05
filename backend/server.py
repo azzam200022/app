@@ -42,10 +42,8 @@ PREVIEW_MODE = os.environ.get(
     "true" if os.environ.get("NODE_ENV") != "production" else "false",
 ).lower() in {"1", "true", "yes"}
 
-try:
-    DEFAULT_DELIVERY_FEE_IQD = max(0.0, round(float(os.environ.get("DEFAULT_DELIVERY_FEE_IQD", "1000")), 2))
-except (TypeError, ValueError):
-    DEFAULT_DELIVERY_FEE_IQD = 1000.0
+DEFAULT_DELIVERY_FEE_IQD = 2000.0
+DELIVERY_PRICING_SETTINGS_ID = "default"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -398,7 +396,7 @@ class CouponUpdate(BaseModel):
 
 class DeliveryAreaIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
-    fee: float = Field(DEFAULT_DELIVERY_FEE_IQD, ge=0, le=1000000)
+    fee: Optional[float] = Field(None, ge=0, le=1000000)
     center_lat: float = Field(..., ge=-90, le=90)
     center_lng: float = Field(..., ge=-180, le=180)
     radius_km: float = Field(..., gt=0, le=100)
@@ -412,6 +410,10 @@ class DeliveryAreaUpdate(BaseModel):
     center_lng: Optional[float] = Field(None, ge=-180, le=180)
     radius_km: Optional[float] = Field(None, gt=0, le=100)
     is_active: Optional[bool] = None
+
+
+class DeliveryPricingUpdate(BaseModel):
+    default_fee: float = Field(..., ge=0, le=1000000)
 
 
 class DeliveryQuoteIn(BaseModel):
@@ -1005,19 +1007,43 @@ def normalize_delivery_area(value: Optional[str]) -> Optional[str]:
     return name
 
 
-def default_delivery_area_view():
+def default_delivery_area_view(default_fee: float):
     return {
         "id": "default_delivery",
-        "name": "التوصيل الأساسي",
-        "fee": DEFAULT_DELIVERY_FEE_IQD,
+        "name": "بقية المناطق",
+        "fee": round(default_fee, 2),
+        "uses_default_fee": True,
         "distance_km": None,
     }
 
 
-def delivery_area_public_view(area):
+async def get_default_delivery_fee():
+    settings = await db.delivery_settings.find_one(
+        {"id": DELIVERY_PRICING_SETTINGS_ID},
+        {"_id": 0},
+    )
+    if not settings or settings.get("default_fee") is None:
+        return DEFAULT_DELIVERY_FEE_IQD
+    try:
+        fee = float(settings["default_fee"])
+    except (TypeError, ValueError):
+        logger.warning("Invalid persisted default delivery fee; using the initial fee")
+        return DEFAULT_DELIVERY_FEE_IQD
+    if not 0 <= fee <= 1000000:
+        logger.warning("Out-of-range persisted default delivery fee; using the initial fee")
+        return DEFAULT_DELIVERY_FEE_IQD
+    return round(fee, 2)
+
+
+def delivery_area_public_view(area, default_fee: Optional[float] = None):
     view = dict(area)
     view.pop("_id", None)
-    view["fee"] = round(float(view.get("fee", DEFAULT_DELIVERY_FEE_IQD) or DEFAULT_DELIVERY_FEE_IQD), 2)
+    area_fee = view.get("fee")
+    view["uses_default_fee"] = area_fee is None
+    if area_fee is None:
+        view["fee"] = round(default_fee, 2) if default_fee is not None else None
+    else:
+        view["fee"] = round(float(area_fee), 2)
     return view
 
 
@@ -1031,10 +1057,11 @@ def distance_between_km(lat1: float, lng1: float, lat2: float, lng2: float) -> f
 
 
 async def resolve_delivery_area_for_location(lat: Optional[float], lng: Optional[float]):
+    default_fee = await get_default_delivery_fee()
     areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).to_list(200)
     geo_areas = [area for area in areas if area.get("center_lat") is not None and area.get("center_lng") is not None and area.get("radius_km") is not None]
     if not geo_areas:
-        return default_delivery_area_view()
+        return default_delivery_area_view(default_fee)
     if lat is None or lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة أولاً")
     matches = []
@@ -1043,9 +1070,9 @@ async def resolve_delivery_area_for_location(lat: Optional[float], lng: Optional
         if distance <= float(area["radius_km"]):
             matches.append((distance, area))
     if not matches:
-        raise HTTPException(status_code=400, detail="موقعك خارج مناطق التوصيل الحالية")
+        return default_delivery_area_view(default_fee)
     distance, area = min(matches, key=lambda item: (item[0], float(item[1].get("radius_km", 0))))
-    view = delivery_area_public_view(area)
+    view = delivery_area_public_view(area, default_fee)
     view["distance_km"] = round(distance, 2)
     return view
 
@@ -1105,7 +1132,8 @@ async def delete_coupon(code: str, user=Depends(require_manager)):
 @api.get("/delivery/areas")
 async def public_delivery_areas():
     areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(100)
-    return [delivery_area_public_view(area) for area in areas]
+    default_fee = await get_default_delivery_fee()
+    return [delivery_area_public_view(area, default_fee) for area in areas]
 
 
 async def configured_store_road_distance_km(lat: float, lng: float):
@@ -1116,28 +1144,8 @@ async def configured_store_road_distance_km(lat: float, lng: float):
 
 @api.post("/delivery/quote")
 async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
-    try:
-        area = await resolve_delivery_area_for_location(body.lat, body.lng)
-    except HTTPException as exc:
-        if exc.status_code != 400 or exc.detail != "موقعك خارج مناطق التوصيل الحالية":
-            raise
-        road_distance_km = await configured_store_road_distance_km(body.lat, body.lng)
-        return {
-            "area_id": "default_delivery",
-            "area_name": "خارج نطاق التوصيل",
-            "fee": 0,
-            "distance_km": None,
-            "road_distance_km": road_distance_km,
-        }
+    area = await resolve_delivery_area_for_location(body.lat, body.lng)
     road_distance_km = await configured_store_road_distance_km(body.lat, body.lng)
-    if not area:
-        return {
-            "area_id": "default_delivery",
-            "area_name": "التوصيل الأساسي",
-            "fee": DEFAULT_DELIVERY_FEE_IQD,
-            "distance_km": None,
-            "road_distance_km": road_distance_km,
-        }
     return {
         "area_id": area["id"],
         "area_name": area["name"],
@@ -1153,6 +1161,22 @@ async def admin_delivery_areas(user=Depends(require_manager)):
     return [delivery_area_public_view(area) for area in areas]
 
 
+@api.get("/admin/delivery-pricing")
+async def admin_delivery_pricing(user=Depends(require_manager)):
+    return {"default_fee": await get_default_delivery_fee(), "currency": "IQD"}
+
+
+@api.put("/admin/delivery-pricing")
+async def update_admin_delivery_pricing(body: DeliveryPricingUpdate, user=Depends(require_manager)):
+    default_fee = round(float(body.default_fee), 2)
+    await db.delivery_settings.update_one(
+        {"id": DELIVERY_PRICING_SETTINGS_ID},
+        {"$set": {"default_fee": default_fee, "updated_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    return {"default_fee": default_fee, "currency": "IQD"}
+
+
 @api.post("/admin/delivery-areas")
 async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manager)):
     name = normalize_delivery_area(body.name)
@@ -1161,7 +1185,7 @@ async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manage
     doc = {
         "id": "area_" + uuid.uuid4().hex[:12],
         "name": name,
-        "fee": round(float(body.fee), 2),
+        "fee": round(float(body.fee), 2) if body.fee is not None else None,
         "center_lat": float(body.center_lat),
         "center_lng": float(body.center_lng),
         "radius_km": round(float(body.radius_km), 3),
@@ -1174,13 +1198,13 @@ async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manage
 
 @api.put("/admin/delivery-areas/{area_id}")
 async def update_delivery_area(area_id: str, body: DeliveryAreaUpdate, user=Depends(require_manager)):
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_unset=True)
     if "name" in updates:
         updates["name"] = normalize_delivery_area(updates["name"])
         duplicate = await db.delivery_areas.find_one({"name": updates["name"], "id": {"$ne": area_id}})
         if duplicate:
             raise HTTPException(status_code=409, detail="منطقة التوصيل موجودة مسبقاً")
-    if "fee" in updates:
+    if "fee" in updates and updates["fee"] is not None:
         updates["fee"] = round(float(updates["fee"]), 2)
     if "radius_km" in updates:
         updates["radius_km"] = round(float(updates["radius_km"]), 3)
@@ -2337,8 +2361,6 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     if order_lat is None or order_lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة")
     delivery_area = await resolve_delivery_area_for_location(order_lat, order_lng)
-    if not delivery_area:
-        raise HTTPException(status_code=400, detail="الموقع خارج نطاق التوصيل")
     delivery_fee = float(delivery_area["fee"])
     subtotal = round(float(cart["total"]), 2)
     coupon_code = normalize_coupon_code(body.coupon_code)
@@ -2363,8 +2385,8 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "address": order_address,
         "address_id": saved_address.get("id") if saved_address else None,
         "address_label": saved_address.get("label") if saved_address else None,
-        "area": delivery_area["name"] if delivery_area else (body.area or infer_order_area(order_address)),
-        "delivery_area_id": delivery_area["id"] if delivery_area else None,
+        "area": delivery_area["name"],
+        "delivery_area_id": delivery_area["id"],
         "delivery_fee": round(delivery_fee, 2),
         "notes": body.notes or "",
         "location": ({"lat": order_lat, "lng": order_lng} if (order_lat is not None and order_lng is not None) else None),
