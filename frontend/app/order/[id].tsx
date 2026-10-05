@@ -42,7 +42,7 @@ export default function OrderDetail() {
       if (order) show(e?.message || "تعذر تحديث الطلب", "error");
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [id]); // eslint-disable-line
+  useEffect(() => { load(true); }, [id]); // eslint-disable-line
 
   // live refresh while out for delivery (tracks agent location)
   useEffect(() => {
@@ -197,6 +197,32 @@ export default function OrderDetail() {
           )}
         </View>
 
+        {user?.role === "customer" && Array.isArray(order.returns) && order.returns.length > 0 ? (
+          <View style={styles.returnHistoryCard} testID="order-returns">
+            <View style={styles.returnHistoryHeader}>
+              <Feather name="rotate-ccw" size={18} color={colors.brandPrimary} />
+              <T weight="displayBold" size={type.lg}>سجل المرتجعات</T>
+            </View>
+            {order.returns.map((returnItem: any) => {
+              const reviewed = returnItem.status === "reviewed";
+              return (
+                <View key={returnItem.id} style={styles.returnHistoryItem} testID={`order-return-${returnItem.id}`}>
+                  <View style={styles.returnHistoryTop}>
+                    <T weight="semi">{returnItem.return_type === "full" ? "مرتجع كامل" : "مرتجع جزئي"}</T>
+                    <T weight="displayBold" color={colors.error}>{formatPrice(returnItem.total)}</T>
+                  </View>
+                  <View style={[styles.returnReviewBadge, reviewed ? styles.returnReviewBadgeDone : styles.returnReviewBadgePending]}>
+                    <Feather name={reviewed ? "check-circle" : "clock"} size={15} color={reviewed ? colors.success : colors.warning} />
+                    <T size={type.sm} weight="bold" color={reviewed ? colors.success : colors.warning}>
+                      {reviewed ? "تمت مراجعة المرتجع لدى المندوب" : "بانتظار مراجعة المرتجع من المندوب"}
+                    </T>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
         {order.location ? (
           <View style={styles.mapCard}>
             {order.status === "out_for_delivery" && (
@@ -272,6 +298,13 @@ const styles = StyleSheet.create({
   itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   itemImg: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   infoCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.lg, gap: spacing.md },
+  returnHistoryCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.md, gap: spacing.md },
+  returnHistoryHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  returnHistoryItem: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, gap: spacing.sm },
+  returnHistoryTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  returnReviewBadge: { flexDirection: "row-reverse", alignItems: "center", alignSelf: "flex-start", gap: spacing.xs, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  returnReviewBadgeDone: { backgroundColor: "#EAF3EE" },
+  returnReviewBadgePending: { backgroundColor: "#FFF6E6" },
   otpCard: { backgroundColor: "#E7F0EC", borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandTertiary, padding: spacing.lg, marginBottom: spacing.lg },
   otpHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   otpValue: { textAlign: "center", letterSpacing: 8, marginTop: spacing.md },
