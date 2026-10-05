@@ -28,6 +28,7 @@ from firebase_admin import credentials as firebase_credentials
 from firebase_admin import firestore
 from firebase_admin import storage as firebase_storage
 from firestore_store import FirestoreDatabase
+from delivery_routing import calculate_driving_distance_km
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -1109,10 +1110,35 @@ async def public_delivery_areas():
 
 @api.post("/delivery/quote")
 async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
-    area = await resolve_delivery_area_for_location(body.lat, body.lng)
+    try:
+        area = await resolve_delivery_area_for_location(body.lat, body.lng)
+    except HTTPException as exc:
+        if exc.status_code != 400 or exc.detail != "موقعك خارج مناطق التوصيل الحالية":
+            raise
+        road_distance_km = await calculate_driving_distance_km(STORE_LAT, STORE_LNG, body.lat, body.lng)
+        return {
+            "area_id": "default_delivery",
+            "area_name": "خارج نطاق التوصيل",
+            "fee": 0,
+            "distance_km": None,
+            "road_distance_km": road_distance_km,
+        }
+    road_distance_km = await calculate_driving_distance_km(STORE_LAT, STORE_LNG, body.lat, body.lng)
     if not area:
-        return {"area_id": "default_delivery", "area_name": "التوصيل الأساسي", "fee": DEFAULT_DELIVERY_FEE_IQD, "distance_km": None}
-    return {"area_id": area["id"], "area_name": area["name"], "fee": area["fee"], "distance_km": area["distance_km"]}
+        return {
+            "area_id": "default_delivery",
+            "area_name": "التوصيل الأساسي",
+            "fee": DEFAULT_DELIVERY_FEE_IQD,
+            "distance_km": None,
+            "road_distance_km": road_distance_km,
+        }
+    return {
+        "area_id": area["id"],
+        "area_name": area["name"],
+        "fee": area["fee"],
+        "distance_km": area["distance_km"],
+        "road_distance_km": road_distance_km,
+    }
 
 
 @api.get("/admin/delivery-areas")
