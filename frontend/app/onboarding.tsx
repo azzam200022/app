@@ -114,5 +114,5 @@ const styles = StyleSheet.create({
   dots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: spacing.lg, marginBottom: spacing.md },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#D8DCD7" },
   dotActive: { width: 22, backgroundColor: colors.brandPrimary },
-  nextButton: { height: 54, borderRadius: radius.lg, backgroundColor: colors.brandPrimary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: "auto", shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  nextButton: { height: 54, borderRadius: radius.md, backgroundColor: colors.brandPrimary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: "auto" },
 });

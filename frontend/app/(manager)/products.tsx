@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row-reverse", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#15302E", shadowOpacity: 0.05, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   img: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
   productInfo: { flex: 1, minWidth: 0 },
   productTopLine: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.xs },

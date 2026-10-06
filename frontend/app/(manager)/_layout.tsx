@@ -24,10 +24,10 @@ export default function ManagerLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.gold,
-        tabBarInactiveTintColor: "rgba(251,247,238,0.7)",
-        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
-        tabBarStyle: { backgroundColor: colors.brandPrimary, direction: "rtl", borderTopColor: colors.brandSecondary, borderTopWidth: StyleSheet.hairlineWidth, ...(Platform.OS === "web" ? { height: 56 } : {}) },
+        tabBarActiveTintColor: colors.brandPrimary,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 2 },
+        tabBarStyle: { backgroundColor: colors.surface, direction: "rtl", borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, ...(Platform.OS === "web" ? { height: 64 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
@@ -36,7 +36,7 @@ export default function ManagerLayout() {
       <Tabs.Screen name="products" options={{ href: null }} />
       <Tabs.Screen name="scan" options={{ title: "إضافة", tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} /> }} />
       <Tabs.Screen name="orders" options={{ title: "الطلبات", tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} /> }} />
-      <Tabs.Screen name="support" options={{ title: "الدعم", tabBarBadge: supportUnread > 0 ? (supportUnread > 99 ? "99+" : supportUnread) : undefined, tabBarBadgeStyle: { backgroundColor: colors.gold, color: "#1A1A1A", fontFamily: font.bodyBold }, tabBarIcon: ({ color, size }) => <Feather name="headphones" size={size} color={color} /> }} />
+       <Tabs.Screen name="support" options={{ title: "الدعم", tabBarBadge: supportUnread > 0 ? (supportUnread > 99 ? "99+" : supportUnread) : undefined, tabBarBadgeStyle: { backgroundColor: colors.gold, color: colors.onSurface, fontFamily: font.bodyBold }, tabBarIcon: ({ color, size }) => <Feather name="headphones" size={size} color={color} /> }} />
       <Tabs.Screen name="agents" options={{ href: null }} />
       <Tabs.Screen name="sync-settings" options={{ href: null }} />
       <Tabs.Screen name="returns" options={{ href: null }} />

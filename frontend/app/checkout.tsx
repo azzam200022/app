@@ -6,7 +6,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
-import { T, Button } from "@/src/components/ui";
+import { T, Button, PageHeading } from "@/src/components/ui";
 import InteractiveMap from "@/src/components/InteractiveMap";
 import { api, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
@@ -198,11 +198,7 @@ export default function Checkout() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <T weight="displayBold" size={type.xl}>إتمام الطلب</T>
-        <View style={{ width: 40 }} />
-      </View>
+      <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={{ paddingTop: insets.top + spacing.md }} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled">
           <View style={styles.savedSection}>
@@ -363,25 +359,25 @@ function Input({ icon, testID, multiline, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
+  header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFEFC", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
+  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 52 },
-  locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#FFFEFC", borderWidth: 1.5, borderColor: colors.brandSecondary, borderStyle: "dashed", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64 },
+  locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.brandSecondary, borderStyle: "dashed", borderRadius: radius.md, padding: spacing.lg, minHeight: 64 },
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: "rgba(24,61,54,0.08)", borderRadius: radius.lg, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
-  mapCard: { borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFEFC", marginTop: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
+  mapCard: { borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFFFF", marginTop: spacing.sm },
   mapImg: { width: "100%", aspectRatio: 600 / 260, backgroundColor: colors.surfaceSecondary },
   mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.sm, lineHeight: 18 },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md, paddingTop: spacing.sm },
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  summary: { backgroundColor: "#FFFEFC", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  summary: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm },
   summaryHint: { marginTop: spacing.xs, textAlign: "right" },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
   couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
   couponBtn: { height: 52, paddingHorizontal: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
-  savedSection: { backgroundColor: "#FFFEFC", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm, shadowColor: colors.onSurface, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
+  savedSection: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm },
   sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   savedCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   savedCardActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
@@ -389,12 +385,12 @@ const styles = StyleSheet.create({
   savedCardTitle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
   saveAddressBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 48, marginBottom: spacing.md },
   manualPicker: { flex: 1, backgroundColor: colors.surface },
-  manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, shadowColor: colors.onSurface, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3, zIndex: 2 },
+  manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
   manualPickerPin: { position: "absolute", left: "50%", top: "50%", width: 52, height: 52, marginLeft: -26, marginTop: -44, alignItems: "center", justifyContent: "center" },
   manualPickerPinDot: { position: "absolute", bottom: 3, width: 10, height: 5, borderRadius: 5, backgroundColor: "rgba(28,41,37,0.28)" },
-  manualPickerFooter: { backgroundColor: "#FFFEFC", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  manualPickerFooter: { backgroundColor: "#FFFFFF", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderTopWidth: 1, borderTopColor: colors.border },
   manualPickerHint: { textAlign: "right" },
-  manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.lg, minHeight: 52, marginTop: spacing.sm, shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  footer: { backgroundColor: colors.surface, padding: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 0, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 5, zIndex: 3 },
+  manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 52, marginTop: spacing.sm },
+  footer: { backgroundColor: colors.surface, padding: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, zIndex: 3 },
 });

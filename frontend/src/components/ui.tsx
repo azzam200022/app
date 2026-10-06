@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, TextProps, Pressable, PressableProps, View, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
+import { Text, TextProps, Pressable, View, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 
@@ -13,7 +13,37 @@ export function T(props: TextProps & { weight?: "reg" | "semi" | "bold" | "displ
     displayMed: font.displayMedium,
     displayBold: font.displayBold,
   }[weight];
-  return <Text {...rest} style={[{ fontFamily: fam, fontSize: size, color, textAlign: "right", writingDirection: "rtl" }, style]} />;
+  return <Text {...rest} style={[{ fontFamily: fam, fontSize: size, color, textAlign: "right", writingDirection: "rtl", includeFontPadding: false, lineHeight: Math.ceil(size * 1.38) }, style]} />;
+}
+
+export function PageHeading({
+  title,
+  subtitle,
+  eyebrow,
+  leading,
+  trailing,
+  style,
+}: {
+  title: string;
+  subtitle?: string;
+  eyebrow?: string;
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
+  style?: ViewStyle;
+}) {
+  return (
+    <View style={[styles.pageHeading, style]}>
+      <View style={styles.pageHeadingMain}>
+        {leading}
+        <View style={styles.pageHeadingCopy}>
+          {eyebrow ? <T size={type.xs} weight="bold" color={colors.gold}>{eyebrow}</T> : null}
+          <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} numberOfLines={1}>{title}</T>
+          {subtitle ? <T size={type.sm} color={colors.muted} numberOfLines={2} style={styles.pageHeadingSubtitle}>{subtitle}</T> : null}
+        </View>
+      </View>
+      {trailing}
+    </View>
+  );
 }
 
 export function Button({
@@ -44,7 +74,7 @@ export function Button({
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: bg, opacity: disabled ? 0.5 : pressed ? 0.85 : 1, borderWidth: variant === "outline" ? 1.5 : 0, borderColor: colors.brandPrimary },
+         { backgroundColor: bg, opacity: disabled ? 0.5 : pressed ? 0.88 : 1, borderWidth: variant === "outline" ? 1 : variant === "secondary" ? 1 : 0, borderColor: variant === "secondary" ? colors.border : colors.brandPrimary },
         style,
       ]}
     >
@@ -81,11 +111,15 @@ export function Badge({ text, color = colors.gold, textColor = "#1A1A1A" }: { te
 }
 
 const styles = StyleSheet.create({
-  btn: { minHeight: 50, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl, shadowColor: colors.onSurface, shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  pageHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  pageHeadingMain: { flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, minWidth: 0 },
+  pageHeadingCopy: { flex: 1, alignItems: "flex-start", minWidth: 0 },
+  pageHeadingSubtitle: { marginTop: 2 },
+  btn: { minHeight: 52, borderRadius: radius.md, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl },
   btnRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   btnText: { fontFamily: font.bodyBold, fontSize: type.lg },
-  empty: { alignItems: "center", justifyContent: "center", paddingVertical: spacing["3xl"], paddingHorizontal: spacing.xl },
-  emptyIcon: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, alignSelf: "flex-start" },
+  empty: { alignItems: "center", justifyContent: "center", paddingVertical: spacing["3xl"], paddingHorizontal: spacing.xl, gap: spacing.xs },
+  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  badge: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.pill, alignSelf: "flex-start" },
   badgeText: { fontFamily: font.bodyBold, fontSize: 11 },
 });

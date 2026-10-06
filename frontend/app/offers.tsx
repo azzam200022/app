@@ -3,8 +3,8 @@ import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, spacing, type } from "@/src/lib/theme";
-import { T, EmptyState } from "@/src/components/ui";
+import { colors, spacing } from "@/src/lib/theme";
+import { EmptyState, PageHeading } from "@/src/components/ui";
 import { ProductCard } from "@/src/components/ProductCard";
 import { api } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
@@ -23,11 +23,12 @@ export default function Offers() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable testID="offers-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <T weight="displayBold" size={type.xl}>العروض والخصومات</T>
-        <View style={{ width: 40 }} />
-      </View>
+      <PageHeading
+        title="العروض والخصومات"
+        leading={<Pressable testID="offers-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>}
+        trailing={<View style={{ width: 40 }} />}
+        style={{ paddingTop: insets.top + spacing.md }}
+      />
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : items.length === 0 ? (
         <View style={styles.center}><EmptyState icon="tag" title="لا توجد عروض حالياً" /></View>
       ) : (

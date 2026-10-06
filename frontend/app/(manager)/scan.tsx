@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   input: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, marginBottom: spacing.sm },
   bcChip: { flexDirection: "row-reverse", alignSelf: "flex-start", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, marginBottom: spacing.md },
-  templatePreview: { backgroundColor: "#fff", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden", shadowColor: "#15302E", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  templatePreview: { backgroundColor: "#fff", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   templateBrandRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.brandTertiary },
   templateLogo: { width: 42, height: 28 },
   templateBrandCopy: { flex: 1, alignItems: "flex-end" },
