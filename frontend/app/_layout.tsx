@@ -15,6 +15,7 @@ import { CartProvider } from "@/src/context/CartContext";
 import { ToastProvider } from "@/src/context/ToastContext";
 import { registerForPush } from "@/src/lib/push";
 import { storage } from "@/src/utils/storage";
+import { colors } from "@/src/lib/theme";
 
 LogBox.ignoreAllLogs(true);
 
@@ -102,7 +103,7 @@ export default function RootLayout() {
           <CartProvider>
             <ToastProvider>
               <AppServices />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FBFBF9", direction: "rtl" } }}>
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface, direction: "rtl" } }}>
                 <Stack.Screen name="checkout" options={{ presentation: "modal" }} />
               </Stack>
             </ToastProvider>

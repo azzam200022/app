@@ -104,13 +104,13 @@ export default function Login() {
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
-        <LinearGradient colors={["#F6EFDD", "#EAF0E5", "#DCEADE"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[colors.surface, colors.surfaceSecondary, colors.brandTertiary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         {/* faint decorative grocery motifs */}
-        <Feather name="shopping-cart" size={56} color="#1F4529" style={styles.decoCart} />
+        <Feather name="shopping-cart" size={56} color={colors.brandPrimary} style={styles.decoCart} />
         <View style={styles.decoAppleA} />
         <View style={styles.decoAppleB} />
         <View style={styles.decoAppleC} />
-        <Feather name="droplet" size={44} color="#C5A059" style={styles.decoDrop} />
+        <Feather name="droplet" size={44} color={colors.gold} style={styles.decoDrop} />
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
           <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
         </View>
@@ -227,9 +227,9 @@ const styles = StyleSheet.create({
   logoImg: { width: 236, height: 148 },
   decoCart: { position: "absolute", top: 96, left: 44, opacity: 0.12 },
   decoDrop: { position: "absolute", bottom: 70, right: 48, opacity: 0.16, transform: [{ rotate: "12deg" }] },
-  decoAppleA: { position: "absolute", top: 110, right: 60, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.2 },
-  decoAppleB: { position: "absolute", bottom: 90, left: 78, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.18 },
-  decoAppleC: { position: "absolute", top: 210, left: 30, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: "#C5A059", opacity: 0.22 },
+  decoAppleA: { position: "absolute", top: 110, right: 60, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.brandSecondary, opacity: 0.2 },
+  decoAppleB: { position: "absolute", bottom: 90, left: 78, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.brandSecondary, opacity: 0.18 },
+  decoAppleC: { position: "absolute", top: 210, left: 30, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: colors.gold, opacity: 0.22 },
   sheet: { flex: 1, marginTop: -24, backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderTopWidth: 1, borderColor: colors.border },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, marginBottom: spacing.md },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%" },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   googleBtn: { height: 54, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   googleRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },
-  previewBox: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: "#EEF5ED", borderWidth: 1, borderColor: "#C6DBC7" },
+  previewBox: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.borderStrong },
   previewTitle: { textAlign: "center" },
   previewHint: { textAlign: "center", marginTop: 4, marginBottom: spacing.sm },
   previewButton: { height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandPrimary, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
