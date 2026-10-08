@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   saleUnitButtonDisabled: { opacity: 0.4 },
   priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", gap: spacing.md, marginTop: spacing.md },
   stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
-  unavailableBox: { marginTop: spacing.md, backgroundColor: "#FFF8F0", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: "#F2D39A" },
+  unavailableBox: { marginTop: spacing.md, backgroundColor: colors.warningSoft, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.warning },
   unavailableStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: 6 },

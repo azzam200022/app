@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   idBlock: { alignItems: "flex-end", gap: 2 },
   typePill: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill },
   fullPill: { backgroundColor: colors.brandTertiary },
-  partialPill: { backgroundColor: "#FFF3E0" },
+  partialPill: { backgroundColor: colors.warningSoft },
   info: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   itemsBox: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, gap: spacing.xs },
   itemRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },

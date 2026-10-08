@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   loading: { minHeight: 210, alignItems: "center", justifyContent: "center", gap: spacing.md },
   summaryGrid: { flexDirection: "row-reverse", flexWrap: "wrap", gap: spacing.sm },
   summaryCard: { flexGrow: 1, flexBasis: "46%", minHeight: 88, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, alignItems: "flex-end", justifyContent: "center", gap: 4 },
-  summaryCardEmphasized: { backgroundColor: "#FFF8EA", borderColor: "#E9D3A9" },
+  summaryCardEmphasized: { backgroundColor: colors.warningSoft, borderColor: colors.warning },
   sectionHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
   secondaryButton: { flexDirection: "row-reverse", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 7, backgroundColor: "#fff" },
   empty: { minHeight: 150, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", gap: spacing.sm },

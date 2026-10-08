@@ -9,15 +9,15 @@ import { api, formatPrice, getCachedOrders, STATUS_LABEL } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
 export const STATUS_COLOR: Record<string, string> = {
-  pending: "#C5A059",
-  confirmed: "#3A5A40",
-  preparing: "#4A524C",
-  ready_for_delivery: "#8A5A00",
-  out_for_delivery: "#285C4D",
-  delivered: "#1F4529",
-  delivery_failed: "#8B3A3A",
-  cancelled: "#8B3A3A",
-  returned: "#8B3A3A",
+  pending: colors.warning,
+  confirmed: colors.brandSecondary,
+  preparing: colors.info,
+  ready_for_delivery: colors.gold,
+  out_for_delivery: colors.success,
+  delivered: colors.brandPrimary,
+  delivery_failed: colors.error,
+  cancelled: colors.error,
+  returned: colors.error,
 };
 
 const STATUS_DESCRIPTION: Record<string, string> = {
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   reorderButtonPressed: { opacity: 0.72 },
   reorderButtonDisabled: { opacity: 0.45 },
   emptyError: { width: "100%", alignItems: "center", gap: spacing.md, padding: spacing.xl, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg },
-  errorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#F5EAE6", alignItems: "center", justifyContent: "center" },
+  errorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.errorSoft, alignItems: "center", justifyContent: "center" },
   errorCopy: { textAlign: "center", maxWidth: 280 },
   retryButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xs },
   retryPressed: { opacity: 0.8 },

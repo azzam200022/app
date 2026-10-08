@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   ticketCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg },
   ticketCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   ticketStatus: { borderRadius: 16, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  unreadPill: { borderRadius: 16, backgroundColor: "#F8EAEA", paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  unreadPill: { borderRadius: 16, backgroundColor: colors.errorSoft, paddingHorizontal: spacing.sm, paddingVertical: 4 },
   openStatus: { backgroundColor: "rgba(46,125,50,0.12)" },
   pendingStatus: { backgroundColor: "rgba(230,145,56,0.14)" },
   closedStatus: { backgroundColor: "rgba(117,117,117,0.12)" },

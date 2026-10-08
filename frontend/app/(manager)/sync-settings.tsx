@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   mono: { fontFamily: font.body, letterSpacing: 0.5 },
   smallBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   codeBox: { backgroundColor: colors.onSurface, borderRadius: radius.md, padding: spacing.md },
-  code: { fontFamily: font.body, color: "#DCEBE8", fontSize: type.sm, lineHeight: 20, textAlign: "left" },
+  code: { fontFamily: font.body, color: colors.brandTertiary, fontSize: type.sm, lineHeight: 20, textAlign: "left" },
   uploadCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   uploadHeader: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.md },
   uploadIcon: { width: 42, height: 42, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
@@ -243,5 +243,5 @@ const styles = StyleSheet.create({
   historyHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   historyItem: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   copyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.md },
-  noteBox: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, backgroundColor: "#FBF6EA", borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.xl },
+  noteBox: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, backgroundColor: colors.warningSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.xl },
 });
