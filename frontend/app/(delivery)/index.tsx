@@ -57,7 +57,6 @@ export default function DeliveryHome() {
   const [returnFor, setReturnFor] = useState<any>(null);
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [returnSubmitting, setReturnSubmitting] = useState(false);
-  const [reviewingReturn, setReviewingReturn] = useState<string | null>(null);
   const [failureFor, setFailureFor] = useState<any>(null);
   const [failureReason, setFailureReason] = useState<string | null>(null);
   const [failureSubmitting, setFailureSubmitting] = useState(false);
@@ -205,20 +204,6 @@ export default function DeliveryHome() {
       show(e.message, "error");
     } finally {
       setReturnSubmitting(false);
-    }
-  };
-
-  const reviewReturn = async (returnId: string) => {
-    if (reviewingReturn) return;
-    setReviewingReturn(returnId);
-    try {
-      await api.deliveryReviewReturn(returnId);
-      show("تم تأكيد استلام ومراجعة المرتجع");
-      await load();
-    } catch (e: any) {
-      show(e.message, "error");
-    } finally {
-      setReviewingReturn(null);
     }
   };
 
@@ -406,25 +391,13 @@ export default function DeliveryHome() {
       <View style={[styles.returnReviewState, item.status === "reviewed" ? styles.returnReviewDone : styles.returnReviewPending]} testID={`return-review-state-${item.id}`}>
         <Feather name={item.status === "reviewed" ? "check-circle" : "clock"} size={15} color={item.status === "reviewed" ? colors.success : colors.warning} />
         <T size={type.sm} weight="bold" color={item.status === "reviewed" ? colors.success : colors.warning}>
-          {item.status === "reviewed" ? "تمت المراجعة لدى المندوب" : "بانتظار مراجعة المرتجع"}
+          {item.manager_received_at ? "تم تأكيد الاستلام لدى المدير" : item.status === "reviewed" ? "تمت مراجعة المرتجع سابقًا" : "بانتظار تأكيد استلام المدير"}
         </T>
       </View>
       <View style={styles.returnCardBottom}>
         <T color={colors.muted} size={type.sm}>{(item.items || []).length} منتجات</T>
         <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
       </View>
-      {item.status !== "reviewed" ? (
-        <Pressable
-          testID={`review-return-${item.id}`}
-          accessibilityRole="button"
-          onPress={() => reviewReturn(item.id)}
-          disabled={reviewingReturn !== null}
-          style={({ pressed }) => [styles.reviewReturnButton, pressed && styles.reviewReturnButtonPressed, reviewingReturn !== null && reviewingReturn !== item.id && styles.reviewReturnButtonDisabled]}
-        >
-          {reviewingReturn === item.id ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="check-circle" size={17} color="#fff" />}
-          <T size={type.sm} weight="bold" color="#fff">{reviewingReturn === item.id ? "جارٍ تأكيد الاستلام..." : "تأكيد استلام المرتجع"}</T>
-        </Pressable>
-      ) : null}
     </View>
   );
 
@@ -660,9 +633,6 @@ const styles = StyleSheet.create({
   returnReviewState: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, alignSelf: "flex-start", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginTop: spacing.xs },
   returnReviewDone: { backgroundColor: "#EAF3EE" },
   returnReviewPending: { backgroundColor: "#FFF6E6" },
-  reviewReturnButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 44, borderRadius: radius.md, backgroundColor: colors.brandPrimary, marginTop: spacing.sm, paddingHorizontal: spacing.md },
-  reviewReturnButtonPressed: { opacity: 0.8 },
-  reviewReturnButtonDisabled: { opacity: 0.55 },
   returnMeta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   returnReason: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.xs },
   returnCardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },

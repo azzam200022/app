@@ -240,6 +240,7 @@ export const api = {
       return req("/admin/orders" + (suffix ? "?" + suffix : ""));
     },
   adminReturns: () => req("/admin/returns"),
+  adminReviewReturn: (id: string) => req("/admin/returns/" + encodeURIComponent(id) + "/review", { method: "POST" }),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
@@ -265,7 +266,6 @@ export const api = {
   deleteBranch: (id: string) => req("/admin/category-branches/" + id, { method: "DELETE" }),
   deliverySummary: (date: string, tzOffsetMinutes: number) => req("/delivery/summary?date=" + encodeURIComponent(date) + "&tz_offset_minutes=" + String(tzOffsetMinutes)),
   deliveryReturns: () => req("/delivery/returns"),
-  deliveryReviewReturn: (id: string) => req("/delivery/returns/" + encodeURIComponent(id) + "/review", { method: "POST" }),
   deliveryOrders: () => req("/delivery/orders"),
   deliveryClaim: (id: string) => req("/delivery/orders/" + id + "/claim", { method: "POST" }),
   deliveryRetry: (id: string) => req("/delivery/orders/" + id + "/retry", { method: "POST" }),

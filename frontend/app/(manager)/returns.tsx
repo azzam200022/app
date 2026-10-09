@@ -30,6 +30,7 @@ export default function ManagerReturns() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reviewingReturn, setReviewingReturn] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -41,6 +42,20 @@ export default function ManagerReturns() {
       setRefreshing(false);
     }
   }, [show]);
+
+  const reviewReturn = useCallback(async (returnId: string) => {
+    if (reviewingReturn) return;
+    setReviewingReturn(returnId);
+    try {
+      const updated = await api.adminReviewReturn(returnId);
+      setReturns((current) => current.map((item) => item.id === returnId ? updated : item));
+      show("تم تأكيد استلام المرتجع");
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setReviewingReturn(null);
+    }
+  }, [reviewingReturn, show]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -105,6 +120,24 @@ export default function ManagerReturns() {
                 <View style={styles.info}><Feather name="clock" size={14} color={colors.muted} /><T size={11} color={colors.muted}>{formatDate(item.created_at)}</T></View>
                 <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
               </View>
+              <View style={[styles.reviewStatus, item.manager_received_at ? styles.reviewStatusDone : styles.reviewStatusPending]} testID={`manager-return-status-${item.id}`}>
+                <Feather name={item.manager_received_at ? "check-circle" : "clock"} size={15} color={item.manager_received_at ? colors.success : colors.warning} />
+                <T size={type.sm} weight="bold" color={item.manager_received_at ? colors.success : colors.warning}>
+                  {item.manager_received_at ? "تم تأكيد استلام المرتجع" : "بانتظار تأكيد استلام المدير"}
+                </T>
+              </View>
+              {!item.manager_received_at ? (
+                <Pressable
+                  testID={`manager-review-return-${item.id}`}
+                  accessibilityRole="button"
+                  onPress={() => reviewReturn(item.id)}
+                  disabled={reviewingReturn !== null}
+                  style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed, reviewingReturn !== null && styles.reviewButtonDisabled]}
+                >
+                  {reviewingReturn === item.id ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="check-circle" size={17} color="#fff" />}
+                  <T size={type.sm} weight="bold" color="#fff">{reviewingReturn === item.id ? "جارٍ تأكيد الاستلام..." : "تأكيد استلام المرتجع"}</T>
+                </Pressable>
+              ) : null}
             </View>
           )}
         />
@@ -134,4 +167,10 @@ const styles = StyleSheet.create({
   itemsBox: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, gap: spacing.xs },
   itemRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.sm },
+  reviewStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, alignSelf: "flex-start", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginTop: spacing.xs },
+  reviewStatusDone: { backgroundColor: "#EAF3EE" },
+  reviewStatusPending: { backgroundColor: "#FFF6E6" },
+  reviewButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 44, borderRadius: radius.md, backgroundColor: colors.brandPrimary, marginTop: spacing.sm, paddingHorizontal: spacing.md },
+  reviewButtonPressed: { opacity: 0.8 },
+  reviewButtonDisabled: { opacity: 0.55 },
 });
