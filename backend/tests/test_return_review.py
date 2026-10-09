@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import server
@@ -142,48 +143,52 @@ def test_customer_order_includes_return_review_status(monkeypatch):
     assert result["returns"][0]["reviewed_at"] == "2026-01-01T01:00:00+00:00"
 
 
-def test_delivery_agent_can_review_only_their_return(monkeypatch):
+def test_manager_can_review_return_assigned_to_a_delivery_agent(monkeypatch):
     returns = FakeReturns({"id": "RET123", "agent_id": "agent-1", "status": "pending_review"})
     monkeypatch.setattr(server, "db", SimpleNamespace(returns=returns))
 
-    reviewed = asyncio.run(server.review_delivery_return(
+    reviewed = asyncio.run(server.admin_review_return(
         "RET123",
-        {"user_id": "agent-1", "name": "مندوب الاختبار"},
+        {"user_id": "manager-1", "name": "مدير الاختبار", "role": "manager"},
     ))
 
     assert reviewed["status"] == "reviewed"
-    assert reviewed["reviewed_by_agent_id"] == "agent-1"
-    assert reviewed["reviewed_by_agent_name"] == "مندوب الاختبار"
+    assert reviewed["manager_received_at"]
+    assert reviewed["reviewed_by_manager_id"] == "manager-1"
+    assert reviewed["reviewed_by_manager_name"] == "مدير الاختبار"
     assert reviewed["reviewed_at"]
 
 
-def test_reviewing_a_return_again_is_idempotent(monkeypatch):
+def test_manager_reviewing_a_return_again_is_idempotent(monkeypatch):
     returns = FakeReturns({
         "id": "RET123",
         "agent_id": "agent-1",
         "status": "reviewed",
+        "manager_received_at": "2026-01-01T00:00:00+00:00",
         "reviewed_at": "2026-01-01T00:00:00+00:00",
     })
     monkeypatch.setattr(server, "db", SimpleNamespace(returns=returns))
 
-    reviewed = asyncio.run(server.review_delivery_return(
+    reviewed = asyncio.run(server.admin_review_return(
         "RET123",
-        {"user_id": "agent-1", "name": "مندوب الاختبار"},
+        {"user_id": "manager-1", "name": "مدير الاختبار", "role": "manager"},
     ))
 
+    assert reviewed["manager_received_at"] == "2026-01-01T00:00:00+00:00"
     assert reviewed["reviewed_at"] == "2026-01-01T00:00:00+00:00"
     assert returns.update_count == 0
 
 
-def test_delivery_agent_cannot_review_another_agents_return(monkeypatch):
+def test_delivery_agent_cannot_review_return_through_manager_route(monkeypatch):
     returns = FakeReturns({"id": "RET123", "agent_id": "agent-1", "status": "pending_review"})
     monkeypatch.setattr(server, "db", SimpleNamespace(returns=returns))
+    monkeypatch.setitem(
+        server.app.dependency_overrides,
+        server.require_user,
+        lambda: {"user_id": "agent-1", "name": "مندوب الاختبار", "role": "delivery"},
+    )
 
-    with pytest.raises(server.HTTPException) as exc:
-        asyncio.run(server.review_delivery_return(
-            "RET123",
-            {"user_id": "agent-2", "name": "مندوب آخر"},
-        ))
+    response = TestClient(server.app).post("/api/admin/returns/RET123/review")
 
-    assert exc.value.status_code == 403
+    assert response.status_code == 403
     assert returns.update_count == 0
