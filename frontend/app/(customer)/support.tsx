@@ -14,6 +14,35 @@ type SupportMessage = { id: string; message: string; sender_role: "customer" | "
 
 type TicketDetails = { ticket: SupportTicket; messages: SupportMessage[] };
 
+function normalizeTickets(value: unknown): SupportTicket[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    const id = String(item?.id ?? "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportTicket[];
+}
+
+function normalizeMessages(value: unknown): SupportMessage[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    if (!item || typeof item !== "object") return false;
+    const id = String(item.id ?? "").trim();
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportMessage[];
+}
+
+function appendMessage(messages: SupportMessage[], incoming: SupportMessage): SupportMessage[] {
+  if (incoming?.id && messages.some((item) => item.id === incoming.id)) return messages;
+  return [...messages, incoming];
+}
+
 const CATEGORIES = [
   { value: "order", label: "طلب" },
   { value: "delivery", label: "توصيل" },
@@ -34,6 +63,7 @@ export default function Support() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selected, setSelected] = useState<TicketDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingTicket, setLoadingTicket] = useState(false);
   const [sending, setSending] = useState(false);
   const [subject, setSubject] = useState("");
@@ -43,36 +73,45 @@ export default function Support() {
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
   const [replyAttachmentUri, setReplyAttachmentUri] = useState<string | null>(null);
 
-  const loadTickets = useCallback(async () => {
-    try {
-      const [data, unread] = await Promise.all([api.supportTickets(), api.supportUnreadCount()]);
-      const nextTickets = Array.isArray(data) ? data : [];
-      setTickets(nextTickets);
-      setUnreadCount(Number(unread?.count) || 0);
-      if (initialTicketId) {
-        const found = nextTickets.find((item: SupportTicket) => item.id === initialTicketId);
-        if (found) await openTicket(found.id, !!found.customer_unread);
-      }
-    } catch (error: any) {
-      show(error.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [initialTicketId, show]);
-
   const openTicket = useCallback(async (ticketId: string, wasUnread = false) => {
     setLoadingTicket(true);
     try {
-      await api.markSupportRead(ticketId);
-      setSelected(await api.supportTicket(ticketId));
-      setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, customer_unread: false } : item));
-      if (wasUnread) setUnreadCount((current) => Math.max(0, current - 1));
+      const details = await api.supportTicket(ticketId);
+      if (!details?.ticket) throw new Error("تعذّر العثور على تذكرة الدعم.");
+      setSelected({ ...details, messages: normalizeMessages(details.messages) });
+      try {
+        await api.markSupportRead(ticketId);
+        setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, customer_unread: false } : item));
+        if (wasUnread) setUnreadCount((current) => Math.max(0, current - 1));
+      } catch {
+        show("تم فتح المحادثة، لكن تعذّر تحديث علامة القراءة.", "error");
+      }
     } catch (error: any) {
-      show(error.message, "error");
+      show(error?.message || "تعذّر فتح تذكرة الدعم.", "error");
     } finally {
       setLoadingTicket(false);
     }
   }, [show]);
+
+
+  const loadTickets = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [data, unread] = await Promise.all([api.supportTickets(), api.supportUnreadCount().catch(() => null)]);
+      const nextTickets = normalizeTickets(data);
+      setTickets(nextTickets);
+      if (unread) setUnreadCount(Number(unread.count) || 0);
+      if (initialTicketId) {
+        const found = nextTickets.find((item) => item.id === initialTicketId);
+        if (found) await openTicket(found.id, !!found.customer_unread);
+      }
+    } catch (error: any) {
+      setLoadError(error?.message || "تعذّر تحميل طلبات الدعم.");
+    } finally {
+      setLoading(false);
+    }
+  }, [initialTicketId, openTicket]);
 
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
@@ -123,7 +162,8 @@ export default function Support() {
     try {
       const attachment_url = await uploadAttachment(attachmentUri);
       const created = await api.createSupportTicket({ category, subject: subject.trim(), message: newMessage.trim(), order_id: initialOrderId, attachment_url });
-      setSelected(created);
+      setSelected({ ...created, messages: normalizeMessages(created.messages) });
+      setLoadError(null);
       setTickets((current) => [created.ticket, ...current.filter((item) => item.id !== created.ticket.id)]);
       setSubject("");
       setNewMessage("");
@@ -142,7 +182,13 @@ export default function Support() {
     try {
       const attachment_url = await uploadAttachment(replyAttachmentUri);
       const message = await api.sendSupportMessage(selected.ticket.id, { message: reply.trim(), attachment_url });
-      setSelected((current) => current ? { ...current, messages: [...current.messages, message], ticket: { ...current.ticket, status: "open" } } : current);
+      setSelected((current) => {
+        if (!current) return current;
+        const previousMessages = normalizeMessages(current.messages);
+        const messages = appendMessage(previousMessages, message);
+        const added = messages.length > previousMessages.length;
+        return { ...current, messages, ticket: { ...current.ticket, status: "open", message_count: Number(current.ticket.message_count || 0) + (added ? 1 : 0) } };
+      });
       setTickets((current) => current.map((item) => item.id === selected.ticket.id ? { ...item, status: "open", updated_at: new Date().toISOString() } : item));
       setReply("");
       setReplyAttachmentUri(null);
@@ -185,10 +231,10 @@ export default function Support() {
               <View style={styles.statusDot}><Feather name="message-circle" size={18} color={colors.brandPrimary} /></View>
             </View>
             <View style={styles.messagesCard}>
-              {selected.messages.map((item) => {
+              {normalizeMessages(selected.messages).map((item, index) => {
                 const own = item.sender_role === "customer";
                 return (
-                  <View key={item.id} style={[styles.messageRow, own ? styles.messageRowOwn : styles.messageRowManager]}>
+                  <View key={(item.id || "message") + ":" + index} style={[styles.messageRow, own ? styles.messageRowOwn : styles.messageRowManager]}>
                     <View style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleManager]}>
                       {!own && <T color={colors.brandPrimary} weight="bold" size={type.xs} style={{ marginBottom: 4 }}>{item.sender_name || "الدعم"}</T>}
                       {item.message ? <T color={own ? "#fff" : colors.onSurface} style={{ lineHeight: 22 }}>{item.message}</T> : null}
@@ -209,7 +255,8 @@ export default function Support() {
           </View>
         ) : (
           <View>
-            {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item) => <Pressable key={item.id} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id, !!item.customer_unread)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginTop: 4 }}><T color={colors.muted} size={type.sm}>{STATUS_LABEL[item.status] || item.status}</T>{item.customer_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>رد جديد</T></View> : null}</View></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
+            {loadError ? <View testID="support-load-error" style={styles.loadErrorCard}><Feather name="alert-circle" size={18} color={colors.error} /><T color={colors.error} size={type.sm} style={{ flex: 1, textAlign: "right" }}>{loadError}</T><Pressable testID="support-retry" onPress={() => void loadTickets()}><T color={colors.brandPrimary} size={type.sm} weight="bold">إعادة المحاولة</T></Pressable></View> : null}
+            {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item, index) => <Pressable key={(item.id || "ticket") + ":" + index} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id, !!item.customer_unread)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginTop: 4 }}><T color={colors.muted} size={type.sm}>{STATUS_LABEL[item.status] || item.status}</T>{item.customer_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>رد جديد</T></View> : null}</View></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
             <View style={styles.section}><T weight="displayBold" size={type.xl}>أرسل رسالة للدعم</T><T color={colors.muted} size={type.sm} style={styles.sectionHint}>صف المشكلة بالتفصيل، ويمكنك إرفاق صورة توضحها.</T></View>
             <View style={styles.formCard}>
               {initialOrderId ? <View style={styles.orderLink}><Feather name="package" size={17} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm} weight="semi">الدعم متعلق بالطلب: {initialOrderId}</T></View> : null}
@@ -242,6 +289,7 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.lg },
   sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
   sectionHint: { marginTop: spacing.xs, lineHeight: 21 },
+  loadErrorCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.errorSoft, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   ticketList: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden" },
   ticketItem: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   ticketItemText: { flex: 1 },

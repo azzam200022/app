@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -12,6 +12,35 @@ import { useToast } from "@/src/context/ToastContext";
 type SupportTicket = { id: string; subject: string; category: string; status: string; user_name?: string; user_email?: string; order_id?: string | null; order_summary?: any; message_count?: number; manager_unread?: boolean; updated_at?: string; };
 type SupportMessage = { id: string; message: string; sender_role: "customer" | "manager"; sender_name?: string; attachment_url?: string | null; created_at?: string; };
 type TicketDetails = { ticket: SupportTicket; messages: SupportMessage[] };
+
+function normalizeTickets(value: unknown): SupportTicket[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    const id = String(item?.id ?? "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportTicket[];
+}
+
+function normalizeMessages(value: unknown): SupportMessage[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    if (!item || typeof item !== "object") return false;
+    const id = String(item.id ?? "").trim();
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportMessage[];
+}
+
+function appendMessage(messages: SupportMessage[], incoming: SupportMessage): SupportMessage[] {
+  if (incoming?.id && messages.some((item) => item.id === incoming.id)) return messages;
+  return [...messages, incoming];
+}
 
 const FILTERS = [
   { value: "all", label: "الكل" },
@@ -31,31 +60,41 @@ export default function ManagerSupport() {
   const [selected, setSelected] = useState<TicketDetails | null>(null);
   const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
   const [loadingTicket, setLoadingTicket] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const load = useCallback(async (nextFilter = filter) => {
-    setLoading(true);
+  const load = useCallback(async (nextFilter = filter, background = false) => {
+    const requestId = ++requestSequence.current;
+    if (!background) setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.adminSupportTickets(nextFilter);
-      setTickets(Array.isArray(data) ? data : []);
+      if (requestId === requestSequence.current) setTickets(normalizeTickets(data));
     } catch (error: any) {
-      show(error.message, "error");
+      if (requestId === requestSequence.current) setLoadError(error?.message || "تعذّر تحميل تذاكر الدعم.");
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [filter, show]);
+  }, [filter]);
 
   useFocusEffect(useCallback(() => { void load(filter); }, [filter, load]));
 
   const openTicket = async (ticketId: string) => {
     setLoadingTicket(true);
     try {
-      await api.adminMarkSupportRead(ticketId);
-      setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, manager_unread: false } : item));
-      setSelected(await api.adminSupportTicket(ticketId));
+      const details = await api.adminSupportTicket(ticketId);
+      if (!details?.ticket) throw new Error("تعذّر العثور على تذكرة الدعم.");
+      setSelected({ ...details, messages: normalizeMessages(details.messages) });
+      try {
+        await api.adminMarkSupportRead(ticketId);
+        setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, manager_unread: false } : item));
+      } catch {
+        show("تم فتح التذكرة، لكن تعذّر تحديث علامة القراءة.", "error");
+      }
     } catch (error: any) {
-      show(error.message, "error");
+      show(error?.message || "تعذّر فتح تذكرة الدعم.", "error");
     } finally {
       setLoadingTicket(false);
     }
@@ -66,11 +105,17 @@ export default function ManagerSupport() {
     setSending(true);
     try {
       const message = await api.adminSendSupportMessage(selected.ticket.id, { message: reply.trim() });
-      setSelected((current) => current ? { ...current, messages: [...current.messages, message], ticket: { ...current.ticket, status: "pending" } } : current);
+      setSelected((current) => {
+        if (!current) return current;
+        const previousMessages = normalizeMessages(current.messages);
+        const messages = appendMessage(previousMessages, message);
+        const added = messages.length > previousMessages.length;
+        return { ...current, messages, ticket: { ...current.ticket, status: "pending", message_count: Number(current.ticket.message_count || 0) + (added ? 1 : 0) } };
+      });
       setReply("");
       show("تم إرسال الرد للزبون");
       // Refreshing the list is best-effort; it must not make a sent reply look failed.
-      void load(filter).catch(() => undefined);
+      void load(filter, true);
     } catch (error: any) {
       show(error.message, "error");
     } finally {
@@ -116,9 +161,9 @@ export default function ManagerSupport() {
             <View style={styles.subjectCard}><T weight="displayBold" size={type.lg}>{selected.ticket.subject}</T><T color={colors.muted} size={type.sm} style={{ marginTop: 4 }}>{selected.ticket.message_count || selected.messages.length} رسائل</T></View>
             <View style={styles.statusRow}>{FILTERS.slice(1).map((item) => <Pressable key={item.value} testID={"support-status-" + item.value} onPress={() => void updateStatus(item.value)} style={[styles.statusButton, selected.ticket.status === item.value && styles.statusButtonActive]}><T color={selected.ticket.status === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View>
             <View style={styles.messagesCard}>
-              {selected.messages.map((item) => {
+              {normalizeMessages(selected.messages).map((item, index) => {
                 const fromCustomer = item.sender_role === "customer";
-                return <View key={item.id} style={[styles.messageRow, fromCustomer ? styles.messageRowCustomer : styles.messageRowManager]}><View style={[styles.bubble, fromCustomer ? styles.bubbleCustomer : styles.bubbleManager]}>{<T color={fromCustomer ? colors.brandPrimary : colors.gold} weight="bold" size={type.xs} style={{ marginBottom: 4 }}>{fromCustomer ? (selected.ticket.user_name || "الزبون") : (item.sender_name || "أنت")}</T>}{item.message ? <T color={fromCustomer ? colors.onSurface : "#fff"} style={{ lineHeight: 22 }}>{item.message}</T> : null}{renderAttachment(item.attachment_url)}</View></View>;
+                return <View key={(item.id || "message") + ":" + index} style={[styles.messageRow, fromCustomer ? styles.messageRowCustomer : styles.messageRowManager]}><View style={[styles.bubble, fromCustomer ? styles.bubbleCustomer : styles.bubbleManager]}>{<T color={fromCustomer ? colors.brandPrimary : colors.gold} weight="bold" size={type.xs} style={{ marginBottom: 4 }}>{fromCustomer ? (selected.ticket.user_name || "الزبون") : (item.sender_name || "أنت")}</T>}{item.message ? <T color={fromCustomer ? colors.onSurface : "#fff"} style={{ lineHeight: 22 }}>{item.message}</T> : null}{renderAttachment(item.attachment_url)}</View></View>;
               })}
             </View>
             <View style={styles.replyCard}><T weight="semi" style={styles.replyLabel}>الرد على الزبون</T><TextInput value={reply} onChangeText={setReply} placeholder="اكتب ردك هنا..." placeholderTextColor={colors.muted} multiline style={styles.replyInput} textAlign="right" /><Pressable testID="manager-support-send" onPress={() => void sendReply()} disabled={sending || !reply.trim()} style={[styles.sendButton, (sending || !reply.trim()) && styles.disabled]}><Feather name="send" size={17} color="#fff" /><T color="#fff" weight="bold">{sending ? "جارٍ الإرسال" : "إرسال الرد"}</T></Pressable></View>
@@ -126,8 +171,9 @@ export default function ManagerSupport() {
         </ScrollView>
       ) : (
         <View style={styles.listRoot}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}><View style={styles.filterRow}>{FILTERS.map((item) => <Pressable key={item.value} testID={"support-filter-" + item.value} onPress={() => setFilter(item.value)} style={[styles.filterChip, filter === item.value && styles.filterChipActive]}><T color={filter === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View></ScrollView>
-          {loading ? <ActivityIndicator color={colors.brandPrimary} size="large" style={{ marginTop: spacing["2xl"] }} /> : tickets.length === 0 ? <View style={styles.empty}><View style={styles.emptyIcon}><Feather name="inbox" size={28} color={colors.brandPrimary} /></View><T weight="bold" size={type.lg}>لا توجد تذاكر</T><T color={colors.muted} style={{ textAlign: "center", marginTop: spacing.xs }}>ستظهر رسائل الزبائن هنا عند إرسالها.</T></View> : <FlatList data={tickets} keyExtractor={(item) => item.id} contentContainerStyle={[styles.ticketList, { paddingBottom: insets.bottom + spacing.xl }]} renderItem={({ item }) => <Pressable testID={"manager-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketCard}><View style={styles.ticketCardTop}><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm }}><View style={[styles.ticketStatus, item.status === "open" ? styles.openStatus : item.status === "pending" ? styles.pendingStatus : styles.closedStatus]}><T size={type.xs} weight="bold" color={item.status === "open" ? colors.success : item.status === "pending" ? colors.warning : colors.muted}>{STATUS_LABEL[item.status] || item.status}</T></View>{item.manager_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>جديد</T></View> : null}</View><T color={colors.muted} size={type.xs}>{CATEGORY_LABEL[item.category] || item.category}</T></View><T weight="bold" size={type.lg} style={styles.ticketSubject}>{item.subject}</T><View style={styles.ticketCustomer}><Feather name="user" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.user_name || "زبون"}</T>{item.order_id ? <><Feather name="package" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.order_id}</T></> : null}</View><View style={styles.ticketBottom}><T color={colors.muted} size={type.xs}>{item.message_count || 1} رسائل</T><Feather name="chevron-left" size={19} color={colors.muted} /></View></Pressable>} />}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filters}><View style={styles.filterRow}>{FILTERS.map((item) => <Pressable key={item.value} testID={"support-filter-" + item.value} onPress={() => setFilter(item.value)} style={[styles.filterChip, filter === item.value && styles.filterChipActive]}><T color={filter === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View></ScrollView>
+          {loadError ? <Pressable testID="manager-support-load-error" onPress={() => void load(filter)} style={styles.loadError}><Feather name="alert-circle" size={18} color={colors.error} /><T color={colors.error} size={type.sm} style={{ flex: 1, textAlign: "right" }}>{loadError}</T><T color={colors.brandPrimary} size={type.sm} weight="bold">إعادة المحاولة</T></Pressable> : null}
+          {loading ? <ActivityIndicator color={colors.brandPrimary} size="large" style={{ marginTop: spacing["2xl"] }} /> : tickets.length === 0 && !loadError ? <View style={styles.empty}><View style={styles.emptyIcon}><Feather name="inbox" size={28} color={colors.brandPrimary} /></View><T weight="bold" size={type.lg}>لا توجد تذاكر</T><T color={colors.muted} style={{ textAlign: "center", marginTop: spacing.xs }}>ستظهر رسائل الزبائن هنا عند إرسالها.</T></View> : <FlatList data={tickets} keyExtractor={(item, index) => (item.id || "ticket") + ":" + index} contentContainerStyle={[styles.ticketList, { paddingBottom: insets.bottom + spacing.xl }]} renderItem={({ item }) => <Pressable testID={"manager-ticket-" + item.id} onPress={() => void openTicket(item.id)} style={styles.ticketCard}><View style={styles.ticketCardTop}><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm }}><View style={[styles.ticketStatus, item.status === "open" ? styles.openStatus : item.status === "pending" ? styles.pendingStatus : styles.closedStatus]}><T size={type.xs} weight="bold" color={item.status === "open" ? colors.success : item.status === "pending" ? colors.warning : colors.muted}>{STATUS_LABEL[item.status] || item.status}</T></View>{item.manager_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>جديد</T></View> : null}</View><T color={colors.muted} size={type.xs}>{CATEGORY_LABEL[item.category] || item.category}</T></View><T weight="bold" size={type.lg} style={styles.ticketSubject}>{item.subject}</T><View style={styles.ticketCustomer}><Feather name="user" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.user_name || "زبون"}</T>{item.order_id ? <><Feather name="package" size={14} color={colors.muted} /><T color={colors.muted} size={type.sm}>{item.order_id}</T></> : null}</View><View style={styles.ticketBottom}><T color={colors.muted} size={type.xs}>{item.message_count || 1} رسائل</T><Feather name="chevron-left" size={19} color={colors.muted} /></View></Pressable>} />}
         </View>
       )}
     </View>
@@ -142,9 +188,11 @@ const styles = StyleSheet.create({
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
   headerIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(214,166,64,0.18)", alignItems: "center", justifyContent: "center" },
   listRoot: { flex: 1 },
-  filters: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
-  filterRow: { flexDirection: "row-reverse", gap: spacing.sm },
-  filterChip: { borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  filterScroll: { flexGrow: 0, flexShrink: 0, minHeight: 60 },
+  filters: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, alignItems: "center", flexGrow: 0 },
+  filterRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  filterChip: { flexShrink: 0, alignSelf: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  loadError: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm, padding: spacing.md, borderRadius: radius.sm, backgroundColor: colors.errorSoft },
   filterChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   ticketList: { paddingHorizontal: spacing.lg, gap: spacing.md },
   ticketCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg },
