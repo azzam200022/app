@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   templateGoldDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
   templateCanvas: { height: 220, backgroundColor: "#F8F5EC", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   templateProductImage: { width: "88%", height: "88%" },
-  processingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(14,91,91,0.82)", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  processingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(24,58,42,0.84)", alignItems: "center", justifyContent: "center", gap: spacing.sm },
   templateFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, padding: spacing.md },
   templateProductCopy: { flex: 1, alignItems: "flex-end", gap: 2 },
   templateBadge: { backgroundColor: colors.brandTertiary, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 5 },
@@ -416,6 +416,6 @@ const styles = StyleSheet.create({
   priceGrid: { flexDirection: "row-reverse", gap: spacing.md },
   wholesaleToggle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
   wholesaleToggleActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
-  wholesaleFields: { marginTop: spacing.sm, backgroundColor: "#F8FBF7", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
-  noteBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FBF6EA", borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  wholesaleFields: { marginTop: spacing.sm, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
+  noteBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.warningSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
 });

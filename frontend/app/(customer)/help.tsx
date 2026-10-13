@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
   headerSpacer: { width: 40 },
-  introIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(214,166,64,0.18)", alignItems: "center", justifyContent: "center", alignSelf: "center", marginTop: spacing.lg },
+  introIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(197,161,90,0.2)", alignItems: "center", justifyContent: "center", alignSelf: "center", marginTop: spacing.lg },
   introTitle: { textAlign: "center", marginTop: spacing.md },
   introText: { textAlign: "center", lineHeight: 22, marginTop: spacing.xs },
   content: { padding: spacing.lg },
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   faqIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   question: { flex: 1, textAlign: "right" },
   answer: { textAlign: "right", lineHeight: 22, marginTop: spacing.md, paddingRight: 54 },
-  nextStepCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg, borderWidth: 1, borderColor: "rgba(31,69,41,0.12)" },
+  nextStepCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg, borderWidth: 1, borderColor: "rgba(36,83,56,0.12)" },
   nextStepIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   nextStepCopy: { flex: 1 },
 });

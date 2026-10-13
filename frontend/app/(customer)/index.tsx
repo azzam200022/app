@@ -169,7 +169,7 @@ export default function Home() {
             renderItem={({ item }) => (
               <Pressable style={styles.heroSlide} onPress={() => router.push("/offers")}>
                 <Image source={{ uri: resolveImage(item.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={["rgba(36,83,56,0.15)", "rgba(24,35,27,0.9)"]} style={StyleSheet.absoluteFill} />
                 <View style={styles.heroContent}>
                   <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
                   <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>{item.title || "وفّر أكثر مع خصومات اليوم"}</T>
@@ -184,7 +184,7 @@ export default function Home() {
       ) : (
         <Pressable style={styles.hero} onPress={() => router.push("/offers")}>
           <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={["rgba(36,83,56,0.15)", "rgba(24,35,27,0.9)"]} style={StyleSheet.absoluteFill} />
           <View style={styles.heroContent}>
             <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
             <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>وفّر أكثر مع خصومات اليوم</T>
@@ -262,7 +262,7 @@ export default function Home() {
     <View style={styles.root}>
       {/* Collapses to a small search control while scrolling */}
       <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: barPadTop, paddingBottom: barPadBottom }]}>
-        <LinearGradient colors={["#FBFAF7", "#F3EEE5"]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <LinearGradient colors={[colors.surface, colors.surfaceSecondary]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
           <View style={styles.topRow}>
             <View style={styles.brandLockup} testID="home-brand" accessibilityRole="image" accessibilityLabel="شعار بن سليم سوبرماركت">
