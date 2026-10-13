@@ -18,7 +18,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Login() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { loginEmail, loginPreview, loginGoogle, loginGoogleWithIdToken } = useAuth();
+  const { loginEmail, loginPreview, loginGoogle } = useAuth();
   const { show } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,31 +27,12 @@ export default function Login() {
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
   // Keep preview roles available on Replit web preview; Firebase popup auth rejects temporary preview domains.
   const isPreview = __DEV__ || Platform.OS === "web";
-  const googleWebClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured";
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: googleWebClientId,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    responseType: ResponseType.IdToken,
-    scopes: ["profile", "email"],
-  });
-
-  useEffect(() => {
-    if (Platform.OS === "web" || response?.type !== "success") return;
-    const idToken = response.params?.id_token;
-    if (!idToken) {
-      setGLoading(false);
-      show("لم يتم استلام رمز Google", "error");
-      return;
-    }
-    setGLoading(true);
-    loginGoogleWithIdToken(idToken)
-      .then(() => router.replace("/"))
-      .catch((error: any) => show(error.message, "error"))
-      .finally(() => setGLoading(false));
-  }, [response, loginGoogleWithIdToken, router, show]);
-
+  const nativeGoogleClientId =
+    Platform.OS === "ios"
+      ? process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+      : Platform.OS === "android"
+        ? process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+        : undefined;
   const doLogin = async () => {
     if (!email || !password) return show("أدخل البريد وكلمة المرور", "error");
     setLoading(true);
@@ -68,24 +49,12 @@ export default function Login() {
   const doGoogle = async () => {
     setGLoading(true);
     try {
-      if (Platform.OS === "web") {
-        await loginGoogle();
-        router.replace("/");
-        return;
-      }
-      if (
-        !process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID &&
-        !process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-      ) {
-        throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
-      }
-      if (!request) throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
-      await promptAsync();
+      await loginGoogle();
+      router.replace("/");
     } catch (e: any) {
-      setGLoading(false);
       show(e.message || "تعذر تسجيل الدخول عبر Google", "error");
     } finally {
-      if (Platform.OS === "web") setGLoading(false);
+      setGLoading(false);
     }
   };
 
@@ -158,7 +127,7 @@ export default function Login() {
                 onPress={() => doPreviewLogin("customer")}
               />
             </View>
-          ) : (
+          ) : Platform.OS === "web" ? (
             <Pressable testID="google-login" onPress={doGoogle} disabled={gLoading} style={styles.googleBtn}>
               {gLoading ? <ActivityIndicator color={colors.onSurface} /> : (
                 <View style={styles.googleRow}>
@@ -167,6 +136,14 @@ export default function Login() {
                 </View>
               )}
             </Pressable>
+          ) : nativeGoogleClientId ? (
+            <NativeGoogleLoginButton />
+          ) : (
+            <View style={styles.googleBtn}>
+              <T color={colors.muted} size={type.sm}>
+                تسجيل الدخول عبر Google غير مهيأ لهذا الجهاز
+              </T>
+            </View>
           )}
 
           <Pressable testID="go-register" onPress={() => router.push("/register")} style={styles.registerLink}>
@@ -175,6 +152,65 @@ export default function Login() {
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function NativeGoogleLoginButton() {
+  const router = useRouter();
+  const { loginGoogleWithIdToken } = useAuth();
+  const { show } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured",
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    responseType: ResponseType.IdToken,
+    scopes: ["profile", "email"],
+  });
+
+  useEffect(() => {
+    if (!response) return;
+    if (response.type !== "success") {
+      setLoading(false);
+      return;
+    }
+    const idToken = response.params?.id_token;
+    if (!idToken) {
+      setLoading(false);
+      show("لم يتم استلام رمز Google", "error");
+      return;
+    }
+    setLoading(true);
+    loginGoogleWithIdToken(idToken)
+      .then(() => router.replace("/"))
+      .catch((error: any) => show(error.message, "error"))
+      .finally(() => setLoading(false));
+  }, [response, loginGoogleWithIdToken, router, show]);
+
+  const doGoogle = async () => {
+    if (!request) {
+      show("إعداد Google غير مكتمل، تحقق من معرف OAuth لهذا الجهاز", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await promptAsync();
+      if (result.type !== "success") setLoading(false);
+    } catch (error: any) {
+      setLoading(false);
+      show(error.message || "تعذر تسجيل الدخول عبر Google", "error");
+    }
+  };
+
+  return (
+    <Pressable testID="google-login" onPress={doGoogle} disabled={loading || !request} style={styles.googleBtn}>
+      {loading ? <ActivityIndicator color={colors.onSurface} /> : (
+        <View style={styles.googleRow}>
+          <Image source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }} style={{ width: 20, height: 20 }} />
+          <T weight="semi">المتابعة عبر جوجل</T>
+        </View>
+      )}
+    </Pressable>
   );
 }
 

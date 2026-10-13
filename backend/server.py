@@ -2657,24 +2657,23 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     return doc
 
 
-@api.post("/delivery/returns/{return_id}/review")
-async def review_delivery_return(return_id: str, user=Depends(require_delivery)):
+@api.post("/admin/returns/{return_id}/review")
+async def admin_review_return(return_id: str, user=Depends(require_manager)):
     return_doc = await db.returns.find_one({"id": return_id}, {"_id": 0})
     if not return_doc:
         raise HTTPException(status_code=404, detail="المرتجع غير موجود")
-    if return_doc.get("agent_id") != user["user_id"]:
-        raise HTTPException(status_code=403, detail="هذا المرتجع غير مسند إليك")
 
-    if return_doc.get("status") != "reviewed":
+    if not return_doc.get("manager_received_at"):
         reviewed_at = now_utc().isoformat()
         await db.returns.update_one(
-            {"id": return_id, "agent_id": user["user_id"]},
+            {"id": return_id},
             {
                 "$set": {
                     "status": "reviewed",
                     "reviewed_at": reviewed_at,
-                    "reviewed_by_agent_id": user["user_id"],
-                    "reviewed_by_agent_name": user.get("name", ""),
+                    "manager_received_at": reviewed_at,
+                    "reviewed_by_manager_id": user["user_id"],
+                    "reviewed_by_manager_name": user.get("name", ""),
                 }
             },
         )
