@@ -152,8 +152,8 @@ export const ProductCard = React.memo(function ProductCard({
         <T weight="semi" size={type.sm} numberOfLines={2} style={styles.name}>{product.name}</T>
         <View style={styles.priceRow}>
           <View style={styles.priceBlock}>
-            <View style={styles.priceHighlight}>
-              <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.onBrandPrimary}>{formatPrice(product.price)}</T>
+             <View style={styles.priceHighlight}>
+               <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
             </View>
             {product.old_price ? (
               <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
@@ -182,25 +182,25 @@ export function ProductCardSkeleton({ width }: { width?: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "#FFFEFC", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.divider },
-  cardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
-  imgWrap: { width: "100%", aspectRatio: 0.98, backgroundColor: colors.surfaceSecondary },
+  card: { backgroundColor: "#FFFFFF", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  cardPressed: { opacity: 0.96, transform: [{ scale: 0.99 }] },
+  imgWrap: { width: "100%", aspectRatio: 0.96, backgroundColor: colors.surfaceSecondary },
   img: { width: "100%", height: "100%" },
   imageFallback: { alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: colors.surfaceSecondary },
   badgeStack: { position: "absolute", top: spacing.xs, insetInlineStart: spacing.xs, alignItems: "flex-start", gap: 3 },
   lowStockBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: "#FFF3D6", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", zIndex: 2 },
+  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", zIndex: 2 },
   favBtnActive: { backgroundColor: colors.error, borderColor: colors.error },
   cartAction: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2 },
-  body: { padding: spacing.sm, height: 124 },
-  name: { height: 40, lineHeight: 19, color: colors.onSurface, letterSpacing: -0.1 },
-  priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: spacing.xs, minHeight: 42 },
+  body: { padding: spacing.md, minHeight: 112 },
+  name: { minHeight: 40, lineHeight: 20, color: colors.onSurface },
+  priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: spacing.xs, minHeight: 38 },
   priceBlock: { flex: 1, minWidth: 0 },
-  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 7 },
+  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
   old: { textDecorationLine: "line-through" },
   addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   addBtnDisabled: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  quantityControls: { width: 76, height: 36, flexShrink: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
+  quantityControls: { width: 82, height: 36, flexShrink: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
   quantityBtn: { width: 26, height: 28, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   quantityText: { minWidth: 18, textAlign: "center", color: colors.onSurface },
   skeletonCard: { overflow: "hidden" },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   skeletonLine: { height: 12, borderRadius: 6, backgroundColor: colors.surfaceSecondary },
   skeletonWide: { width: "82%" },
   skeletonShort: { width: "52%", marginTop: spacing.sm },
-  skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg },
+  skeletonFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md },
   skeletonPrice: { width: "34%" },
   skeletonAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary },
   outOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },

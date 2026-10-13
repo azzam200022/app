@@ -388,6 +388,12 @@ export default function DeliveryHome() {
       <View style={styles.returnMeta}><Feather name="user" size={14} color={colors.muted} /><T size={type.sm}>{item.customer_name || "عميل"}</T></View>
       <View style={styles.returnMeta}><Feather name="clock" size={14} color={colors.muted} /><T size={type.sm} color={colors.onSurfaceTertiary}>{item.created_at ? new Date(item.created_at).toLocaleDateString("ar-IQ") : ""}</T></View>
       {item.reason ? <View style={styles.returnReason}><T size={type.sm} color={colors.onSurfaceSecondary}>السبب: {item.reason}</T></View> : null}
+      <View style={[styles.returnReviewState, item.status === "reviewed" ? styles.returnReviewDone : styles.returnReviewPending]} testID={`return-review-state-${item.id}`}>
+        <Feather name={item.status === "reviewed" ? "check-circle" : "clock"} size={15} color={item.status === "reviewed" ? colors.success : colors.warning} />
+        <T size={type.sm} weight="bold" color={item.status === "reviewed" ? colors.success : colors.warning}>
+          {item.manager_received_at ? "تم تأكيد الاستلام لدى المدير" : item.status === "reviewed" ? "تمت مراجعة المرتجع سابقًا" : "بانتظار تأكيد استلام المدير"}
+        </T>
+      </View>
       <View style={styles.returnCardBottom}>
         <T color={colors.muted} size={type.sm}>{(item.items || []).length} منتجات</T>
         <T weight="displayBold" color={colors.error}>{formatPrice(item.total)}</T>
@@ -599,15 +605,15 @@ export default function DeliveryHome() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  locationWarning: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.md, padding: spacing.md, backgroundColor: "#fff4f2", borderRadius: radius.md, borderWidth: 1, borderColor: "#f4c6c1" },
+  header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  locationWarning: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.errorSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.errorSoft },
   headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
   summaryGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
   summaryBox: { width: "48%", minHeight: 58, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
   summaryWideRow: { width: "100%", flexDirection: "row-reverse", justifyContent: "space-between", gap: spacing.sm },
-  summaryWideBox: { width: "48%", minHeight: 62, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(198,160,121,0.18)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(198,160,121,0.55)", paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
-  earningsBox: { backgroundColor: "rgba(79,166,119,0.18)", borderColor: "rgba(191,232,208,0.55)" },
+  summaryWideBox: { width: "48%", minHeight: 62, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(185,148,85,0.16)", borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(185,148,85,0.42)", paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
+  earningsBox: { backgroundColor: "rgba(96,147,112,0.18)", borderColor: "rgba(193,220,196,0.55)" },
   content: { flex: 1 },
   sectionScroll: { flex: 1 },
   summaryIntro: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
@@ -618,12 +624,18 @@ const styles = StyleSheet.create({
   quickGrid: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.lg },
   quickAction: { flex: 1, minHeight: 92, alignItems: "center", justifyContent: "center", backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm },
   quickActionTitle: { marginTop: spacing.xs },
-  bottomNav: { flexDirection: "row-reverse", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs, paddingHorizontal: spacing.sm },
-  bottomNavItem: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: radius.md, gap: 2 },
+  bottomNav: { flexDirection: "row-reverse", backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.sm, paddingHorizontal: spacing.sm },
+  bottomNavItem: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: radius.md, gap: 3 },
   bottomNavItemActive: { backgroundColor: colors.brandTertiary },
   returnCard: { backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
   returnCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
-  returnBadge: { backgroundColor: "#FFF0F0", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  returnBadge: { backgroundColor: colors.errorSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  returnReviewState: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, alignSelf: "flex-start", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginTop: spacing.xs },
+  returnReviewDone: { backgroundColor: colors.successSoft },
+  returnReviewPending: { backgroundColor: colors.warningSoft },
+  reviewReturnButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 44, borderRadius: radius.md, backgroundColor: colors.brandPrimary, marginTop: spacing.sm, paddingHorizontal: spacing.md },
+  reviewReturnButtonPressed: { opacity: 0.8 },
+  reviewReturnButtonDisabled: { opacity: 0.55 },
   returnMeta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   returnReason: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.xs },
   returnCardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
@@ -632,7 +644,7 @@ const styles = StyleSheet.create({
   accountAvatar: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
   accountMetricRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   accountNote: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
-  accountLogout: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 48, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.lg },
+  accountLogout: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.errorSoft, backgroundColor: colors.errorSoft, marginTop: spacing.lg },
   tabs: { flexDirection: "row-reverse", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface },
   tab: { flex: 1, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   tabActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
@@ -653,8 +665,8 @@ const styles = StyleSheet.create({
   navRow: { marginTop: spacing.sm },
   detailBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
   navBtn: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, minHeight: 46, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brandPrimary, backgroundColor: "#fff" },
-  returnBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.sm },
-  failBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: "#FFF8F8", marginTop: spacing.sm },
+  returnBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: colors.errorSoft, marginTop: spacing.sm },
+  failBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.error, backgroundColor: colors.errorSoft, marginTop: spacing.sm },
   failureOption: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   failureOptionActive: { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary },
   returnSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, maxHeight: "86%" },
@@ -669,8 +681,8 @@ const styles = StyleSheet.create({
   returnFooter: { gap: spacing.sm, marginTop: spacing.md },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { width: "100%", backgroundColor: "#fff", borderRadius: radius.lg, padding: spacing.xl, alignItems: "center" },
-  modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5E9E9", alignItems: "center", justifyContent: "center" },
-  proofIcon: { backgroundColor: "#E7F0EC" },
+  modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.errorSoft, alignItems: "center", justifyContent: "center" },
+  proofIcon: { backgroundColor: colors.successSoft },
   otpInput: { width: "100%", height: 64, marginTop: spacing.md, borderWidth: 1.5, borderColor: colors.brandPrimary, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, color: colors.brandPrimary, fontSize: 28, fontWeight: "800", textAlign: "center", letterSpacing: 8 },
   modalBtns: { flexDirection: "row-reverse", gap: spacing.md, marginTop: spacing.xl, width: "100%" },
 });

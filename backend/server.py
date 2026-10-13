@@ -2524,6 +2524,21 @@ async def get_order(oid: str, user=Depends(require_user)):
     if user["role"] == "delivery" and d.get("agent_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail="هذا الطلب غير مسند إليك")
     d = with_order_amounts(d)
+    if user["role"] == "customer":
+        return_docs = await db.returns.find(
+            {"order_id": oid},
+            {
+                "_id": 0,
+                "id": 1,
+                "items": 1,
+                "total": 1,
+                "return_type": 1,
+                "status": 1,
+                "created_at": 1,
+                "reviewed_at": 1,
+            },
+        ).sort("created_at", -1).to_list(100)
+        d["returns"] = return_docs
     if user["role"] != "customer":
         d.pop("delivery_otp", None)
     return d
@@ -2629,7 +2644,7 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "total": total,
         "return_type": "full" if is_full else "partial",
         "reason": body.reason or "",
-        "status": "accepted",
+        "status": "pending_review",
         "created_at": created_at,
         "stock_released": False,
     }
@@ -2662,6 +2677,30 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     except Exception as e:
         logger.warning(f"return push failed: {e}")
     return doc
+
+
+@api.post("/admin/returns/{return_id}/review")
+async def admin_review_return(return_id: str, user=Depends(require_manager)):
+    return_doc = await db.returns.find_one({"id": return_id}, {"_id": 0})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="المرتجع غير موجود")
+
+    if not return_doc.get("manager_received_at"):
+        reviewed_at = now_utc().isoformat()
+        await db.returns.update_one(
+            {"id": return_id},
+            {
+                "$set": {
+                    "status": "reviewed",
+                    "reviewed_at": reviewed_at,
+                    "manager_received_at": reviewed_at,
+                    "reviewed_by_manager_id": user["user_id"],
+                    "reviewed_by_manager_name": user.get("name", ""),
+                }
+            },
+        )
+        return_doc = await db.returns.find_one({"id": return_id}, {"_id": 0}) or return_doc
+    return return_doc
 
 
 # ---------------- Manager ops ----------------

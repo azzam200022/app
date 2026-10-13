@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   cardCopy: { flex: 1, gap: 3 },
   actions: { gap: spacing.sm },
   actionButton: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  deleteAction: { backgroundColor: "#FCEEEE" },
+  deleteAction: { backgroundColor: colors.errorSoft },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, maxHeight: "90%" },
   grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: "center", marginBottom: spacing.md },

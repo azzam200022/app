@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -6,8 +6,8 @@ import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, font, radius, spacing, type } from "@/src/lib/theme";
-import { T, Button, EmptyState } from "@/src/components/ui";
+import { colors, radius, spacing, type } from "@/src/lib/theme";
+import { T, Button, EmptyState, PageHeading } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
@@ -31,10 +31,7 @@ export default function CartScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <T weight="displayBold" size={type.xl}>سلة المشتريات</T>
-        {cart.count > 0 && <T color={colors.muted}>{cart.count} منتج</T>}
-      </View>
+      <PageHeading title="سلة المشتريات" subtitle={cart.count > 0 ? `${cart.count} منتج في سلتك` : undefined} style={{ paddingTop: insets.top + spacing.md }} />
 
       {loading && cart.items.length === 0 ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
@@ -94,7 +91,7 @@ const styles = StyleSheet.create({
   item: { flexDirection: "row-reverse", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   itemImg: { width: 84, height: 84, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   qtyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
-  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, minWidth: 120, height: 44, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, padding: 4, shadowColor: "#15302E", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, minWidth: 120, height: 44, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, padding: 4 },
   stepBtn: { width: 35, height: 35, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.md },
   summaryRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },

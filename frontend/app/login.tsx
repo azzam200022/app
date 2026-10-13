@@ -18,7 +18,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Login() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { loginEmail, loginPreview, loginGoogle, loginGoogleWithIdToken } = useAuth();
+  const { loginEmail, loginPreview, loginGoogle } = useAuth();
   const { show } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,31 +27,12 @@ export default function Login() {
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
   // Keep preview roles available on Replit web preview; Firebase popup auth rejects temporary preview domains.
   const isPreview = __DEV__ || Platform.OS === "web";
-  const googleWebClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured";
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: googleWebClientId,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    responseType: ResponseType.IdToken,
-    scopes: ["profile", "email"],
-  });
-
-  useEffect(() => {
-    if (Platform.OS === "web" || response?.type !== "success") return;
-    const idToken = response.params?.id_token;
-    if (!idToken) {
-      setGLoading(false);
-      show("لم يتم استلام رمز Google", "error");
-      return;
-    }
-    setGLoading(true);
-    loginGoogleWithIdToken(idToken)
-      .then(() => router.replace("/"))
-      .catch((error: any) => show(error.message, "error"))
-      .finally(() => setGLoading(false));
-  }, [response, loginGoogleWithIdToken, router, show]);
-
+  const nativeGoogleClientId =
+    Platform.OS === "ios"
+      ? process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+      : Platform.OS === "android"
+        ? process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+        : undefined;
   const doLogin = async () => {
     if (!email || !password) return show("أدخل البريد وكلمة المرور", "error");
     setLoading(true);
@@ -68,24 +49,12 @@ export default function Login() {
   const doGoogle = async () => {
     setGLoading(true);
     try {
-      if (Platform.OS === "web") {
-        await loginGoogle();
-        router.replace("/");
-        return;
-      }
-      if (
-        !process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID &&
-        !process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-      ) {
-        throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
-      }
-      if (!request) throw new Error("إعداد Google غير مكتمل، أضف معرفات OAuth الخاصة بالتطبيق");
-      await promptAsync();
+      await loginGoogle();
+      router.replace("/");
     } catch (e: any) {
-      setGLoading(false);
       show(e.message || "تعذر تسجيل الدخول عبر Google", "error");
     } finally {
-      if (Platform.OS === "web") setGLoading(false);
+      setGLoading(false);
     }
   };
 
@@ -104,13 +73,13 @@ export default function Login() {
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
-        <LinearGradient colors={["#F6EFDD", "#EAF0E5", "#DCEADE"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[colors.surface, colors.surfaceSecondary, colors.brandTertiary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         {/* faint decorative grocery motifs */}
-        <Feather name="shopping-cart" size={56} color="#1F4529" style={styles.decoCart} />
+        <Feather name="shopping-cart" size={56} color={colors.brandPrimary} style={styles.decoCart} />
         <View style={styles.decoAppleA} />
         <View style={styles.decoAppleB} />
         <View style={styles.decoAppleC} />
-        <Feather name="droplet" size={44} color="#C5A059" style={styles.decoDrop} />
+        <Feather name="droplet" size={44} color={colors.gold} style={styles.decoDrop} />
         <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xl }]}>
           <Image source={require("../assets/images/logo-binsaleem.png")} style={styles.logoImg} contentFit="contain" />
         </View>
@@ -158,7 +127,7 @@ export default function Login() {
                 onPress={() => doPreviewLogin("customer")}
               />
             </View>
-          ) : (
+          ) : Platform.OS === "web" ? (
             <Pressable testID="google-login" onPress={doGoogle} disabled={gLoading} style={styles.googleBtn}>
               {gLoading ? <ActivityIndicator color={colors.onSurface} /> : (
                 <View style={styles.googleRow}>
@@ -167,6 +136,14 @@ export default function Login() {
                 </View>
               )}
             </Pressable>
+          ) : nativeGoogleClientId ? (
+            <NativeGoogleLoginButton />
+          ) : (
+            <View style={styles.googleBtn}>
+              <T color={colors.muted} size={type.sm}>
+                تسجيل الدخول عبر Google غير مهيأ لهذا الجهاز
+              </T>
+            </View>
           )}
 
           <Pressable testID="go-register" onPress={() => router.push("/register")} style={styles.registerLink}>
@@ -175,6 +152,65 @@ export default function Login() {
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function NativeGoogleLoginButton() {
+  const router = useRouter();
+  const { loginGoogleWithIdToken } = useAuth();
+  const { show } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "not-configured",
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    responseType: ResponseType.IdToken,
+    scopes: ["profile", "email"],
+  });
+
+  useEffect(() => {
+    if (!response) return;
+    if (response.type !== "success") {
+      setLoading(false);
+      return;
+    }
+    const idToken = response.params?.id_token;
+    if (!idToken) {
+      setLoading(false);
+      show("لم يتم استلام رمز Google", "error");
+      return;
+    }
+    setLoading(true);
+    loginGoogleWithIdToken(idToken)
+      .then(() => router.replace("/"))
+      .catch((error: any) => show(error.message, "error"))
+      .finally(() => setLoading(false));
+  }, [response, loginGoogleWithIdToken, router, show]);
+
+  const doGoogle = async () => {
+    if (!request) {
+      show("إعداد Google غير مكتمل، تحقق من معرف OAuth لهذا الجهاز", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await promptAsync();
+      if (result.type !== "success") setLoading(false);
+    } catch (error: any) {
+      setLoading(false);
+      show(error.message || "تعذر تسجيل الدخول عبر Google", "error");
+    }
+  };
+
+  return (
+    <Pressable testID="google-login" onPress={doGoogle} disabled={loading || !request} style={styles.googleBtn}>
+      {loading ? <ActivityIndicator color={colors.onSurface} /> : (
+        <View style={styles.googleRow}>
+          <Image source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }} style={{ width: 20, height: 20 }} />
+          <T weight="semi">المتابعة عبر جوجل</T>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -222,22 +258,22 @@ export function Field({ icon, secure, testID, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  hero: { height: 400, overflow: "hidden" },
+  hero: { height: 280, overflow: "hidden" },
   heroContent: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: "center", alignItems: "center" },
-  logoImg: { width: 260, height: 170 },
+  logoImg: { width: 236, height: 148 },
   decoCart: { position: "absolute", top: 96, left: 44, opacity: 0.12 },
   decoDrop: { position: "absolute", bottom: 70, right: 48, opacity: 0.16, transform: [{ rotate: "12deg" }] },
-  decoAppleA: { position: "absolute", top: 110, right: 60, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.2 },
-  decoAppleB: { position: "absolute", bottom: 90, left: 78, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "#3A5A40", opacity: 0.18 },
-  decoAppleC: { position: "absolute", top: 210, left: 30, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: "#C5A059", opacity: 0.22 },
-  sheet: { flex: 1, marginTop: -28, backgroundColor: colors.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  decoAppleA: { position: "absolute", top: 110, right: 60, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.brandSecondary, opacity: 0.2 },
+  decoAppleB: { position: "absolute", bottom: 90, left: 78, width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.brandSecondary, opacity: 0.18 },
+  decoAppleC: { position: "absolute", top: 210, left: 30, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: colors.gold, opacity: 0.22 },
+  sheet: { flex: 1, marginTop: -24, backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderTopWidth: 1, borderColor: colors.border },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 54, marginBottom: spacing.md },
   input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: "100%" },
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.lg },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   googleBtn: { height: 54, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   googleRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },
-  previewBox: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: "#EEF5ED", borderWidth: 1, borderColor: "#C6DBC7" },
+  previewBox: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.borderStrong },
   previewTitle: { textAlign: "center" },
   previewHint: { textAlign: "center", marginTop: 4, marginBottom: spacing.sm },
   previewButton: { height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandPrimary, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginTop: spacing.sm },

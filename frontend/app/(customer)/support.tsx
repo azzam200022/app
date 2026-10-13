@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   ticketList: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden" },
   ticketItem: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   ticketItemText: { flex: 1 },
-  unreadPill: { borderRadius: radius.pill, backgroundColor: "#F8EAEA", paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  unreadPill: { borderRadius: radius.pill, backgroundColor: colors.errorSoft, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   formCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   orderLink: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   label: { textAlign: "right", marginBottom: spacing.sm, marginTop: spacing.sm },

@@ -240,6 +240,7 @@ export const api = {
       return req("/admin/orders" + (suffix ? "?" + suffix : ""));
     },
   adminReturns: () => req("/admin/returns"),
+  adminReviewReturn: (id: string) => req("/admin/returns/" + encodeURIComponent(id) + "/review", { method: "POST" }),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),

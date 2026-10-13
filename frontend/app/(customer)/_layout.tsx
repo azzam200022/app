@@ -11,15 +11,16 @@ export default function CustomerLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.gold,
-        tabBarInactiveTintColor: "rgba(251,247,238,0.7)",
-        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 10 },
+        tabBarActiveTintColor: colors.brandPrimary,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 2 },
         tabBarStyle: {
-          backgroundColor: colors.brandPrimary,
+          backgroundColor: colors.surface,
           direction: "rtl",
-          borderTopColor: colors.brandSecondary,
+          borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth,
-          ...(Platform.OS === "web" ? { height: 56 } : {}),
+          paddingTop: 6,
+          ...(Platform.OS === "web" ? { height: 64 } : {}),
         },
         tabBarItemStyle: { alignSelf: "center" },
       }}
@@ -33,7 +34,7 @@ export default function CustomerLayout() {
         options={{
           title: "السلة",
           tabBarBadge: cart.count > 0 ? cart.count : undefined,
-          tabBarBadgeStyle: { backgroundColor: colors.gold, color: "#1A1A1A", fontFamily: font.bodyBold },
+           tabBarBadgeStyle: { backgroundColor: colors.gold, color: colors.onSurface, fontFamily: font.bodyBold },
           tabBarIcon: ({ color, size }) => <Feather name="shopping-cart" size={size} color={color} />,
         }}
       />
