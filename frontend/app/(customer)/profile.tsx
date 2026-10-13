@@ -17,7 +17,8 @@ export default function Profile() {
     { icon: "heart", label: "المفضلة", onPress: () => router.push("/favorites") },
     { icon: "package", label: "طلباتي", onPress: () => router.push("/(customer)/orders") },
     { icon: "tag", label: "العروض والخصومات", onPress: () => router.push("/offers") },
-    { icon: "map-pin", label: "الدفع عند الاستلام", onPress: () => {} },
+    { icon: "map-pin", label: "عناويني", onPress: () => router.push("/addresses") },
+    { icon: "help-circle", label: "المساعدة والدعم", onPress: () => router.push("/(customer)/help") },
   ];
 
   return (

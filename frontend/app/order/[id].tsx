@@ -8,7 +8,8 @@ import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
 import { api, getCachedOrders, resolveImage, formatPrice, STATUS_LABEL, STATUS_FLOW } from "@/src/lib/api";
 import { printOrder } from "@/src/lib/receipt";
-import { staticMapUrl, staticMapUrlTwo, openDirections } from "@/src/lib/maps";
+import { openDirections } from "@/src/lib/maps";
+import InteractiveMap from "@/src/components/InteractiveMap";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
@@ -22,60 +23,62 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const orderItems = Array.isArray(order?.items) ? order.items : [];
-  const orderListRoute = user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders";
-  const goBack = () => router.canGoBack() ? router.back() : router.replace(orderListRoute);
+  const [cancelling, setCancelling] = useState(false);
   const canPrint = user?.role === "manager";
+  const orderListRoute = user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders";
+
+  const goBack = () => {
+    if (router.canGoBack()) { router.back(); return; }
+    router.replace(orderListRoute);
+  };
 
   const load = async (force = false) => {
     try {
-      setLoadError(null);
       const result = await api.order(id!, force);
       if (!result || typeof result !== "object" || Array.isArray(result)) {
-        setOrder(null);
-        setLoadError("لم نعثر على هذا الطلب.");
+        if (!order) setLoadError("لم نعثر على هذا الطلب.");
         return;
       }
       setOrder(result);
+      setLoadError(null);
     } catch (e: any) {
-      const message = e?.message || "تعذر تحميل تفاصيل الطلب. تحقق من الاتصال وحاول مجدداً.";
+      const message = e?.message || "تعذّر تحميل تفاصيل الطلب. تحقق من الاتصال وحاول مجدداً.";
       if (order) show(message, "error");
       else setLoadError(message);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [id]); // eslint-disable-line
+  useEffect(() => { load(true); }, [id]); // eslint-disable-line
 
   // live refresh while out for delivery (tracks agent location)
   useEffect(() => {
     if (!order || order.status !== "out_for_delivery") return;
-    const iv = setInterval(async () => { try { setOrder(await api.order(id!, true)); } catch {} }, 15000);
+    const iv = setInterval(async () => { try { setOrder(await api.order(id!, true)); } catch {} }, 5000);
     return () => clearInterval(iv);
   }, [order?.status, id]);
 
   const cancel = async () => {
-    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); }
+    if (cancelling) return;
+    setCancelling(true);
+    try { await api.cancelOrder(id!); show("تم إلغاء الطلب"); void load(true); } catch (e: any) { show(e.message, "error"); } finally { setCancelling(false); }
   };
 
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
 
   if (!order) {
+    const missingOrder = Boolean(loadError?.includes("غير موجود") || loadError?.includes("نعثر") || loadError?.includes("العثور على الطلب"));
     return (
       <View style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <Pressable testID="od-back" onPress={goBack} hitSlop={10} style={styles.back}>
-            <Feather name="arrow-right" size={22} color={colors.onSurface} />
-          </Pressable>
+          <Pressable testID="od-back-error" onPress={goBack} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
           <T weight="displayBold" size={type.xl}>تفاصيل الطلب</T>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorState}>
-          <Feather name="alert-circle" size={36} color={colors.error} />
-          <T weight="displayBold" size={type.lg}>{loadError ? "تعذّر تحميل الطلب" : "الطلب غير موجود"}</T>
-          <T color={colors.muted} style={styles.errorText}>{loadError || "لم نعثر على تفاصيل هذا الطلب."}</T>
-          <Button title="إعادة المحاولة" icon="refresh-cw" onPress={() => { setLoadError(null); setLoading(true); void load(true); }} testID="od-retry" style={{ marginTop: spacing.md, alignSelf: "stretch" }} />
-          <Button title="العودة إلى الطلبات" variant="outline" onPress={() => router.replace(orderListRoute)} testID="od-back-orders" style={{ alignSelf: "stretch" }} />
+          <View style={styles.errorIcon}><Feather name={missingOrder ? "package" : "alert-circle"} size={26} color={colors.error} /></View>
+          <T weight="displayBold" size={type.lg}>{missingOrder ? "الطلب غير موجود" : "تعذّر تحميل الطلب"}</T>
+          <T color={colors.muted} style={styles.errorCopy}>{loadError || "تحقق من اتصالك بالإنترنت ثم أعد المحاولة."}</T>
+          <Button title="إعادة المحاولة" icon="refresh-cw" onPress={() => { setLoading(true); void load(true); }} style={styles.retryButton} />
+          <Button title="العودة إلى الطلبات" variant="outline" onPress={() => router.replace(orderListRoute)} style={styles.retryButton} />
         </View>
       </View>
     );
@@ -85,12 +88,15 @@ export default function OrderDetail() {
   const failed = order.status === "delivery_failed";
   const returned = order.status === "returned";
   const currentIdx = STATUS_FLOW.indexOf(order.status);
+  const STATUS_ICON: Record<string, any> = { pending: "clock", confirmed: "check-circle", preparing: "package", ready_for_delivery: "check", out_for_delivery: "truck", delivered: "home" };
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const orderNumber = String(order.id ?? id ?? "").replace(/^ORD/, "");
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable testID="od-back" onPress={goBack} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <T weight="displayBold" size={type.xl}>طلب #{order.id.replace("ORD", "")}</T>
+        <T weight="displayBold" size={type.xl}>طلب #{orderNumber}</T>
         {canPrint ? (
           <Pressable testID="od-print" onPress={async () => { try { await printOrder(order); } catch { show("تعذّرت الطباعة", "error"); } }} hitSlop={10} style={styles.back}>
             <Feather name="printer" size={20} color={colors.brandPrimary} />
@@ -127,24 +133,31 @@ export default function OrderDetail() {
           ) : returned ? (
             <View style={styles.cancelRow}><Feather name="rotate-ccw" size={20} color={colors.error} /><T weight="bold" color={colors.error}>تم إغلاق الطلب بسبب المرتجع الكامل</T></View>
           ) : (
-            STATUS_FLOW.map((st, i) => {
-              const done = i <= currentIdx;
-              const active = i === currentIdx;
-              return (
-                <View key={st} style={styles.step}>
-                  <View style={styles.stepIndicator}>
-                    <View style={[styles.dot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
-                      {done && <Feather name="check" size={12} color="#fff" />}
+            <>
+              <View style={styles.stepsRow}>
+                {STATUS_FLOW.map((st, i) => {
+                  const done = i <= currentIdx;
+                  const active = i === currentIdx;
+                  return (
+                    <View key={st} style={styles.horizontalStep} accessible accessibilityLabel={STATUS_LABEL[st]}>
+                      <View style={styles.horizontalNodeRow}>
+                        <View style={[styles.horizontalDot, done ? styles.dotDone : styles.dotIdle, active && styles.dotActive]}>
+                          <Feather name={STATUS_ICON[st] || "circle"} size={14} color={done ? "#fff" : colors.muted} />
+                        </View>
+                        {i < STATUS_FLOW.length - 1 ? <View style={[styles.horizontalConnector, done && i < currentIdx ? styles.connectorDone : null]} /> : <View style={styles.horizontalConnectorPlaceholder} />}
+                      </View>
                     </View>
-                    {i < STATUS_FLOW.length - 1 && <View style={[styles.connector, done && i < currentIdx ? styles.connectorDone : null]} />}
-                  </View>
-                  <View style={{ flex: 1, paddingBottom: spacing.lg }}>
-                    <T weight={active ? "bold" : "semi"} color={done ? colors.onSurface : colors.muted}>{STATUS_LABEL[st]}</T>
-                    {active && <T size={type.sm} color={colors.brandPrimary}>الحالة الحالية</T>}
-                  </View>
+                  );
+                })}
+              </View>
+              <View style={styles.currentStatus}>
+                <View style={styles.currentStatusIcon}><Feather name="check-circle" size={18} color={colors.brandPrimary} /></View>
+                <View style={{ flex: 1 }}>
+                  <T size={type.xs} color={colors.brandPrimary} weight="bold">الحالة الحالية</T>
+                  <T weight="bold">{STATUS_LABEL[order.status]}</T>
                 </View>
-              );
-            })
+              </View>
+            </>
           )}
           {order.agent_name && <View style={styles.agentRow}><Feather name="truck" size={16} color={colors.brandPrimary} /><T size={type.sm} weight="semi">المندوب: {order.agent_name}{order.agent_phone ? " • " + order.agent_phone : ""}</T></View>}
         </View>
@@ -163,11 +176,11 @@ export default function OrderDetail() {
           {orderItems.length === 0 ? (
             <T color={colors.muted} size={type.sm} style={{ padding: spacing.lg, textAlign: "center" }}>تفاصيل المنتجات غير متاحة</T>
           ) : orderItems.map((it: any, idx: number) => (
-            <View key={it.product_id || idx} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
+            <View key={`${it.product_id}:${it.sale_unit || "piece"}`} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
               <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
                 <T weight="semi" numberOfLines={2}>{it.name}</T>
-                <T color={colors.muted} size={type.sm}>{it.quantity} × {formatPrice(it.price)}</T>
+                <T color={colors.muted} size={type.sm}>{it.quantity} × {formatPrice(it.price)} / {it.unit_label || "قطعة"}{it.sale_unit === "wholesale" && it.units_per_unit ? ` (${it.units_per_unit} قطع)` : ""}</T>
               </View>
               <T weight="bold" color={colors.brandPrimary}>{formatPrice(it.line_total)}</T>
             </View>
@@ -193,23 +206,70 @@ export default function OrderDetail() {
           )}
         </View>
 
-        {order.location ? (
-          <Pressable testID="od-map" onPress={() => openDirections(order.location.lat, order.location.lng, order.address)} style={styles.mapCard}>
-            <Image source={{ uri: staticMapUrl(order.location.lat, order.location.lng, 600, 220) }} style={styles.mapImg} contentFit="cover" />
-            <View style={styles.mapFoot}><Feather name="navigation" size={15} color={colors.brandPrimary} /><T weight="bold" size={type.sm} color={colors.brandPrimary}>موقع التوصيل المحدد — فتح في الخرائط</T></View>
-          </Pressable>
-        ) : null}
-
-        {order.status === "out_for_delivery" && order.agent_location && order.location ? (
-          <View style={styles.mapCard}>
-            <View style={styles.liveBadge}><View style={styles.liveDot} /><T size={type.sm} weight="bold" color="#fff">تتبّع مباشر</T></View>
-            <Image source={{ uri: staticMapUrlTwo(order.location.lat, order.location.lng, order.agent_location.lat, order.agent_location.lng, 600, 240) }} style={styles.mapImg} contentFit="cover" />
-            <View style={styles.mapFoot}><Feather name="truck" size={15} color={colors.brandPrimary} /><T weight="bold" size={type.sm} color={colors.brandPrimary}>مندوبك {order.agent_name || ""} في الطريق إليك الآن</T></View>
+        {user?.role === "customer" && Array.isArray(order.returns) && order.returns.length > 0 ? (
+          <View style={styles.returnHistoryCard} testID="order-returns">
+            <View style={styles.returnHistoryHeader}>
+              <Feather name="rotate-ccw" size={18} color={colors.brandPrimary} />
+              <T weight="displayBold" size={type.lg}>سجل المرتجعات</T>
+            </View>
+            {order.returns.map((returnItem: any) => {
+              const reviewed = returnItem.status === "reviewed";
+              return (
+                <View key={returnItem.id} style={styles.returnHistoryItem} testID={`order-return-${returnItem.id}`}>
+                  <View style={styles.returnHistoryTop}>
+                    <T weight="semi">{returnItem.return_type === "full" ? "مرتجع كامل" : "مرتجع جزئي"}</T>
+                    <T weight="displayBold" color={colors.error}>{formatPrice(returnItem.total)}</T>
+                  </View>
+                  <View style={[styles.returnReviewBadge, reviewed ? styles.returnReviewBadgeDone : styles.returnReviewBadgePending]}>
+                    <Feather name={reviewed ? "check-circle" : "clock"} size={15} color={reviewed ? colors.success : colors.warning} />
+                    <T size={type.sm} weight="bold" color={reviewed ? colors.success : colors.warning}>
+                      {reviewed ? "تمت مراجعة المرتجع لدى المندوب" : "بانتظار مراجعة المرتجع من المندوب"}
+                    </T>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         ) : null}
 
+        {order.location ? (
+          <View style={styles.mapCard}>
+            {order.status === "out_for_delivery" && (
+              <View style={styles.liveBadge}><View style={styles.liveDot} /><T size={type.sm} weight="bold" color="#fff">تتبّع مباشر GPS</T></View>
+            )}
+            <InteractiveMap
+              center={order.location}
+              destination={order.location}
+              agent={order.status === "out_for_delivery" ? order.agent_location : null}
+              followAgent={order.status === "out_for_delivery"}
+              style={styles.mapImg}
+            />
+            <View style={styles.mapFoot}>
+              <Feather name={order.status === "out_for_delivery" ? "truck" : "navigation"} size={15} color={colors.brandPrimary} />
+              <T weight="bold" size={type.sm} color={colors.brandPrimary} style={{ flex: 1 }}>
+                {order.status === "out_for_delivery"
+                  ? order.agent_location
+                    ? "مندوبك " + (order.agent_name || "") + " يتحرك الآن على الخريطة — آخر تحديث " + new Date(order.agent_location.at).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })
+                    : "بانتظار أول تحديث GPS من المندوب"
+                  : "موقع التوصيل المحدد — حرّك الخريطة أو افتح الملاحة"}
+              </T>
+            </View>
+            <Pressable testID="od-map-directions" onPress={() => openDirections(order.location.lat, order.location.lng, order.address)} style={styles.mapDirections}>
+              <Feather name="navigation" size={15} color={colors.brandPrimary} />
+              <T weight="bold" size={type.sm} color={colors.brandPrimary}>فتح الملاحة إلى موقع الزبون</T>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {user?.role === "customer" && (
+          <Pressable testID="od-support" onPress={() => router.push({ pathname: "/(customer)/support", params: { orderId: String(order.id) } })} style={styles.supportButton}>
+            <Feather name="message-circle" size={18} color={colors.brandPrimary} />
+            <T color={colors.brandPrimary} weight="bold">تحتاج مساعدة بهذا الطلب؟</T>
+          </Pressable>
+        )}
+
         {user?.role === "customer" && (order.status === "pending" || order.status === "confirmed") && (
-          <Button title="إلغاء الطلب" variant="outline" icon="x" onPress={cancel} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
+          <Button title={cancelling ? "جارٍ إلغاء الطلب..." : "إلغاء الطلب"} variant="outline" icon="x" onPress={cancel} loading={cancelling} disabled={cancelling} testID="od-cancel" style={{ marginTop: spacing.lg, borderColor: colors.error }} />
         )}
       </ScrollView>
     </View>
@@ -219,34 +279,49 @@ export default function OrderDetail() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-  errorState: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing["2xl"], gap: spacing.md },
-  errorText: { textAlign: "center", lineHeight: 22 },
+  errorState: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.md },
+  errorIcon: { width: 62, height: 62, borderRadius: 31, backgroundColor: colors.errorSoft, alignItems: "center", justifyContent: "center" },
+  errorCopy: { textAlign: "center", maxWidth: 290 },
+  retryButton: { marginTop: spacing.xs, minWidth: 190 },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#E7F0EC", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+  successBox: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.successSoft, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   timelineCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
-  step: { flexDirection: "row-reverse", gap: spacing.md },
-  stepIndicator: { alignItems: "center", width: 24 },
-  dot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  stepsRow: { flexDirection: "row-reverse", alignItems: "flex-start", width: "100%", paddingVertical: spacing.sm },
+  horizontalStep: { flex: 1, minWidth: 0, alignItems: "stretch" },
+  horizontalNodeRow: { height: 32, flexDirection: "row-reverse", alignItems: "center" },
+  horizontalDot: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", zIndex: 1 },
   dotIdle: { backgroundColor: colors.surfaceTertiary },
   dotDone: { backgroundColor: colors.brandPrimary },
   dotActive: { borderWidth: 3, borderColor: colors.brandTertiary },
-  connector: { width: 2, flex: 1, backgroundColor: colors.surfaceTertiary, marginVertical: 2 },
+  horizontalConnector: { flex: 1, height: 2, backgroundColor: colors.surfaceTertiary },
+  horizontalConnectorPlaceholder: { flex: 1, height: 2, backgroundColor: "transparent" },
   connectorDone: { backgroundColor: colors.brandPrimary },
+  currentStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  currentStatusIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.sm },
+  supportButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.lg },
   cancelRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   itemsCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   item: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, padding: spacing.md },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   itemImg: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   infoCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.lg, gap: spacing.md },
-  otpCard: { backgroundColor: "#E7F0EC", borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandTertiary, padding: spacing.lg, marginBottom: spacing.lg },
+  returnHistoryCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.md, gap: spacing.md },
+  returnHistoryHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
+  returnHistoryItem: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, gap: spacing.sm },
+  returnHistoryTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  returnReviewBadge: { flexDirection: "row-reverse", alignItems: "center", alignSelf: "flex-start", gap: spacing.xs, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  returnReviewBadgeDone: { backgroundColor: colors.successSoft },
+  returnReviewBadgePending: { backgroundColor: colors.warningSoft },
+  otpCard: { backgroundColor: colors.successSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandTertiary, padding: spacing.lg, marginBottom: spacing.lg },
   otpHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   otpValue: { textAlign: "center", letterSpacing: 8, marginTop: spacing.md },
   infoRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, justifyContent: "space-between" },
   mapCard: { marginTop: spacing.lg, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
   mapImg: { width: "100%", height: 150, backgroundColor: colors.surfaceSecondary },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md },
+  mapDirections: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
   liveBadge: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.error, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff" },
 });

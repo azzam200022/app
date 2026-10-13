@@ -31,8 +31,8 @@ import { Text } from "react-native";
 
 const styles = StyleSheet.create({
   container: { flexGrow: 0 },
-  row: { gap: spacing.sm, paddingHorizontal: spacing.lg, alignItems: "center", height: 56 },
-  chip: { height: 36, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", flexShrink: 0, borderWidth: 1 },
+  row: { gap: spacing.sm, paddingHorizontal: spacing.lg, alignItems: "center", height: 58 },
+  chip: { height: 38, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", flexShrink: 0, borderWidth: 1 },
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   chipIdle: { backgroundColor: "#fff", borderColor: colors.border },
   chipText: { fontFamily: font.bodySemi, fontSize: type.base },

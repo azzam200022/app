@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "frontend",
-    "slug": "frontend",
+    "slug": "market-bin-saleem",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FBFBF9"
+        "backgroundColor": "#FAF9F4"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.groceryhub.hfzqyg",
@@ -54,13 +54,18 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#FBFBF9"
+          "backgroundColor": "#FAF9F4"
         }
       ],
       "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f9bd193a-5b38-4245-9a9d-38fc71a8c607"
+      }
     }
   }
 }

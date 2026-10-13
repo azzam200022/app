@@ -14,19 +14,19 @@ const slides = [
     id: "offers",
     title: "عروض ومنتجات متنوعة",
     description: "أجود المنتجات من أفضل الماركات وبأسعار مميزة",
-    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1000&q=85",
+    image: require("../assets/images/onboarding-products.png"),
   },
   {
     id: "delivery",
     title: "طلبك يوصل لبابك",
     description: "نوصل طلبك بسرعة وأمان إلى باب منزلك",
-    image: "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1000&q=85",
+    image: require("../assets/images/onboarding-delivery.png"),
   },
   {
     id: "everything",
     title: "كل ما تحتاجه.. في مكان واحد",
     description: "تسوق منتجاتك المفضلة بسهولة، واستلم طلبك حتى باب المنزل.",
-    image: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1000&q=85",
+    image: require("../assets/images/onboarding-shopping.png"),
   },
 ];
 
@@ -68,7 +68,7 @@ export default function Onboarding() {
       </View>
 
       <View style={styles.imageFrame}>
-        <Image source={{ uri: slide.image }} style={StyleSheet.absoluteFill} contentFit="cover" transition={220} />
+        <Image source={slide.image} style={StyleSheet.absoluteFill} contentFit="cover" transition={220} />
         <View style={styles.imageShade} />
         <View style={styles.imageBadge}>
           <Feather name={isLast ? "shopping-cart" : index === 1 ? "truck" : "percent"} size={18} color={colors.brandPrimary} />
@@ -105,14 +105,14 @@ const styles = StyleSheet.create({
   brand: { alignItems: "center", marginTop: spacing.xs, marginBottom: spacing.md },
   logo: { width: 170, height: 86 },
   tagline: { marginTop: -spacing.sm },
-  imageFrame: { width: "100%", height: Math.min(Dimensions.get("window").height * 0.39, 320), borderRadius: 30, overflow: "hidden", backgroundColor: "#DDEBDD" },
+  imageFrame: { width: "100%", height: Math.min(Dimensions.get("window").height * 0.39, 320), borderRadius: 30, overflow: "hidden", backgroundColor: colors.brandTertiary },
   imageShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(21,61,36,0.08)" },
   imageBadge: { position: "absolute", top: spacing.md, right: spacing.md, width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.92)", alignItems: "center", justifyContent: "center" },
   copy: { alignItems: "center", paddingHorizontal: spacing.sm, marginTop: spacing.xl, minHeight: 102 },
   title: { textAlign: "center", lineHeight: 34 },
   description: { textAlign: "center", lineHeight: 25, marginTop: spacing.sm, maxWidth: width - spacing.xl * 2 },
   dots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: spacing.lg, marginBottom: spacing.md },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#D8DCD7" },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.borderStrong },
   dotActive: { width: 22, backgroundColor: colors.brandPrimary },
-  nextButton: { height: 54, borderRadius: radius.lg, backgroundColor: colors.brandPrimary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: "auto", shadowColor: colors.brandPrimary, shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  nextButton: { height: 54, borderRadius: radius.md, backgroundColor: colors.brandPrimary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: "auto" },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -6,8 +6,8 @@ import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, font, radius, spacing, type } from "@/src/lib/theme";
-import { T, Button, EmptyState } from "@/src/components/ui";
+import { colors, radius, spacing, type } from "@/src/lib/theme";
+import { T, Button, EmptyState, PageHeading } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
@@ -18,23 +18,20 @@ export default function CartScreen() {
   const { cart, reload, setQty, remove, loading } = useCart();
   const { show } = useToast();
 
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { void reload(true); }, [reload]));
 
-  const changeQty = (id: string, qty: number) => {
+  const changeQty = (id: string, qty: number, saleUnit: "piece" | "wholesale") => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    void setQty(id, qty).catch((error: any) => show(error.message, "error"));
+    void setQty(id, qty, saleUnit).catch((error: any) => show(error.message, "error"));
   };
 
-  const removeItem = (id: string) => {
-    void remove(id).catch((error: any) => show(error.message, "error"));
+  const removeItem = (id: string, saleUnit: "piece" | "wholesale") => {
+    void remove(id, saleUnit).catch((error: any) => show(error.message, "error"));
   };
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <T weight="displayBold" size={type.xl}>سلة المشتريات</T>
-        {cart.count > 0 && <T color={colors.muted}>{cart.count} منتج</T>}
-      </View>
+      <PageHeading title="سلة المشتريات" subtitle={cart.count > 0 ? `${cart.count} منتج في سلتك` : undefined} style={{ paddingTop: insets.top + spacing.md }} />
 
       {loading && cart.items.length === 0 ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
@@ -47,25 +44,26 @@ export default function CartScreen() {
         <>
           <FlatList
             data={cart.items}
-            keyExtractor={(i) => i.product_id}
+            keyExtractor={(i) => `${i.product_id}:${i.sale_unit || "piece"}`}
             contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={styles.item} testID={`cart-item-${item.product_id}`}>
+              <View style={styles.item} testID={`cart-item-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`}>
                 <Image source={{ uri: resolveImage(item.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
                 <View style={{ flex: 1 }}>
                   <T weight="semi" numberOfLines={2}>{item.name}</T>
-                  <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 4 }}>{formatPrice(item.price)}</T>
+                  <T color={colors.muted} size={type.xs} style={{ marginTop: 2 }}>{item.unit_label || "قطعة"}{item.sale_unit === "wholesale" && item.units_per_unit ? ` • ${item.units_per_unit} قطع` : ""}</T>
+                  <T weight="displayBold" color={colors.brandPrimary} style={{ marginTop: 4 }}>{formatPrice(item.price)} / {item.unit_label || "قطعة"}</T>
                   <View style={styles.qtyRow}>
                     <View style={styles.stepper}>
-                      <Pressable testID={`dec-${item.product_id}`} onPress={() => changeQty(item.product_id, item.quantity - 1)} style={styles.stepBtn}>
+                      <Pressable testID={`dec-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => changeQty(item.product_id, item.quantity - 1, item.sale_unit || "piece")} style={styles.stepBtn}>
                         <Feather name="minus" size={16} color={colors.onSurface} />
                       </Pressable>
                       <T weight="bold" style={{ minWidth: 24, textAlign: "center" }}>{item.quantity}</T>
-                      <Pressable testID={`inc-${item.product_id}`} onPress={() => changeQty(item.product_id, item.quantity + 1)} style={styles.stepBtn}>
+                      <Pressable testID={`inc-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => changeQty(item.product_id, item.quantity + 1, item.sale_unit || "piece")} style={styles.stepBtn}>
                         <Feather name="plus" size={16} color={colors.onSurface} />
                       </Pressable>
                     </View>
-                    <Pressable testID={`remove-${item.product_id}`} onPress={() => removeItem(item.product_id)} hitSlop={8}>
+                    <Pressable testID={`remove-${item.product_id}${item.sale_unit === "wholesale" ? "-wholesale" : ""}`} onPress={() => removeItem(item.product_id, item.sale_unit || "piece")} hitSlop={8}>
                       <Feather name="trash-2" size={18} color={colors.error} />
                     </Pressable>
                   </View>
@@ -93,7 +91,7 @@ const styles = StyleSheet.create({
   item: { flexDirection: "row-reverse", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   itemImg: { width: 84, height: 84, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   qtyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
-  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, minWidth: 120, height: 44, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, padding: 4, shadowColor: "#15302E", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, minWidth: 120, height: 44, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, padding: 4 },
   stepBtn: { width: 35, height: 35, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   footer: { backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.md },
   summaryRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },

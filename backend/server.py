@@ -28,6 +28,7 @@ from firebase_admin import credentials as firebase_credentials
 from firebase_admin import firestore
 from firebase_admin import storage as firebase_storage
 from firestore_store import FirestoreDatabase
+from delivery_routing import calculate_driving_distance_km
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -41,10 +42,8 @@ PREVIEW_MODE = os.environ.get(
     "true" if os.environ.get("NODE_ENV") != "production" else "false",
 ).lower() in {"1", "true", "yes"}
 
-try:
-    DEFAULT_DELIVERY_FEE_IQD = max(0.0, round(float(os.environ.get("DEFAULT_DELIVERY_FEE_IQD", "1000")), 2))
-except (TypeError, ValueError):
-    DEFAULT_DELIVERY_FEE_IQD = 1000.0
+DEFAULT_DELIVERY_FEE_IQD = 2000.0
+DELIVERY_PRICING_SETTINGS_ID = "default"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -124,6 +123,11 @@ PRODUCT_LIST_PROJECTION = {
     "branch_id": 1,
     "price": 1,
     "old_price": 1,
+    "wholesale_enabled": 1,
+    "wholesale_unit_name": 1,
+    "wholesale_quantity": 1,
+    "wholesale_price": 1,
+    "wholesale_old_price": 1,
     "image_url": 1,
     "stock": 1,
     "is_published": 1,
@@ -135,6 +139,12 @@ CART_PRODUCT_PROJECTION = {
     "id": 1,
     "name": 1,
     "price": 1,
+    "old_price": 1,
+    "wholesale_enabled": 1,
+    "wholesale_unit_name": 1,
+    "wholesale_quantity": 1,
+    "wholesale_price": 1,
+    "wholesale_old_price": 1,
     "image_url": 1,
     "stock": 1,
     "coming_soon": 1,
@@ -214,6 +224,11 @@ class ProductIn(BaseModel):
     branch_id: Optional[str] = None
     price: float
     old_price: Optional[float] = None
+    wholesale_enabled: bool = False
+    wholesale_unit_name: Optional[str] = Field(None, max_length=40)
+    wholesale_quantity: Optional[int] = Field(None, ge=2, le=100000)
+    wholesale_price: Optional[float] = Field(None, gt=0)
+    wholesale_old_price: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
     description: Optional[str] = ""
     stock: int = 100
@@ -228,6 +243,11 @@ class ProductUpdate(BaseModel):
     branch_id: Optional[str] = None
     price: Optional[float] = None
     old_price: Optional[float] = None
+    wholesale_enabled: Optional[bool] = None
+    wholesale_unit_name: Optional[str] = Field(None, max_length=40)
+    wholesale_quantity: Optional[int] = Field(None, ge=2, le=100000)
+    wholesale_price: Optional[float] = Field(None, gt=0)
+    wholesale_old_price: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
     description: Optional[str] = None
     stock: Optional[int] = None
@@ -269,6 +289,7 @@ class CategoryBranchUpdate(BaseModel):
 
 class CartItemIn(BaseModel):
     product_id: str
+    sale_unit: str = "piece"
     # Zero is allowed for set_cart_item so the client can clear a line item.
     quantity: int = Field(1, ge=0, le=1000)
 
@@ -282,8 +303,29 @@ class OrderIn(BaseModel):
     lng: Optional[float] = None
     area: Optional[str] = None
     delivery_area_id: Optional[str] = None
+    saved_address_id: Optional[str] = None
     coupon_code: Optional[str] = None
     client_request_id: Optional[str] = Field(None, min_length=8, max_length=100)
+
+
+class AddressIn(BaseModel):
+    label: str = Field(..., min_length=1, max_length=40)
+    recipient_name: str = Field(..., min_length=1, max_length=120)
+    phone: str = Field(..., min_length=5, max_length=30)
+    address: str = Field(..., min_length=3, max_length=500)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    is_default: bool = False
+
+
+class AddressUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=40)
+    recipient_name: Optional[str] = Field(None, min_length=1, max_length=120)
+    phone: Optional[str] = Field(None, min_length=5, max_length=30)
+    address: Optional[str] = Field(None, min_length=3, max_length=500)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    is_default: Optional[bool] = None
 
 
 class StatusUpdateIn(BaseModel):
@@ -302,6 +344,7 @@ class AgentUpdateIn(BaseModel):
 
 class ReturnItemIn(BaseModel):
     product_id: str
+    sale_unit: str = "piece"
     quantity: int = Field(..., ge=1)
 
 
@@ -353,7 +396,7 @@ class CouponUpdate(BaseModel):
 
 class DeliveryAreaIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
-    fee: float = Field(DEFAULT_DELIVERY_FEE_IQD, ge=0, le=1000000)
+    fee: Optional[float] = Field(None, ge=0, le=1000000)
     center_lat: float = Field(..., ge=-90, le=90)
     center_lng: float = Field(..., ge=-180, le=180)
     radius_km: float = Field(..., gt=0, le=100)
@@ -369,9 +412,30 @@ class DeliveryAreaUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class DeliveryPricingUpdate(BaseModel):
+    default_fee: float = Field(..., ge=0, le=1000000)
+
+
 class DeliveryQuoteIn(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
     lng: float = Field(..., ge=-180, le=180)
+
+
+class SupportTicketIn(BaseModel):
+    category: str = Field("other", min_length=2, max_length=40)
+    subject: str = Field(..., min_length=3, max_length=120)
+    message: str = Field("", max_length=4000)
+    order_id: Optional[str] = Field(None, max_length=120)
+    attachment_url: Optional[str] = Field(None, max_length=1000)
+
+
+class SupportMessageIn(BaseModel):
+    message: str = Field("", max_length=4000)
+    attachment_url: Optional[str] = Field(None, max_length=1000)
+
+
+class SupportStatusIn(BaseModel):
+    status: str
 
 
 # ---------------- Auth ----------------
@@ -746,6 +810,17 @@ def parse_inventory_pdf(content: bytes):
     return unique_rows, sorted(duplicate_barcodes), invalid_rows
 
 
+async def _cleanup_inventory_sync_logs():
+    cutoff = (now_utc() - timedelta(days=31)).isoformat()
+    await db.inventory_sync_logs.delete_many({"created_at": {"$lt": cutoff}})
+
+
+@api.get("/admin/inventory/pdf/logs")
+async def inventory_pdf_logs(user=Depends(require_manager)):
+    await _cleanup_inventory_sync_logs()
+    return await db.inventory_sync_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
 @api.post("/admin/inventory/pdf")
 async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manager)):
     if not (file.filename or "").lower().endswith(".pdf"):
@@ -759,9 +834,12 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
         logger.exception("Inventory PDF parsing failed")
         raise HTTPException(status_code=400, detail="تعذر قراءة ملف PDF. تأكد أنه يحتوي على نص واضح وبيانات الباركود والسعر والكمية")
 
+    await _cleanup_inventory_sync_logs()
     updated = 0
     not_found = []
     duplicate_products = []
+    price_changes = []
+    became_unavailable = []
     for row in rows:
         products = await db.products.find({"barcode": row["barcode"], "deleted_at": None}, {"_id": 0}).to_list(2)
         if not products:
@@ -770,11 +848,69 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
         if len(products) > 1:
             duplicate_products.append(row["barcode"])
             continue
-        setd = {"price": row["price"], "stock": row["quantity"], "coming_soon": row["quantity"] == 1}
-        await db.products.update_one({"id": products[0]["id"], "deleted_at": None}, {"$set": setd})
-        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": row["price"]}})
+
+        product = products[0]
+        old_price_raw = product.get("price")
+        try:
+            old_price = float(old_price_raw) if old_price_raw is not None else None
+        except (TypeError, ValueError):
+            old_price = old_price_raw
+        try:
+            old_stock = float(product.get("stock", 0) or 0)
+        except (TypeError, ValueError):
+            old_stock = 0
+        new_price = float(row["price"])
+        new_stock = row["quantity"]
+        new_coming_soon = new_stock == 1
+        was_available = old_stock > 0 and not bool(product.get("coming_soon"))
+        will_be_available = new_stock > 0 and not new_coming_soon
+
+        if old_price != new_price:
+            price_changes.append({
+                "barcode": row["barcode"],
+                "product_id": product["id"],
+                "name": product.get("name", ""),
+                "old_price": old_price_raw,
+                "new_price": new_price,
+            })
+        if was_available and not will_be_available:
+            became_unavailable.append({
+                "barcode": row["barcode"],
+                "product_id": product["id"],
+                "name": product.get("name", ""),
+                "stock": new_stock,
+                "reason": "نفد المخزون" if new_stock <= 0 else "قيد الوصول",
+            })
+
+        setd = {"price": new_price, "stock": new_stock, "coming_soon": new_coming_soon}
+        await db.products.update_one({"id": product["id"], "deleted_at": None}, {"$set": setd})
+        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": new_price}})
         updated += 1
-    return {"updated": updated, "count": len(rows), "not_found": sorted(set(not_found)), "duplicate_barcodes": sorted(set(duplicate_barcodes + duplicate_products)), "invalid_rows": invalid_rows}
+
+    if updated > 0:
+        await db.inventory_sync_logs.insert_one({
+            "id": "inventory_log_" + uuid.uuid4().hex[:12],
+            "created_at": now_utc().isoformat(),
+            "filename": file.filename or "inventory.pdf",
+            "updated": updated,
+            "price_changes": price_changes,
+            "became_unavailable": became_unavailable,
+        })
+    logger.info(
+        "Inventory PDF applied: updated=%s price_changes=%s became_unavailable=%s",
+        updated,
+        len(price_changes),
+        len(became_unavailable),
+    )
+    return {
+        "updated": updated,
+        "count": len(rows),
+        "not_found": sorted(set(not_found)),
+        "duplicate_barcodes": sorted(set(duplicate_barcodes + duplicate_products)),
+        "invalid_rows": invalid_rows,
+        "price_changes": price_changes,
+        "became_unavailable": became_unavailable,
+    }
 
 
 # ---------------- Catalog ----------------
@@ -871,19 +1007,43 @@ def normalize_delivery_area(value: Optional[str]) -> Optional[str]:
     return name
 
 
-def default_delivery_area_view():
+def default_delivery_area_view(default_fee: float):
     return {
         "id": "default_delivery",
-        "name": "التوصيل الأساسي",
-        "fee": DEFAULT_DELIVERY_FEE_IQD,
+        "name": "بقية المناطق",
+        "fee": round(default_fee, 2),
+        "uses_default_fee": True,
         "distance_km": None,
     }
 
 
-def delivery_area_public_view(area):
+async def get_default_delivery_fee():
+    settings = await db.delivery_settings.find_one(
+        {"id": DELIVERY_PRICING_SETTINGS_ID},
+        {"_id": 0},
+    )
+    if not settings or settings.get("default_fee") is None:
+        return DEFAULT_DELIVERY_FEE_IQD
+    try:
+        fee = float(settings["default_fee"])
+    except (TypeError, ValueError):
+        logger.warning("Invalid persisted default delivery fee; using the initial fee")
+        return DEFAULT_DELIVERY_FEE_IQD
+    if not 0 <= fee <= 1000000:
+        logger.warning("Out-of-range persisted default delivery fee; using the initial fee")
+        return DEFAULT_DELIVERY_FEE_IQD
+    return round(fee, 2)
+
+
+def delivery_area_public_view(area, default_fee: Optional[float] = None):
     view = dict(area)
     view.pop("_id", None)
-    view["fee"] = round(float(view.get("fee", DEFAULT_DELIVERY_FEE_IQD) or DEFAULT_DELIVERY_FEE_IQD), 2)
+    area_fee = view.get("fee")
+    view["uses_default_fee"] = area_fee is None
+    if area_fee is None:
+        view["fee"] = round(default_fee, 2) if default_fee is not None else None
+    else:
+        view["fee"] = round(float(area_fee), 2)
     return view
 
 
@@ -897,10 +1057,11 @@ def distance_between_km(lat1: float, lng1: float, lat2: float, lng2: float) -> f
 
 
 async def resolve_delivery_area_for_location(lat: Optional[float], lng: Optional[float]):
+    default_fee = await get_default_delivery_fee()
     areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).to_list(200)
     geo_areas = [area for area in areas if area.get("center_lat") is not None and area.get("center_lng") is not None and area.get("radius_km") is not None]
     if not geo_areas:
-        return default_delivery_area_view()
+        return default_delivery_area_view(default_fee)
     if lat is None or lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة أولاً")
     matches = []
@@ -909,9 +1070,9 @@ async def resolve_delivery_area_for_location(lat: Optional[float], lng: Optional
         if distance <= float(area["radius_km"]):
             matches.append((distance, area))
     if not matches:
-        raise HTTPException(status_code=400, detail="موقعك خارج مناطق التوصيل الحالية")
+        return default_delivery_area_view(default_fee)
     distance, area = min(matches, key=lambda item: (item[0], float(item[1].get("radius_km", 0))))
-    view = delivery_area_public_view(area)
+    view = delivery_area_public_view(area, default_fee)
     view["distance_km"] = round(distance, 2)
     return view
 
@@ -971,21 +1132,49 @@ async def delete_coupon(code: str, user=Depends(require_manager)):
 @api.get("/delivery/areas")
 async def public_delivery_areas():
     areas = await db.delivery_areas.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(100)
-    return [delivery_area_public_view(area) for area in areas]
+    default_fee = await get_default_delivery_fee()
+    return [delivery_area_public_view(area, default_fee) for area in areas]
+
+
+async def configured_store_road_distance_km(lat: float, lng: float):
+    if not STORE_ROUTE_ORIGIN_CONFIGURED:
+        return None
+    return await calculate_driving_distance_km(STORE_LAT, STORE_LNG, lat, lng)
 
 
 @api.post("/delivery/quote")
 async def delivery_quote(body: DeliveryQuoteIn, user=Depends(require_user)):
     area = await resolve_delivery_area_for_location(body.lat, body.lng)
-    if not area:
-        return {"area_id": "default_delivery", "area_name": "التوصيل الأساسي", "fee": DEFAULT_DELIVERY_FEE_IQD, "distance_km": None}
-    return {"area_id": area["id"], "area_name": area["name"], "fee": area["fee"], "distance_km": area["distance_km"]}
+    road_distance_km = await configured_store_road_distance_km(body.lat, body.lng)
+    return {
+        "area_id": area["id"],
+        "area_name": area["name"],
+        "fee": area["fee"],
+        "distance_km": area["distance_km"],
+        "road_distance_km": road_distance_km,
+    }
 
 
 @api.get("/admin/delivery-areas")
 async def admin_delivery_areas(user=Depends(require_manager)):
     areas = await db.delivery_areas.find({}, {"_id": 0}).sort("name", 1).to_list(200)
     return [delivery_area_public_view(area) for area in areas]
+
+
+@api.get("/admin/delivery-pricing")
+async def admin_delivery_pricing(user=Depends(require_manager)):
+    return {"default_fee": await get_default_delivery_fee(), "currency": "IQD"}
+
+
+@api.put("/admin/delivery-pricing")
+async def update_admin_delivery_pricing(body: DeliveryPricingUpdate, user=Depends(require_manager)):
+    default_fee = round(float(body.default_fee), 2)
+    await db.delivery_settings.update_one(
+        {"id": DELIVERY_PRICING_SETTINGS_ID},
+        {"$set": {"default_fee": default_fee, "updated_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    return {"default_fee": default_fee, "currency": "IQD"}
 
 
 @api.post("/admin/delivery-areas")
@@ -996,7 +1185,7 @@ async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manage
     doc = {
         "id": "area_" + uuid.uuid4().hex[:12],
         "name": name,
-        "fee": round(float(body.fee), 2),
+        "fee": round(float(body.fee), 2) if body.fee is not None else None,
         "center_lat": float(body.center_lat),
         "center_lng": float(body.center_lng),
         "radius_km": round(float(body.radius_km), 3),
@@ -1009,13 +1198,13 @@ async def create_delivery_area(body: DeliveryAreaIn, user=Depends(require_manage
 
 @api.put("/admin/delivery-areas/{area_id}")
 async def update_delivery_area(area_id: str, body: DeliveryAreaUpdate, user=Depends(require_manager)):
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_unset=True)
     if "name" in updates:
         updates["name"] = normalize_delivery_area(updates["name"])
         duplicate = await db.delivery_areas.find_one({"name": updates["name"], "id": {"$ne": area_id}})
         if duplicate:
             raise HTTPException(status_code=409, detail="منطقة التوصيل موجودة مسبقاً")
-    if "fee" in updates:
+    if "fee" in updates and updates["fee"] is not None:
         updates["fee"] = round(float(updates["fee"]), 2)
     if "radius_km" in updates:
         updates["radius_km"] = round(float(updates["radius_km"]), 3)
@@ -1067,7 +1256,11 @@ async def list_products(
     if branch_id:
         q["branch_id"] = branch_id
     if search:
-        q["name"] = {"$regex": search, "$options": "i"}
+        normalized_search = search.strip()
+        if len(normalized_search) > 100:
+            raise HTTPException(status_code=400, detail="عبارة البحث طويلة جداً")
+        if normalized_search:
+            q["name"] = {"$regex": re.escape(normalized_search), "$options": "i"}
     if offers:
         q["old_price"] = {"$ne": None, "$gt": 0}
     docs_task = db.products.find(q, PRODUCT_LIST_PROJECTION).sort("created_at", -1).to_list(500)
@@ -1078,6 +1271,29 @@ async def list_products(
         favs = await db.favorites.find({"user_id": user["user_id"]}, {"_id": 0, "product_id": 1}).to_list(1000)
         fav = {f["product_id"] for f in favs}
     return [clean_product(d, fav) for d in docs]
+
+
+@api.get("/products/barcode/{barcode}")
+async def product_by_barcode(barcode: str, authorization: Optional[str] = Header(None)):
+    normalized_barcode = barcode.strip()
+    if not normalized_barcode or len(normalized_barcode) > 64:
+        raise HTTPException(status_code=400, detail="رقم الباركود غير صالح")
+    product_task = db.products.find_one(
+        {"barcode": normalized_barcode, "deleted_at": None, "is_published": True},
+        PRODUCT_LIST_PROJECTION,
+    )
+    user_task = get_user_by_token(authorization)
+    product, user = await asyncio.gather(product_task, user_task)
+    if not product:
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    favorites = set()
+    if user:
+        favs = await db.favorites.find(
+            {"user_id": user["user_id"]},
+            {"_id": 0, "product_id": 1},
+        ).to_list(1000)
+        favorites = {favorite["product_id"] for favorite in favs}
+    return clean_product(product, favorites)
 
 
 @api.get("/products/bestsellers")
@@ -1121,7 +1337,10 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
             fav = {pid}
         alert = await db.product_availability_alerts.find_one({"user_id": user["user_id"], "product_id": pid})
         availability_alerted = bool(alert)
-    return clean_product(d, fav, availability_alerted)
+    product_view = clean_product(d, fav, availability_alerted)
+    if not user or user.get("role") != "manager":
+        product_view.pop("barcode", None)
+    return product_view
 
 
 @api.post("/products/{pid}/availability-alert", status_code=201)
@@ -1283,6 +1502,64 @@ async def delete_category_branch(branch_id: str, user=Depends(require_manager)):
     return {"ok": True}
 
 
+def normalize_wholesale_fields(data):
+    if not bool(data.get("wholesale_enabled")):
+        return {
+            "wholesale_enabled": False,
+            "wholesale_unit_name": None,
+            "wholesale_quantity": None,
+            "wholesale_price": None,
+            "wholesale_old_price": None,
+        }
+    unit_name = str(data.get("wholesale_unit_name") or "").strip()
+    try:
+        quantity = int(data.get("wholesale_quantity") or 0)
+        price = float(data.get("wholesale_price") or 0)
+        old_price = data.get("wholesale_old_price")
+        old_price = float(old_price) if old_price not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="بيانات سعر الجملة أو عدد القطع غير صحيحة")
+    if not unit_name or len(unit_name) > 40:
+        raise HTTPException(status_code=400, detail="أدخل اسم وحدة الجملة بحد أقصى 40 حرفاً")
+    if quantity < 2 or quantity > 100000:
+        raise HTTPException(status_code=400, detail="يجب أن تحتوي وحدة الجملة على قطعتين على الأقل")
+    if price <= 0 or (old_price is not None and old_price <= 0):
+        raise HTTPException(status_code=400, detail="أدخل سعراً صحيحاً للجملة")
+    return {
+        "wholesale_enabled": True,
+        "wholesale_unit_name": unit_name,
+        "wholesale_quantity": quantity,
+        "wholesale_price": price,
+        "wholesale_old_price": old_price,
+    }
+
+
+def product_sale_unit(product, sale_unit="piece"):
+    sale_unit = sale_unit or "piece"
+    if sale_unit == "piece":
+        return 1, "قطعة", float(product.get("price", 0) or 0), product.get("old_price")
+    if sale_unit != "wholesale" or not product.get("wholesale_enabled"):
+        raise HTTPException(status_code=400, detail="البيع بالجملة غير متاح لهذا المنتج")
+    unit_name = str(product.get("wholesale_unit_name") or "").strip()
+    quantity = int(product.get("wholesale_quantity", 0) or 0)
+    price = float(product.get("wholesale_price", 0) or 0)
+    if not unit_name or quantity < 2 or price <= 0:
+        raise HTTPException(status_code=400, detail="بيانات البيع بالجملة لهذا المنتج غير مكتملة")
+    return quantity, unit_name, price, product.get("wholesale_old_price")
+
+
+def cart_line_key(item):
+    return (str(item.get("product_id") or ""), str(item.get("sale_unit") or "piece"))
+
+
+def order_item_stock_quantity(item):
+    if item.get("stock_quantity") is not None:
+        return max(int(item.get("stock_quantity", 0) or 0), 0)
+    quantity = max(int(item.get("quantity", 0) or 0), 0)
+    units_per_unit = max(int(item.get("units_per_unit", 1) or 1), 1)
+    return quantity * units_per_unit
+
+
 @api.post("/products")
 async def create_product(body: ProductIn, user=Depends(require_manager)):
     barcode = normalize_barcode(body.barcode)
@@ -1300,6 +1577,7 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         )
         if not branch:
             raise HTTPException(status_code=400, detail="الفرع لا ينتمي إلى القسم المختار")
+    wholesale = normalize_wholesale_fields(body.dict())
     pid = "prod_" + uuid.uuid4().hex[:12]
     doc = {
         "id": pid,
@@ -1309,6 +1587,7 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
         "branch_id": body.branch_id or None,
         "price": body.price,
         "old_price": body.old_price,
+        **wholesale,
         "image_url": body.image_url or CATEGORY_IMAGES.get(body.category, DEFAULT_IMG),
         "description": body.description or "",
         "stock": body.stock,
@@ -1326,7 +1605,8 @@ async def create_product(body: ProductIn, user=Depends(require_manager)):
 @api.put("/products/{pid}")
 async def update_product(pid: str, body: ProductUpdate, user=Depends(require_manager)):
     raw_updates = body.dict(exclude_unset=True)
-    upd = {k: v for k, v in raw_updates.items() if v is not None or k == "branch_id"}
+    wholesale_keys = {"wholesale_enabled", "wholesale_unit_name", "wholesale_quantity", "wholesale_price", "wholesale_old_price"}
+    upd = {k: v for k, v in raw_updates.items() if v is not None or k == "branch_id" or k in wholesale_keys}
     if body.barcode is not None:
         barcode = normalize_barcode(body.barcode)
         if not re.fullmatch(r"\d{8,14}", barcode):
@@ -1335,11 +1615,17 @@ async def update_product(pid: str, body: ProductUpdate, user=Depends(require_man
         if duplicate:
             raise HTTPException(status_code=409, detail="هذا الباركود مستخدم لمنتج آخر")
         upd["barcode"] = barcode
-    if not upd:
-        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
-    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0, "coming_soon": 1, "category": 1, "branch_id": 1})
+    existing = await db.products.find_one({"id": pid, "deleted_at": None}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if any(key in raw_updates for key in wholesale_keys):
+        merged_wholesale = dict(existing)
+        for key in wholesale_keys:
+            if key in raw_updates:
+                merged_wholesale[key] = raw_updates[key]
+        upd.update(normalize_wholesale_fields(merged_wholesale))
+    if not upd:
+        raise HTTPException(status_code=400, detail="لا يوجد تغيير")
     if "category" in upd and "branch_id" not in upd and existing.get("branch_id"):
         upd["branch_id"] = None
     if upd.get("branch_id"):
@@ -1384,6 +1670,102 @@ async def update_product(pid: str, body: ProductUpdate, user=Depends(require_man
 @api.delete("/products/{pid}")
 async def delete_product(pid: str, user=Depends(require_manager)):
     await db.products.update_one({"id": pid}, {"$set": {"deleted_at": now_utc().isoformat()}})
+    return {"ok": True}
+
+
+# ---------------- Saved customer addresses ----------------
+def address_public_view(address):
+    return {
+        "id": address.get("id"),
+        "label": address.get("label", ""),
+        "recipient_name": address.get("recipient_name", ""),
+        "phone": address.get("phone", ""),
+        "address": address.get("address", ""),
+        "lat": address.get("lat"),
+        "lng": address.get("lng"),
+        "is_default": bool(address.get("is_default")),
+        "created_at": address.get("created_at"),
+        "updated_at": address.get("updated_at"),
+    }
+
+
+def validate_address_coordinates(lat, lng):
+    if (lat is None) != (lng is None):
+        raise HTTPException(status_code=400, detail="حدد الموقع على الخريطة أو استخدم موقع الجهاز")
+    if lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="يجب تحديد موقع العنوان قبل حفظه")
+
+
+async def clear_default_addresses(user_id, except_id=None):
+    query = {"user_id": user_id, "is_default": True}
+    if except_id:
+        query["id"] = {"$ne": except_id}
+    await db.addresses.update_many(query, {"$set": {"is_default": False}})
+
+
+@api.get("/addresses")
+async def list_addresses(user=Depends(require_user)):
+    docs = await db.addresses.find({"user_id": user["user_id"]}, {"_id": 0}).sort("is_default", -1).sort("updated_at", -1).to_list(100)
+    return [address_public_view(doc) for doc in docs]
+
+
+@api.post("/addresses", status_code=201)
+async def create_address(body: AddressIn, user=Depends(require_user)):
+    validate_address_coordinates(body.lat, body.lng)
+    existing_count = await db.addresses.count_documents({"user_id": user["user_id"]})
+    is_default = bool(body.is_default or existing_count == 0)
+    if is_default:
+        await clear_default_addresses(user["user_id"])
+    now = now_utc().isoformat()
+    doc = {
+        "id": "addr_" + uuid.uuid4().hex[:12],
+        "user_id": user["user_id"],
+        "label": body.label.strip(),
+        "recipient_name": body.recipient_name.strip(),
+        "phone": body.phone.strip(),
+        "address": body.address.strip(),
+        "lat": body.lat,
+        "lng": body.lng,
+        "is_default": is_default,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.addresses.insert_one(doc)
+    return address_public_view(doc)
+
+
+@api.put("/addresses/{address_id}")
+async def update_address(address_id: str, body: AddressUpdate, user=Depends(require_user)):
+    current = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="العنوان غير موجود")
+    updates = {key: value for key, value in body.dict(exclude_unset=True).items() if value is not None}
+    if not updates:
+        return address_public_view(current)
+    validate_address_coordinates(updates.get("lat", current.get("lat")), updates.get("lng", current.get("lng")))
+    for key in ("label", "recipient_name", "phone", "address"):
+        if key in updates:
+            updates[key] = updates[key].strip()
+    updates["updated_at"] = now_utc().isoformat()
+    if updates.get("is_default"):
+        await clear_default_addresses(user["user_id"], address_id)
+    elif updates.get("is_default") is False and current.get("is_default"):
+        updates["is_default"] = True
+    await db.addresses.update_one({"id": address_id, "user_id": user["user_id"]}, {"$set": updates})
+    updated = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    return address_public_view(updated)
+
+
+@api.delete("/addresses/{address_id}")
+async def delete_address(address_id: str, user=Depends(require_user)):
+    current = await db.addresses.find_one({"id": address_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="العنوان غير موجود")
+    await db.addresses.delete_one({"id": address_id, "user_id": user["user_id"]})
+    if current.get("is_default"):
+        replacement = await db.addresses.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", 1).limit(1).to_list(1)
+        if replacement:
+            await db.addresses.update_one({"id": replacement[0]["id"], "user_id": user["user_id"]}, {"$set": {"is_default": True, "updated_at": now_utc().isoformat()}})
     return {"ok": True}
 
 
@@ -1624,16 +2006,25 @@ def cart_from_items(items, products_by_id):
         quantity = max(int(item.get("quantity", 0) or 0), 0)
         if not product or quantity <= 0:
             continue
-        line_total = float(product.get("price", 0) or 0) * quantity
+        sale_unit = item.get("sale_unit") or "piece"
+        units_per_unit, unit_label, unit_price, old_price = product_sale_unit(product, sale_unit)
+        line_total = unit_price * quantity
+        stock = max(int(product.get("stock", 0) or 0), 0)
         total += line_total
         out.append(
             {
                 "product_id": product["id"],
                 "name": product.get("name", ""),
-                "price": product.get("price", 0),
+                "price": unit_price,
+                "old_price": old_price,
                 "image_url": product.get("image_url", ""),
+                "sale_unit": sale_unit,
+                "unit_label": unit_label,
+                "units_per_unit": units_per_unit,
                 "quantity": quantity,
-                "stock": max(int(product.get("stock", 0) or 0), 0),
+                "stock": stock,
+                "stock_quantity": quantity * units_per_unit,
+                "available_quantity": stock // units_per_unit,
                 "line_total": line_total,
             }
         )
@@ -1665,26 +2056,28 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon"):
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
-    available_stock = max(int(prod.get("stock", 0) or 0), 0)
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="يجب أن تكون الكمية أكبر من صفر")
+    available_stock = max(int(prod.get("stock", 0) or 0), 0)
     if available_stock <= 0:
         raise HTTPException(status_code=400, detail="نفدت الكمية")
+    sale_unit = body.sale_unit or "piece"
+    units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
     items = list((cart or {}).get("items", []))
-    found = False
-    for it in items:
-        if it["product_id"] == body.product_id:
-            current_quantity = max(int(it.get("quantity", 0) or 0), 0)
-            if current_quantity + body.quantity > available_stock:
-                raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-            it["quantity"] = current_quantity + body.quantity
-            found = True
-            break
-    if not found:
-        if body.quantity > available_stock:
-            raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-        items.append({"product_id": body.product_id, "quantity": body.quantity})
-    items = [i for i in items if i["quantity"] > 0]
+    used_stock = 0
+    for item in items:
+        if str(item.get("product_id")) == body.product_id:
+            factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
+            used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
+    if used_stock + body.quantity * units_per_unit > available_stock:
+        capacity = max((available_stock - used_stock) // units_per_unit, 0)
+        raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
+    line = next((item for item in items if cart_line_key(item) == (body.product_id, sale_unit)), None)
+    if line:
+        line["quantity"] = max(int(line.get("quantity", 0) or 0), 0) + body.quantity
+    else:
+        items.append({"product_id": body.product_id, "sale_unit": sale_unit, "quantity": body.quantity})
+    items = [item for item in items if int(item.get("quantity", 0) or 0) > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
     products = await load_cart_products(items, {prod["id"]: prod})
     return cart_from_items(items, products)
@@ -1702,22 +2095,42 @@ async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("coming_soon") and body.quantity > 0:
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
-    available_stock = max(int(prod.get("stock", 0) or 0), 0)
-    if body.quantity > available_stock:
-        raise HTTPException(status_code=400, detail=f"الكمية المتاحة فقط: {available_stock}")
-    items = list((cart or {}).get("items", []))
-    items = [i for i in items if i["product_id"] != body.product_id]
+    sale_unit = body.sale_unit or "piece"
+    if sale_unit not in {"piece", "wholesale"}:
+        raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
     if body.quantity > 0:
-        items.append({"product_id": body.product_id, "quantity": body.quantity})
-    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
-    products = await load_cart_products(items)
-    return cart_from_items(items, products)
+        units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
+    else:
+        units_per_unit, unit_label = 1, "قطعة"
+    items = list((cart or {}).get("items", []))
+    target_key = (body.product_id, sale_unit)
+    remaining = [item for item in items if cart_line_key(item) != target_key]
+    if body.quantity > 0:
+        used_stock = 0
+        for item in remaining:
+            if str(item.get("product_id")) == body.product_id:
+                factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
+                used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
+        stock = max(int(prod.get("stock", 0) or 0), 0)
+        if body.quantity * units_per_unit + used_stock > stock:
+            capacity = max((stock - used_stock) // units_per_unit, 0)
+            raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
+        remaining.append({"product_id": body.product_id, "sale_unit": sale_unit, "quantity": body.quantity})
+    await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": remaining}}, upsert=True)
+    products = await load_cart_products(remaining, {prod["id"]: prod})
+    return cart_from_items(remaining, products)
 
 
 @api.delete("/cart/items/{pid}")
-async def remove_cart_item(pid: str, user=Depends(require_user)):
+async def remove_cart_item(pid: str, sale_unit: Optional[str] = None, user=Depends(require_user)):
+    if sale_unit is not None and sale_unit not in {"piece", "wholesale"}:
+        raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
     cart = await db.carts.find_one({"user_id": user["user_id"]})
-    items = [item for item in (cart or {}).get("items", []) if item["product_id"] != pid]
+    items = list((cart or {}).get("items", []))
+    if sale_unit is None:
+        items = [item for item in items if str(item.get("product_id")) != pid]
+    else:
+        items = [item for item in items if cart_line_key(item) != (pid, sale_unit)]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": items}}, upsert=True)
     products = await load_cart_products(items)
     return cart_from_items(items, products)
@@ -1725,21 +2138,21 @@ async def remove_cart_item(pid: str, user=Depends(require_user)):
 
 # ---------------- Orders ----------------
 async def reserve_order_stock(items):
-    """Atomically reserve every item, rolling back partial reservations on failure."""
+    """Atomically reserve the base-piece quantity for every order line."""
     reserved = []
     try:
         for item in items:
-            quantity = max(int(item.get("quantity", 0) or 0), 0)
-            if quantity <= 0:
+            stock_quantity = order_item_stock_quantity(item)
+            if stock_quantity <= 0:
                 continue
             product_id = item["product_id"]
             updated = await db.products.find_one_and_update(
-                {"id": product_id, "deleted_at": None, "stock": {"$gte": quantity}},
-                {"$inc": {"stock": -quantity}},
+                {"id": product_id, "deleted_at": None, "stock": {"$gte": stock_quantity}},
+                {"$inc": {"stock": -stock_quantity}},
             )
             if not updated:
                 raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
-            reserved.append({"product_id": product_id, "quantity": quantity})
+            reserved.append({"product_id": product_id, "stock_quantity": stock_quantity})
     except Exception:
         try:
             await release_order_stock(reserved)
@@ -1751,32 +2164,39 @@ async def reserve_order_stock(items):
 
 async def release_order_stock(items):
     for item in items:
-        quantity = max(int(item.get("quantity", 0) or 0), 0)
-        if quantity <= 0:
+        stock_quantity = order_item_stock_quantity(item)
+        if stock_quantity <= 0:
             continue
         await db.products.find_one_and_update(
             {"id": item["product_id"]},
-            {"$inc": {"stock": quantity}},
+            {"$inc": {"stock": stock_quantity}},
         )
 
 
 async def remaining_stock_items(order):
-    """Return only units that have not already been restored by a partial return."""
+    """Return base pieces not already restored by partial returns."""
     items = list(order.get("items") or [])
     if not items or not order.get("stock_reserved") or order.get("stock_released"):
         return []
+    source_by_key = {cart_line_key(item): item for item in items}
     returned_docs = await db.returns.find({"order_id": order.get("id")}, {"_id": 0, "items": 1}).to_list(200)
-    returned_by_product = {}
+    returned_stock_by_line = {}
     for returned in returned_docs:
         for item in returned.get("items", []):
-            product_id = str(item.get("product_id"))
-            returned_by_product[product_id] = returned_by_product.get(product_id, 0) + int(item.get("quantity", 0) or 0)
+            key = cart_line_key(item)
+            source = source_by_key.get(key)
+            if item.get("stock_quantity") is not None:
+                stock_quantity = order_item_stock_quantity(item)
+            else:
+                factor = max(int((source or {}).get("units_per_unit", 1) or 1), 1)
+                stock_quantity = max(int(item.get("quantity", 0) or 0), 0) * factor
+            returned_stock_by_line[key] = returned_stock_by_line.get(key, 0) + stock_quantity
     remaining = []
     for item in items:
-        product_id = str(item.get("product_id"))
-        quantity = max(int(item.get("quantity", 0) or 0) - returned_by_product.get(product_id, 0), 0)
-        if quantity:
-            remaining.append({"product_id": product_id, "quantity": quantity})
+        key = cart_line_key(item)
+        stock_quantity = max(order_item_stock_quantity(item) - returned_stock_by_line.get(key, 0), 0)
+        if stock_quantity:
+            remaining.append({"product_id": item.get("product_id"), "stock_quantity": stock_quantity})
     return remaining
 
 
@@ -1845,6 +2265,7 @@ try:
     STORE_LNG = float(os.environ.get("STORE_LNG", "44.3661"))
 except (TypeError, ValueError):
     STORE_LAT, STORE_LNG = 33.3152, 44.3661
+STORE_ROUTE_ORIGIN_CONFIGURED = bool(os.environ.get("STORE_LAT", "").strip() and os.environ.get("STORE_LNG", "").strip())
 
 
 def infer_order_area(address: str) -> str:
@@ -1920,13 +2341,26 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         raise HTTPException(status_code=400, detail="السلة فارغة")
     for item in cart["items"]:
         available_stock = max(int(item.get("stock", 0) or 0), 0)
-        if int(item.get("quantity", 0) or 0) > available_stock:
+        if order_item_stock_quantity(item) > available_stock:
             raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
-    if body.lat is None or body.lng is None:
+    saved_address = None
+    order_name = body.name.strip()
+    order_phone = body.phone.strip()
+    order_address = body.address.strip()
+    order_lat = body.lat
+    order_lng = body.lng
+    if body.saved_address_id:
+        saved_address = await db.addresses.find_one({"id": body.saved_address_id, "user_id": user["user_id"]}, {"_id": 0})
+        if not saved_address:
+            raise HTTPException(status_code=404, detail="العنوان المحفوظ غير موجود")
+        order_name = saved_address["recipient_name"]
+        order_phone = saved_address["phone"]
+        order_address = saved_address["address"]
+        order_lat = saved_address.get("lat")
+        order_lng = saved_address.get("lng")
+    if order_lat is None or order_lng is None:
         raise HTTPException(status_code=400, detail="حدد موقع التوصيل على الخريطة")
-    delivery_area = await resolve_delivery_area_for_location(body.lat, body.lng)
-    if not delivery_area:
-        raise HTTPException(status_code=400, detail="الموقع خارج نطاق التوصيل")
+    delivery_area = await resolve_delivery_area_for_location(order_lat, order_lng)
     delivery_fee = float(delivery_area["fee"])
     subtotal = round(float(cart["total"]), 2)
     coupon_code = normalize_coupon_code(body.coupon_code)
@@ -1945,16 +2379,19 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     doc = {
         "id": oid,
         "user_id": user["user_id"],
-        "customer_name": body.name,
-        "phone": body.phone,
-        "address": body.address,
-        "area": delivery_area["name"] if delivery_area else (body.area or infer_order_area(body.address)),
-        "delivery_area_id": delivery_area["id"] if delivery_area else None,
+        "customer_name": order_name,
+        "recipient_name": order_name,
+        "phone": order_phone,
+        "address": order_address,
+        "address_id": saved_address.get("id") if saved_address else None,
+        "address_label": saved_address.get("label") if saved_address else None,
+        "area": delivery_area["name"],
+        "delivery_area_id": delivery_area["id"],
         "delivery_fee": round(delivery_fee, 2),
         "notes": body.notes or "",
-        "location": ({"lat": body.lat, "lng": body.lng} if (body.lat is not None and body.lng is not None) else None),
+        "location": ({"lat": order_lat, "lng": order_lng} if (order_lat is not None and order_lng is not None) else None),
         "items": [
-            {key: value for key, value in item.items() if key != "stock"}
+            {key: value for key, value in item.items() if key not in {"stock", "available_quantity"}}
             for item in cart["items"]
         ],
         "subtotal": subtotal,
@@ -1986,7 +2423,7 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
     try:
-        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {body.name} بقيمة {int(total)} د.ع", "action_url": f"/order/{oid}"})
+        await send_push(await manager_ids(), {"title": "طلب جديد 🛒", "message": f"طلب جديد من {order_name} بقيمة {int(total)} د.ع", "action_url": f"/order/{oid}"})
     except Exception as e:
         logger.warning(f"push failed: {e}")
     return doc
@@ -1997,7 +2434,6 @@ async def reorder_order(oid: str, user=Depends(require_user)):
     order = await db.orders.find_one({"id": oid, "user_id": user["user_id"]}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
-
     source_items = list(order.get("items") or [])
     if not source_items:
         raise HTTPException(status_code=400, detail="لا توجد منتجات في هذا الطلب")
@@ -2010,42 +2446,55 @@ async def reorder_order(oid: str, user=Depends(require_user)):
         quantity = max(int(item.get("quantity", 0) or 0), 0)
         if not product_id or quantity <= 0:
             continue
-        if product_id in positions:
-            merged_items[positions[product_id]]["quantity"] += quantity
+        key = cart_line_key(item)
+        if key in positions:
+            merged_items[positions[key]]["quantity"] += quantity
         else:
-            positions[product_id] = len(merged_items)
-            merged_items.append({"product_id": product_id, "quantity": quantity})
+            positions[key] = len(merged_items)
+            merged_items.append({"product_id": product_id, "sale_unit": key[1], "quantity": quantity})
 
     products = await load_cart_products(source_items + merged_items)
     added_items = []
     unavailable_items = []
     for item in source_items:
         product_id = str(item.get("product_id") or "")
+        sale_unit = item.get("sale_unit") or "piece"
+        line_key = (product_id, sale_unit)
         requested = max(int(item.get("quantity", 0) or 0), 0)
         if not product_id or requested <= 0:
             continue
         product = products.get(product_id)
         name = (product or {}).get("name") or item.get("name") or "منتج"
         if not product:
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
             continue
         if product.get("coming_soon"):
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
+            continue
+        try:
+            units_per_unit, unit_label, _, _ = product_sale_unit(product, sale_unit)
+        except HTTPException as exc:
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": str(exc.detail)})
             continue
         stock = max(int(product.get("stock", 0) or 0), 0)
-        current_quantity = merged_items[positions[product_id]]["quantity"] if product_id in positions else 0
-        capacity = max(stock - current_quantity, 0)
+        used_stock = 0
+        for current_item in merged_items:
+            if str(current_item.get("product_id")) == product_id:
+                factor, _, _, _ = product_sale_unit(product, current_item.get("sale_unit") or "piece")
+                used_stock += max(int(current_item.get("quantity", 0) or 0), 0) * factor
+        capacity = max((stock - used_stock) // units_per_unit, 0)
         added_quantity = min(requested, capacity)
-        if product_id in positions:
-            merged_items[positions[product_id]]["quantity"] += added_quantity
-        elif added_quantity > 0:
-            positions[product_id] = len(merged_items)
-            merged_items.append({"product_id": product_id, "quantity": added_quantity})
         if added_quantity > 0:
-            added_items.append({"product_id": product_id, "name": name, "quantity": added_quantity})
+            if line_key in positions:
+                merged_items[positions[line_key]]["quantity"] += added_quantity
+            else:
+                positions[line_key] = len(merged_items)
+                merged_items.append({"product_id": product_id, "sale_unit": sale_unit, "quantity": added_quantity})
+            added_items.append({"product_id": product_id, "sale_unit": sale_unit, "unit_label": unit_label, "name": name, "quantity": added_quantity})
         if added_quantity < requested:
-            reason = "نفدت الكمية" if stock <= 0 else "المتاح حالياً: " + str(capacity)
-            unavailable_items.append({"product_id": product_id, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
+            remaining_capacity = max((stock - used_stock) // units_per_unit, 0)
+            reason = "نفدت الكمية" if stock <= 0 else f"المتاح حالياً من {unit_label}: {remaining_capacity}"
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
 
     merged_items = [item for item in merged_items if item["quantity"] > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": merged_items}}, upsert=True)
@@ -2075,6 +2524,21 @@ async def get_order(oid: str, user=Depends(require_user)):
     if user["role"] == "delivery" and d.get("agent_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail="هذا الطلب غير مسند إليك")
     d = with_order_amounts(d)
+    if user["role"] == "customer":
+        return_docs = await db.returns.find(
+            {"order_id": oid},
+            {
+                "_id": 0,
+                "id": 1,
+                "items": 1,
+                "total": 1,
+                "return_type": 1,
+                "status": 1,
+                "created_at": 1,
+                "reviewed_at": 1,
+            },
+        ).sort("created_at", -1).to_list(100)
+        d["returns"] = return_docs
     if user["role"] != "customer":
         d.pop("delivery_otp", None)
     return d
@@ -2119,42 +2583,53 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         raise HTTPException(status_code=400, detail="يجب تسجيل المرتجع قبل تأكيد التسليم")
 
     previous_returns = await db.returns.find({"order_id": oid}, {"_id": 0}).to_list(200)
-    returned_by_product = {}
+    returned_by_line = {}
     for previous in previous_returns:
         for item in previous.get("items", []):
-            pid = str(item.get("product_id"))
-            returned_by_product[pid] = returned_by_product.get(pid, 0) + int(item.get("quantity", 0) or 0)
+            key = cart_line_key(item)
+            returned_by_line[key] = returned_by_line.get(key, 0) + int(item.get("quantity", 0) or 0)
 
-    order_items = {str(item.get("product_id")): item for item in order.get("items", [])}
-    requested_by_product = {}
+    order_items = {cart_line_key(item): item for item in order.get("items", [])}
+    requested_by_line = {}
     return_items = []
     for requested in body.items:
         pid = str(requested.product_id)
-        if pid in requested_by_product:
-            raise HTTPException(status_code=400, detail="لا يمكن تكرار المنتج في نفس المرتجع")
-        source = order_items.get(pid)
+        sale_unit = requested.sale_unit or "piece"
+        if sale_unit not in {"piece", "wholesale"}:
+            raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
+        key = (pid, sale_unit)
+        if key in requested_by_line:
+            raise HTTPException(status_code=400, detail="لا يمكن تكرار المنتج ووحدة البيع في نفس المرتجع")
+        source = order_items.get(key)
         if not source:
-            raise HTTPException(status_code=400, detail="المنتج غير موجود في هذا الطلب")
+            raise HTTPException(status_code=400, detail="المنتج ووحدة البيع غير موجودين في هذا الطلب")
         ordered_qty = int(source.get("quantity", 0) or 0)
-        available_qty = ordered_qty - returned_by_product.get(pid, 0)
+        available_qty = ordered_qty - returned_by_line.get(key, 0)
         if requested.quantity > available_qty:
             raise HTTPException(status_code=400, detail=f"الكمية المتاحة للإرجاع من {source.get('name', 'المنتج')} هي {max(available_qty, 0)}")
-        requested_by_product[pid] = requested.quantity
+        requested_by_line[key] = requested.quantity
+        units_per_unit = max(int(source.get("units_per_unit", 1) or 1), 1)
+        unit_label = source.get("unit_label") or ("قطعة" if sale_unit == "piece" else "وحدة")
+        price = float(source.get("price", 0) or 0)
         return_items.append({
             "product_id": pid,
             "name": source.get("name", ""),
             "image_url": source.get("image_url"),
-            "price": float(source.get("price", 0) or 0),
+            "sale_unit": sale_unit,
+            "unit_label": unit_label,
+            "units_per_unit": units_per_unit,
+            "price": price,
             "quantity": requested.quantity,
-            "line_total": float(source.get("price", 0) or 0) * requested.quantity,
+            "stock_quantity": requested.quantity * units_per_unit,
+            "line_total": price * requested.quantity,
         })
 
     if not return_items:
         raise HTTPException(status_code=400, detail="حدد كمية الإرجاع")
     total = sum(item["line_total"] for item in return_items)
     is_full = all(
-        returned_by_product.get(pid, 0) + requested_by_product.get(pid, 0) >= int(source.get("quantity", 0) or 0)
-        for pid, source in order_items.items()
+        returned_by_line.get(key, 0) + requested_by_line.get(key, 0) >= int(source.get("quantity", 0) or 0)
+        for key, source in order_items.items()
     )
     created_at = now_utc().isoformat()
     return_id = "RET" + uuid.uuid4().hex[:8].upper()
@@ -2169,14 +2644,11 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         "total": total,
         "return_type": "full" if is_full else "partial",
         "reason": body.reason or "",
-        "status": "accepted",
+        "status": "pending_review",
         "created_at": created_at,
         "stock_released": False,
     }
     should_restore_stock = bool(order.get("stock_reserved") and not order.get("stock_released"))
-    # Claim the order while it is still out for delivery. The Firestore
-    # transaction makes the status check atomic with the return bookkeeping,
-    # so a return cannot race with delivery confirmation.
     order_update = {
         "return_status": "full" if is_full else "partial",
         "returned_total": float(order.get("returned_total", 0) or 0) + total,
@@ -2207,7 +2679,249 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
     return doc
 
 
+@api.post("/admin/returns/{return_id}/review")
+async def admin_review_return(return_id: str, user=Depends(require_manager)):
+    return_doc = await db.returns.find_one({"id": return_id}, {"_id": 0})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="المرتجع غير موجود")
+
+    if not return_doc.get("manager_received_at"):
+        reviewed_at = now_utc().isoformat()
+        await db.returns.update_one(
+            {"id": return_id},
+            {
+                "$set": {
+                    "status": "reviewed",
+                    "reviewed_at": reviewed_at,
+                    "manager_received_at": reviewed_at,
+                    "reviewed_by_manager_id": user["user_id"],
+                    "reviewed_by_manager_name": user.get("name", ""),
+                }
+            },
+        )
+        return_doc = await db.returns.find_one({"id": return_id}, {"_id": 0}) or return_doc
+    return return_doc
+
+
 # ---------------- Manager ops ----------------
+
+
+# ---------------- Customer support ----------------
+@api.post("/support/tickets")
+async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user)):
+    message_text = body.message.strip()
+    if not message_text:
+        raise HTTPException(status_code=400, detail="اكتب تفاصيل المشكلة أولاً")
+    order = None
+    if body.order_id:
+        order = await db.orders.find_one(
+            {"id": body.order_id, "user_id": user["user_id"]},
+            {"_id": 0, "id": 1, "status": 1, "created_at": 1, "total": 1},
+        )
+        if not order:
+            raise HTTPException(status_code=404, detail="الطلب غير موجود في حسابك")
+    now = now_utc().isoformat()
+    ticket_id = "ticket_" + uuid.uuid4().hex[:12]
+    ticket = {
+        "id": ticket_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name") or "مستخدم",
+        "user_email": user.get("email"),
+        "category": body.category,
+        "subject": body.subject.strip(),
+        "status": "open",
+        "priority": "normal",
+        "order_id": body.order_id,
+        "order_summary": order,
+        "message_count": 1,
+        "manager_unread": True,
+        "customer_unread": False,
+        "last_message_preview": message_text[:160],
+        "created_at": now,
+        "updated_at": now,
+    }
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": user["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "customer",
+        "sender_name": user.get("name") or "مستخدم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_tickets.insert_one(ticket)
+    await db.support_messages.insert_one(message)
+    return {"ticket": ticket, "messages": [message]}
+
+
+@api.get("/support/tickets")
+async def list_support_tickets(user=Depends(require_user)):
+    return await db.support_tickets.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).sort("updated_at", -1).to_list(200)
+
+
+@api.get("/support/unread-count")
+async def support_unread_count(user=Depends(require_user)):
+    return {"count": await db.support_tickets.count_documents({"user_id": user["user_id"], "customer_unread": True})}
+
+
+@api.post("/support/tickets/{ticket_id}/read")
+async def mark_support_ticket_read(ticket_id: str, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id, "user_id": user["user_id"]},
+        {"$set": {"customer_unread": False}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    return {"ok": True}
+
+
+@api.get("/support/tickets/{ticket_id}")
+async def get_support_ticket(ticket_id: str, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one(
+        {"id": ticket_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    messages = await db.support_messages.find(
+        {"ticket_id": ticket_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return {"ticket": ticket, "messages": messages}
+
+
+@api.post("/support/tickets/{ticket_id}/messages")
+async def add_support_message(ticket_id: str, body: SupportMessageIn, user=Depends(require_user)):
+    ticket = await db.support_tickets.find_one(
+        {"id": ticket_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    message_text = body.message.strip()
+    if not message_text and not body.attachment_url:
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة")
+    now = now_utc().isoformat()
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": user["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "customer",
+        "sender_name": user.get("name") or "مستخدم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_messages.insert_one(message)
+    await db.support_tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {
+            "status": "open",
+            "manager_unread": True,
+            "customer_unread": False,
+            "updated_at": now,
+            "last_message_preview": message_text[:160] or "مرفق صورة",
+            "message_count": int(ticket.get("message_count") or 0) + 1,
+        }},
+    )
+    return message
+
+
+# ---------------- Manager support ----------------
+@api.get("/admin/support/unread-count")
+async def admin_support_unread_count(user=Depends(require_manager)):
+    return {"count": await db.support_tickets.count_documents({"manager_unread": True})}
+
+
+@api.post("/admin/support/tickets/{ticket_id}/read")
+async def admin_mark_support_read(ticket_id: str, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id},
+        {"$set": {"manager_unread": False}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    return {"ok": True}
+
+
+@api.get("/admin/support/tickets")
+async def admin_support_tickets(status: Optional[str] = None, user=Depends(require_manager)):
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    return await db.support_tickets.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+
+
+@api.get("/admin/support/tickets/{ticket_id}")
+async def admin_get_support_ticket(ticket_id: str, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    messages = await db.support_messages.find(
+        {"ticket_id": ticket_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return {"ticket": ticket, "messages": messages}
+
+
+@api.post("/admin/support/tickets/{ticket_id}/messages")
+async def admin_add_support_message(ticket_id: str, body: SupportMessageIn, user=Depends(require_manager)):
+    ticket = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    message_text = body.message.strip()
+    if not message_text and not body.attachment_url:
+        raise HTTPException(status_code=400, detail="اكتب رسالة أو أرفق صورة")
+    now = now_utc().isoformat()
+    message = {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "ticket_id": ticket_id,
+        "user_id": ticket["user_id"],
+        "sender_id": user["user_id"],
+        "sender_role": "manager",
+        "sender_name": user.get("name") or "الدعم",
+        "message": message_text,
+        "attachment_url": body.attachment_url,
+        "created_at": now,
+    }
+    await db.support_messages.insert_one(message)
+    await db.support_tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {
+            "status": "pending",
+            "manager_unread": False,
+            "customer_unread": True,
+            "updated_at": now,
+            "last_message_preview": message_text[:160] or "مرفق صورة",
+            "message_count": int(ticket.get("message_count") or 0) + 1,
+        }},
+    )
+    try:
+        await send_push([ticket["user_id"]], {
+            "title": "رد جديد من الدعم",
+            "message": message_text[:120] or "لديك رد جديد من فريق الدعم",
+            "action_url": f"/support?ticketId={ticket_id}",
+        })
+    except Exception as exc:
+        logger.warning(f"support push failed: {exc}")
+    return message
+
+
+@api.post("/admin/support/tickets/{ticket_id}/status")
+async def admin_set_support_status(ticket_id: str, body: SupportStatusIn, user=Depends(require_manager)):
+    if body.status not in ("open", "pending", "closed"):
+        raise HTTPException(status_code=400, detail="حالة تذكرة غير صالحة")
+    ticket = await db.support_tickets.find_one_and_update(
+        {"id": ticket_id},
+        {"$set": {"status": body.status, "updated_at": now_utc().isoformat()}},
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="تذكرة الدعم غير موجودة")
+    updated = await db.support_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    return updated
+
+
 @api.get("/admin/returns")
 async def admin_returns(user=Depends(require_manager)):
     return await db.returns.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -2237,15 +2951,55 @@ async def admin_stats(user=Depends(require_manager)):
 
 
 @api.get("/admin/orders")
-async def admin_orders(status: Optional[str] = None, user=Depends(require_manager)):
+async def admin_orders(
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1, le=1000),
+    page_size: int = Query(50, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=100),
+    date_from: Optional[str] = Query(None, max_length=40),
+    date_to: Optional[str] = Query(None, max_length=40),
+    user=Depends(require_manager),
+):
     q = {}
     if status and status != "all":
         q["status"] = status
-    docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
-    for doc in docs:
-        doc.pop("delivery_otp", None)
-    return docs
+    created_filter = {}
+    if date_from:
+        created_filter["$gte"] = date_from
+    if date_to:
+        created_filter["$lte"] = date_to
+    if created_filter:
+        q["created_at"] = created_filter
 
+    projection = {"_id": 0}
+    search_term = search.strip().casefold() if search else ""
+    if search_term:
+        # Firestore does not provide a portable contains query for these fields.
+        # Search the filtered result set in memory, then paginate the matches.
+        all_docs = await db.orders.find(q, projection).sort("created_at", -1).to_list(None)
+        docs = [
+            doc for doc in all_docs
+            if any(search_term in str(doc.get(field) or "").casefold() for field in ("id", "customer_name", "phone"))
+        ]
+        total = len(docs)
+    else:
+        total = await db.orders.count_documents(q)
+        fetch_count = page * page_size
+        docs = await db.orders.find(q, projection).sort("created_at", -1).limit(fetch_count).to_list(fetch_count)
+
+    start = (page - 1) * page_size
+    page_docs = docs[start : start + page_size]
+    for doc in page_docs:
+        doc.pop("delivery_otp", None)
+    return {
+        "items": page_docs,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "has_more": start + len(page_docs) < total,
+        },
+    }
 
 async def notify_customer_status(oid, status):
     o = await db.orders.find_one({"id": oid}, {"_id": 0, "user_id": 1})
@@ -2589,21 +3343,65 @@ def get_object(path):
     return blob.download_as_bytes(), blob.content_type or "application/octet-stream"
 
 
-@api.post("/upload")
-async def upload(file: UploadFile = File(...), user=Depends(require_manager)):
-    ext = (file.filename or "img.jpg").rsplit(".", 1)[-1].lower()
-    if ext not in ("jpg", "jpeg", "png", "webp"):
-        ext = "jpg"
-    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+@api.post("/remove-background")
+async def remove_background(file: UploadFile = File(...), user=Depends(require_manager)):
     data = await file.read()
-    ct = file.content_type or "image/jpeg"
+    if not data:
+        raise HTTPException(status_code=400, detail="الصورة فارغة")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم الصورة كبير جداً")
     try:
-        await run_in_threadpool(put_object, path, data, ct)
+        from rembg import remove as remove_bg
+        output = await run_in_threadpool(remove_bg, data)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="معالجة الصور غير مفعلة على الخادم")
+    except Exception as e:
+        logger.error(f"background removal failed: {e}")
+        raise HTTPException(status_code=502, detail="تعذر عزل المنتج عن الخلفية")
+    path = f"{APP_NAME}/processed/{user['user_id']}/{uuid.uuid4().hex}.png"
+    try:
+        await run_in_threadpool(put_object, path, output, "image/png")
+    except Exception as e:
+        logger.error(f"processed image upload failed: {e}")
+        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة المعزولة")
+    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": "background_removed", "created_at": now_utc().isoformat()})
+    return {"path": path, "url": f"/api/files/{path}", "processed": True}
+
+
+async def _store_uploaded_image(file: UploadFile, user, folder: str = "uploads"):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="الصورة فارغة")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم الصورة كبير جداً")
+    content_type = (file.content_type or "").lower()
+    allowed_types = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+    ext = allowed_types.get(content_type)
+    if not ext:
+        ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+        if ext == "jpeg":
+            ext = "jpg"
+        if ext not in ("jpg", "png", "webp"):
+            raise HTTPException(status_code=415, detail="صيغة الصورة غير مدعومة")
+        content_type = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[ext]
+    path = f"{APP_NAME}/{folder}/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    try:
+        await run_in_threadpool(put_object, path, data, content_type)
     except Exception as e:
         logger.error(f"upload failed: {e}")
-        raise HTTPException(status_code=502, detail="فشل رفع الصورة")
-    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "created_at": now_utc().isoformat()})
+        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة. تحقق من إعداد تخزين الملفات ثم حاول مرة أخرى")
+    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": folder, "created_at": now_utc().isoformat()})
     return {"path": path, "url": f"/api/files/{path}"}
+
+
+@api.post("/upload")
+async def upload(file: UploadFile = File(...), user=Depends(require_manager)):
+    return await _store_uploaded_image(file, user)
+
+
+@api.post("/support/upload")
+async def support_upload(file: UploadFile = File(...), user=Depends(require_user)):
+    return await _store_uploaded_image(file, user, "support")
 
 
 @api.get("/files/{path:path}")
@@ -2669,6 +3467,7 @@ async def seed():
     await db.user_sessions.create_index("session_token", unique=True)
     await db.catalog.create_index("barcode")
     await db.products.create_index("barcode")
+    await db.inventory_sync_logs.create_index("created_at")
 
     # Reset catalog if version changed (v2 adds real selling prices)
     meta = await db.meta.find_one({"key": "catalog_version"})

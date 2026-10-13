@@ -1,18 +1,7 @@
 import { storage } from "@/src/utils/storage";
-import { Platform } from "react-native";
-
-const configuredBackend = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
-
-function getBackendUrl() {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    const { hostname, protocol } = window.location;
-    const isReplitPreview = hostname.endsWith(".replit.dev") || hostname.endsWith(".repl.co");
-    if (isReplitPreview) return protocol + "//" + hostname;
-  }
-  return configuredBackend;
-}
-
-export const BACKEND = getBackendUrl();
+// Production API origin; request paths below add the /api prefix.
+const configuredBackend = "https://bin-salim.onrender.com";
+export const BACKEND = configuredBackend;
 export const TOKEN_KEY = "souq_auth_token";
 
 let authToken: string | null = null;
@@ -28,6 +17,7 @@ const CACHE_TTLS = {
 type CacheEntry = { value: any; expiresAt: number };
 const responseCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<any>>();
+const cacheEpochs = new Map<string, number>();
 const productCache = new Map<string, any>();
 
 function cloneValue<T>(value: T): T {
@@ -41,7 +31,7 @@ function setCachedValue(key: string, value: any, ttl: number) {
 
 function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, force = false): Promise<T> {
   const inFlight = inflightRequests.get(key);
-  if (inFlight) return inFlight.then(cloneValue) as Promise<T>;
+  if (inFlight && !force) return inFlight.then(cloneValue) as Promise<T>;
 
   const cached = responseCache.get(key);
   if (!force && cached) {
@@ -50,17 +40,28 @@ function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, fo
     return Promise.resolve(cloneValue(cached.value));
   }
 
+  const requestEpoch = cacheEpochs.get(key) || 0;
   const request = loader()
     .then((value) => {
-      setCachedValue(key, value, ttl);
+      // A cart mutation can finish while this read is still in flight. Do not
+      // let that older response overwrite the newer cart snapshot.
+      if ((cacheEpochs.get(key) || 0) === requestEpoch) {
+        setCachedValue(key, value, ttl);
+      }
       return cloneValue(value);
     })
-    .finally(() => inflightRequests.delete(key));
+    .finally(() => {
+      if (inflightRequests.get(key) === request) inflightRequests.delete(key);
+    });
   inflightRequests.set(key, request);
   return request;
 }
 
 export function setCachedCart(cart: any) {
+  cacheEpochs.set("cart", (cacheEpochs.get("cart") || 0) + 1);
+  // Let the next cart read start from the new server state instead of
+  // reusing a pre-mutation request that is still pending.
+  inflightRequests.delete("cart");
   setCachedValue("cart", cart, CACHE_TTLS.cart);
 }
 
@@ -155,6 +156,7 @@ export const api = {
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
+  inventoryPdfLogs: () => req("/admin/inventory/pdf/logs"),
   products: (params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}, force = false) => {
     const key = productsCacheKey(params);
     const suffix = key.slice("products:".length);
@@ -173,6 +175,7 @@ export const api = {
       return product;
     }, CACHE_TTLS.product, force);
   },
+  productByBarcode: (barcode: string) => req("/products/barcode/" + encodeURIComponent(barcode)),
   bestsellers: () => req("/products/bestsellers"),
   categories: (force = false) => cachedRequest("categories", () => req("/categories"), CACHE_TTLS.categories, force),
   categoryBranches: (category: string, force = false) => cachedRequest(
@@ -191,12 +194,16 @@ export const api = {
   banners: (force = false) => cachedRequest("banners", () => req("/banners"), CACHE_TTLS.banners, force),
   deliveryAreas: () => req("/delivery/areas"),
   deliveryQuote: (lat: number, lng: number) => req("/delivery/quote", { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  addresses: () => req("/addresses"),
+  createAddress: (body: any) => req("/addresses", { method: "POST", body: JSON.stringify(body) }),
+  updateAddress: (id: string, body: any) => req("/addresses/" + id, { method: "PUT", body: JSON.stringify(body) }),
+  deleteAddress: (id: string) => req("/addresses/" + id, { method: "DELETE" }),
   favorites: () => req("/favorites"),
   toggleFav: (id: string) => req("/favorites/" + id, { method: "POST" }),
   cart: (force = false) => cachedRequest("cart", () => req("/cart"), CACHE_TTLS.cart, force),
-  addToCart: async (product_id: string, quantity = 1) => { const result = await req("/cart/items", { method: "POST", body: JSON.stringify({ product_id, quantity }) }); setCachedCart(result); return result; },
-  setCartItem: async (product_id: string, quantity: number) => { const result = await req("/cart/items", { method: "PUT", body: JSON.stringify({ product_id, quantity }) }); setCachedCart(result); return result; },
-  removeCartItem: async (id: string) => { const result = await req("/cart/items/" + id, { method: "DELETE" }); setCachedCart(result); return result; },
+  addToCart: async (product_id: string, quantity = 1, sale_unit = "piece") => { const result = await req("/cart/items", { method: "POST", body: JSON.stringify({ product_id, quantity, sale_unit }) }); setCachedCart(result); return result; },
+  setCartItem: async (product_id: string, quantity: number, sale_unit = "piece") => { const result = await req("/cart/items", { method: "PUT", body: JSON.stringify({ product_id, quantity, sale_unit }) }); setCachedCart(result); return result; },
+  removeCartItem: async (id: string, sale_unit = "piece") => { const result = await req("/cart/items/" + id + "?sale_unit=" + encodeURIComponent(sale_unit), { method: "DELETE" }); setCachedCart(result); return result; },
   validateCoupon: (code: string, location?: { lat: number; lng: number }) => req("/coupons/validate", { method: "POST", body: JSON.stringify({ code, ...location }) }),
   createOrder: async (body: any) => { const result = await req("/orders", { method: "POST", body: JSON.stringify(body) }); setCachedCart({ items: [], total: 0, count: 0 }); return result; },
   myOrders: (force = false) => cachedRequest("orders", () => req("/orders"), CACHE_TTLS.orders, force),
@@ -209,8 +216,31 @@ export const api = {
   cancelOrder: (id: string) => req("/orders/" + id + "/cancel", { method: "POST" }),
   reorderOrder: async (id: string) => { const result = await req("/orders/" + id + "/reorder", { method: "POST" }); if (result?.cart) setCachedCart(result.cart); return result; },
   adminStats: () => req("/admin/stats"),
-  adminOrders: (status?: string) => req("/admin/orders" + (status ? "?status=" + status : "")),
+  supportTickets: () => req("/support/tickets"),
+  supportUnreadCount: () => req("/support/unread-count"),
+  markSupportRead: (id: string) => req("/support/tickets/" + id + "/read", { method: "POST" }),
+  supportTicket: (id: string) => req("/support/tickets/" + id),
+  createSupportTicket: (body: any) => req("/support/tickets", { method: "POST", body: JSON.stringify(body) }),
+  sendSupportMessage: (id: string, body: any) => req("/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
+  adminSupportTickets: (status?: string) => req("/admin/support/tickets" + (status ? "?status=" + encodeURIComponent(status) : "")),
+  adminSupportUnreadCount: () => req("/admin/support/unread-count"),
+  adminMarkSupportRead: (id: string) => req("/admin/support/tickets/" + id + "/read", { method: "POST" }),
+  adminSupportTicket: (id: string) => req("/admin/support/tickets/" + id),
+  adminSendSupportMessage: (id: string, body: any) => req("/admin/support/tickets/" + id + "/messages", { method: "POST", body: JSON.stringify(body) }),
+  adminSetSupportStatus: (id: string, status: string) => req("/admin/support/tickets/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
+  adminOrders: (params: { status?: string; page?: number; page_size?: number; search?: string; date_from?: string; date_to?: string } = {}) => {
+      const query = new URLSearchParams();
+      if (params.status && params.status !== "all") query.set("status", params.status);
+      if (params.page) query.set("page", String(params.page));
+      if (params.page_size) query.set("page_size", String(params.page_size));
+      if (params.search) query.set("search", params.search);
+      if (params.date_from) query.set("date_from", params.date_from);
+      if (params.date_to) query.set("date_to", params.date_to);
+      const suffix = query.toString();
+      return req("/admin/orders" + (suffix ? "?" + suffix : ""));
+    },
   adminReturns: () => req("/admin/returns"),
+  adminReviewReturn: (id: string) => req("/admin/returns/" + encodeURIComponent(id) + "/review", { method: "POST" }),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
   adminAssign: (id: string, agent_id: string) => req("/admin/orders/" + id + "/assign", { method: "POST", body: JSON.stringify({ agent_id }) }),
   adminAgents: () => req("/admin/agents"),
@@ -220,6 +250,8 @@ export const api = {
   syncConfig: () => req("/admin/sync-config"),
   adminCoupons: () => req("/admin/coupons"),
   adminDeliveryAreas: () => req("/admin/delivery-areas"),
+  adminDeliveryPricing: () => req("/admin/delivery-pricing"),
+  updateAdminDeliveryPricing: (default_fee: number) => req("/admin/delivery-pricing", { method: "PUT", body: JSON.stringify({ default_fee }) }),
   createDeliveryArea: (body: any) => req("/admin/delivery-areas", { method: "POST", body: JSON.stringify(body) }),
   updateDeliveryArea: (id: string, body: any) => req("/admin/delivery-areas/" + id, { method: "PUT", body: JSON.stringify(body) }),
   deleteDeliveryArea: (id: string) => req("/admin/delivery-areas/" + id, { method: "DELETE" }),
@@ -244,19 +276,54 @@ export const api = {
   deliveryCreateReturn: (id: string, body: any) => req("/delivery/orders/" + id + "/returns", { method: "POST", body: JSON.stringify(body) }),
 };
 
-export async function uploadImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string }> {
+export async function removeBackgroundImage(uri: string, platformWeb: boolean): Promise<{ path: string; url: string; processed: boolean }> {
   let token = authToken;
   if (!token) token = await storage.secureGet(TOKEN_KEY, "");
   const form = new FormData();
-  const name = "photo_" + Date.now() + ".jpg";
+  const name = "product_" + Date.now() + ".jpg";
   if (platformWeb) { const blob = await (await fetch(uri)).blob(); form.append("file", blob, name); }
   else form.append("file", { uri, name, type: "image/jpeg" } as any);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
-    const res = await fetch(BACKEND + "/api/upload", { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
-    if (!res.ok) throw new Error("فشل رفع الصورة");
-    return res.json();
+    const res = await fetch(BACKEND + "/api/remove-background", { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
+    const text = await res.text();
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) throw new Error(data?.detail || "تعذر عزل خلفية الصورة");
+    return data;
+  } catch (error: any) {
+    if (error?.name === "AbortError") throw new Error("استغرقت معالجة الصورة وقتاً طويلاً");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
+export async function uploadImage(uri: string, platformWeb: boolean, endpoint = "/api/upload"): Promise<{ path: string; url: string }> {
+  let token = authToken;
+  if (!token) token = await storage.secureGet(TOKEN_KEY, "");
+  const extension = (uri.split("?")[0].split(".").pop() || "jpg").toLowerCase();
+  const mime = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+  const safeExtension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  const form = new FormData();
+  const name = "photo_" + Date.now() + "." + safeExtension;
+  if (platformWeb) {
+    const source = await fetch(uri);
+    if (!source.ok) throw new Error("تعذر قراءة الصورة المختارة");
+    const blob = await source.blob();
+    form.append("file", blob, name);
+  } else {
+    form.append("file", { uri, name, type: mime } as any);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(BACKEND + endpoint, { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
+    const text = await res.text();
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) throw new Error(data?.detail || "تعذر رفع الصورة");
+    if (!data?.url && !data?.path) throw new Error("لم يتم حفظ الصورة، حاول اختيارها مرة أخرى");
+    return data;
   } catch (error: any) {
     if (error?.name === "AbortError") throw new Error("انتهت مهلة رفع الصورة");
     throw error;

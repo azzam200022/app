@@ -12,10 +12,10 @@ import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
 const STATUS_ROWS = [
-  { key: "pending", label: "قيد المراجعة", color: "#8B5CF6" },
-  { key: "confirmed", label: "تم التأكيد", color: "#F59E0B" },
-  { key: "preparing", label: "قيد التجهيز", color: "#20A88A" },
-  { key: "delivered", label: "مكتمل", color: "#AEB7B2" },
+  { key: "pending", label: "قيد المراجعة", color: colors.gold },
+  { key: "confirmed", label: "تم التأكيد", color: colors.brandSecondary },
+  { key: "preparing", label: "قيد التجهيز", color: colors.success },
+  { key: "delivered", label: "مكتمل", color: colors.onSurfaceTertiary },
 ];
 
 export default function ManagerDashboard() {
@@ -26,14 +26,24 @@ export default function ManagerDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [supportUnread, setSupportUnread] = useState(0);
+  const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [s, o, products] = await Promise.all([api.adminStats(), api.adminOrders(), api.products({}, true)]);
+      const [s, o, products, support, agentsData] = await Promise.all([
+        api.adminStats(),
+        api.adminOrders({ page: 1, page_size: 100 }),
+        api.products({}, true),
+        api.adminSupportUnreadCount(),
+        api.adminAgents().catch(() => []),
+      ]);
       setStats(s);
-      setOrders(o);
+      setOrders(Array.isArray(o) ? o : (o?.items || []));
+      setSupportUnread(Number(support?.count ?? 0));
+      setAgents(Array.isArray(agentsData) ? agentsData : []);
       setLowStockProducts((Array.isArray(products) ? products : []).filter((product) => Number(product.stock ?? 0) <= 5));
     } catch (e: any) {
       show(e.message, "error");
@@ -59,6 +69,31 @@ export default function ManagerDashboard() {
   const recent = orders.slice(0, 5);
   const maxStatusCount = Math.max(1, ...STATUS_ROWS.map((row) => counts[row.key] || 0));
 
+  const agentOverview = useMemo(() => {
+    const activeStatuses = new Set(["ready_for_delivery", "out_for_delivery"]);
+    const assignedOrders = orders.filter((order) => Boolean(order.agent_id));
+    const deliveredOrders = assignedOrders.filter((order) => order.status === "delivered");
+    const today = new Date().toDateString();
+    const deliveredToday = deliveredOrders.filter((order) => new Date(order.delivered_at || order.created_at).toDateString() === today).length;
+    const rows = agents.map((agent) => {
+      const agentOrders = assignedOrders.filter((order) => order.agent_id === agent.user_id);
+      return {
+        ...agent,
+        assigned: agentOrders.length,
+        active: agentOrders.filter((order) => activeStatuses.has(order.status)).length,
+        delivered: agentOrders.filter((order) => order.status === "delivered").length,
+      };
+    }).sort((a, b) => b.active - a.active || b.delivered - a.delivered || b.assigned - a.assigned);
+    return {
+      total: agents.length,
+      activeAgents: rows.filter((agent) => agent.active > 0).length,
+      activeOrders: assignedOrders.filter((order) => activeStatuses.has(order.status)).length,
+      deliveredToday,
+      unassignedReady: orders.filter((order) => order.status === "ready_for_delivery" && !order.agent_id).length,
+      rows,
+    };
+  }, [agents, orders]);
+
   const toggleComingSoon = async (product: any) => {
     const next = !product.coming_soon;
     try {
@@ -76,24 +111,50 @@ export default function ManagerDashboard() {
   };
 
   const statCards = stats ? [
-    { label: "إجمالي المنتجات", value: stats.products, icon: "shopping-cart", color: colors.brandPrimary },
-    { label: "قيد المراجعة", value: counts.pending || 0, icon: "truck", color: "#3C9C91" },
-    { label: "قيد التجهيز", value: counts.preparing || 0, icon: "check-circle", color: colors.success },
-    { label: "إجمالي الطلبات", value: stats.orders, icon: "users", color: colors.brandSecondary },
+    { label: "الإيرادات الكلية", value: formatPrice(stats.revenue || 0), icon: "bar-chart-2", color: colors.gold },
+    { label: "الطلبات النشطة", value: stats.active_orders ?? 0, icon: "activity", color: colors.brandSecondary },
+    { label: "طلبات مكتملة", value: stats.delivered ?? 0, icon: "check-circle", color: colors.success },
+    { label: "إجمالي المنتجات", value: stats.products ?? 0, icon: "shopping-cart", color: colors.brandPrimary },
   ] : [];
 
-  const quickActions = [
-    { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
-    { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
-    { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
-    { icon: "users", label: "المندوبون", onPress: () => router.push("/(manager)/agents"), testID: "qa-agents" },
-    { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
-    { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
-    { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
-     { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
-            { icon: "image", label: "البانورامات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
-    { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
+  const quickActionGroups = [
+    {
+      title: "تشغيل المتجر",
+      hint: "المهام التي تستخدمها يوميًا",
+      actions: [
+        { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
+        { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
+        { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
+      ],
+    },
+    {
+      title: "إدارة المتجر",
+      hint: "الأقسام والعروض والبيانات",
+      actions: [
+        { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
+        { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
+        { icon: "image", label: "البانرات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
+        { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
+      ],
+    },
+    {
+      title: "الفريق والدعم",
+      hint: "المتابعة والتواصل اليومي",
+      actions: [
+        { icon: "users", label: "إحصاءات المندوبين", onPress: () => router.push("/(manager)/agent-statistics"), testID: "qa-agents" },
+        { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
+        { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
+        { icon: "printer", label: "الطباعة", onPress: () => router.push("/(manager)/orders"), testID: "qa-print" },
+      ],
+    },
   ];
+
+  const attentionItems = [
+    { key: "orders", label: "طلبات قيد المعالجة", detail: "تحتاج إلى متابعة الحالة", count: Number(stats?.active_orders ?? 0), icon: "clock", color: colors.brandSecondary, route: "/(manager)/orders" },
+    { key: "support", label: "رسائل دعم غير مقروءة", detail: "تحتاج إلى رد من فريق الدعم", count: supportUnread, icon: "message-circle", color: colors.brandPrimary, route: "/(manager)/support" },
+    { key: "returns", label: "إجمالي المرتجعات", detail: "راجع سجلات المرتجعات عند الحاجة", count: Number(stats?.returns ?? 0), icon: "rotate-ccw", color: colors.error, route: "/(manager)/returns" },
+    { key: "stock", label: "منتجات منخفضة المخزون", detail: "راجع الكميات قبل نفادها", count: lowStockProducts.length, icon: "alert-triangle", color: colors.gold, route: "/(manager)/products" },
+  ].filter((item) => item.count > 0);
 
   return (
     <View style={styles.root}>
@@ -127,25 +188,48 @@ export default function ManagerDashboard() {
             ))}
           </View>
 
-          <Pressable testID="dashboard-print-settings" onPress={() => router.push("/(manager)/orders")} style={styles.printBanner}>
-            <View style={styles.printIcon}><Feather name="printer" size={25} color="#fff" /></View>
-            <View style={styles.printCopy}>
-              <T weight="bold" color="#fff" size={type.lg}>الطباعة التلقائية للطلبات</T>
-              <T size={type.sm} color="rgba(255,255,255,0.8)">تعمل عند استلام الطلبات الجديدة</T>
-            </View>
-            <View style={styles.printAction}>
-              <T weight="bold" size={11} color={colors.brandPrimary}>إعدادات الطباعة</T>
-              <Feather name="chevron-left" size={15} color={colors.brandPrimary} />
-            </View>
-          </Pressable>
-
           <View style={styles.sectionTitle}>
-            <T weight="displayBold" size={type.lg}>إجراءات سريعة</T>
+            <View style={styles.sectionTitleCopy}>
+              <T weight="displayBold" size={type.lg}>مركز العمل</T>
+              <T color={colors.muted} size={type.sm}>ابدأ من المهام الأهم في متجرك</T>
+            </View>
             <Feather name="zap" size={18} color={colors.gold} />
           </View>
-          <View style={styles.quickGrid}>
-            {quickActions.map((action) => <QuickAction key={action.testID} {...action} />)}
+          {quickActionGroups.map((group) => (
+            <View key={group.title} style={styles.actionGroup}>
+              <View style={styles.actionGroupHeader}>
+                <T weight="semi" color={colors.onSurfaceSecondary}>{group.title}</T>
+                <T color={colors.muted} size={type.xs}>{group.hint}</T>
+              </View>
+              <View style={styles.quickGrid}>
+                {group.actions.map((action) => <QuickAction key={action.testID} {...action} />)}
+              </View>
+            </View>
+          ))}
+          <View style={styles.sectionTitle}>
+            <T weight="displayBold" size={type.lg}>أولوية اليوم</T>
+            <Feather name="bell" size={18} color={colors.error} />
           </View>
+          {attentionItems.length === 0 ? (
+            <View style={styles.attentionEmpty} testID="attention-empty">
+              <Feather name="check-circle" size={20} color={colors.success} />
+              <T color={colors.muted} size={type.sm}>لا توجد تنبيهات عاجلة حالياً</T>
+            </View>
+          ) : (
+            <View style={styles.attentionPanel} testID="attention-panel">
+              {attentionItems.map((item) => (
+                <Pressable key={item.key} testID={"attention-" + item.key} onPress={() => router.push(item.route as any)} style={styles.attentionRow}>
+                  <View style={[styles.attentionIcon, { backgroundColor: item.color + "1A" }]}><Feather name={item.icon as any} size={18} color={item.color} /></View>
+                  <View style={styles.attentionCopy}>
+                    <T weight="semi">{item.label}</T>
+                    <T color={colors.muted} size={type.sm}>{item.detail}</T>
+                  </View>
+                  <View style={[styles.attentionCount, { backgroundColor: item.color + "1A" }]}><T weight="displayBold" color={item.color}>{item.count}</T></View>
+                  <Feather name="chevron-left" size={18} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           <View style={styles.stockSectionTitle}>
             <View style={styles.stockSectionHeading}>
@@ -220,6 +304,64 @@ export default function ManagerDashboard() {
           </View>
 
           <View style={styles.sectionTitle}>
+            <View style={styles.sectionTitleCopy}>
+              <T weight="displayBold" size={type.lg}>إحصائيات المندوبين</T>
+              <T color={colors.muted} size={type.sm}>{agentOverview.total} مندوب مسجل</T>
+            </View>
+            <Pressable testID="agent-view-all" onPress={() => router.push("/(manager)/agent-statistics")}>
+              <T color={colors.brandPrimary} weight="semi" size={type.sm}>إدارة المندوبين ‹</T>
+            </Pressable>
+          </View>
+          <View style={styles.agentPanel} testID="agent-stats-panel">
+            <View style={styles.agentMetrics}>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.brandTertiary }]}><Feather name="users" size={17} color={colors.brandPrimary} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.activeAgents}</T>
+                <T color={colors.muted} size={10}>نشطون الآن</T>
+              </View>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.brandSecondary + "1A" }]}><Feather name="truck" size={17} color={colors.brandSecondary} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.activeOrders}</T>
+                <T color={colors.muted} size={10}>طلبات قيد التوصيل</T>
+              </View>
+              <View style={styles.agentMetric}>
+                <View style={[styles.agentMetricIcon, { backgroundColor: colors.success + "1A" }]}><Feather name="check-circle" size={17} color={colors.success} /></View>
+                <T weight="displayBold" size={type.lg}>{agentOverview.deliveredToday}</T>
+                <T color={colors.muted} size={10}>تم توصيلها اليوم</T>
+              </View>
+            </View>
+            {agentOverview.unassignedReady > 0 && (
+              <Pressable testID="unassigned-ready-orders" onPress={() => router.push("/(manager)/orders")} style={styles.agentWarning}>
+                <Feather name="alert-triangle" size={17} color={colors.gold} />
+                <T color={colors.onSurfaceSecondary} size={type.sm} style={{ flex: 1 }}>هناك {agentOverview.unassignedReady} طلبات جاهزة بانتظار التعيين</T>
+                <Feather name="chevron-left" size={17} color={colors.gold} />
+              </Pressable>
+            )}
+            {agentOverview.rows.length === 0 ? (
+              <View style={styles.agentEmpty}>
+                <Feather name="users" size={20} color={colors.muted} />
+                <T color={colors.muted} size={type.sm}>لا يوجد مندوبون مسجلون بعد</T>
+              </View>
+            ) : (
+              <View style={styles.agentList}>
+                {agentOverview.rows.slice(0, 4).map((agent) => (
+                  <View key={agent.user_id} style={styles.agentRow}>
+                    <View style={styles.agentAvatar}><Feather name="truck" size={17} color={colors.brandPrimary} /></View>
+                    <View style={styles.agentCopy}>
+                      <T weight="semi" numberOfLines={1}>{agent.name || "مندوب توصيل"}</T>
+                      <T color={colors.muted} size={type.sm}>{agent.active} نشطة • {agent.delivered} مكتملة</T>
+                    </View>
+                    <View style={styles.agentScore}>
+                      <T weight="displayBold" color={colors.brandPrimary}>{agent.assigned}</T>
+                      <T color={colors.muted} size={10}>طلبات</T>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.sectionTitle}>
             <T weight="displayBold" size={type.lg}>أحدث الطلبات</T>
             <Pressable onPress={() => router.push("/(manager)/orders")}><T color={colors.brandPrimary} weight="semi" size={type.sm}>عرض الكل ‹</T></Pressable>
           </View>
@@ -233,6 +375,18 @@ export default function ManagerDashboard() {
               <View style={styles.orderMeta}><StatusPill status={order.status} /><Feather name="chevron-left" size={17} color={colors.muted} /></View>
             </Pressable>
           ))}
+
+          <Pressable testID="dashboard-print-settings" onPress={() => router.push("/(manager)/orders")} style={styles.printBanner}>
+            <View style={styles.printIcon}><Feather name="printer" size={25} color="#fff" /></View>
+            <View style={styles.printCopy}>
+              <T weight="bold" color="#fff" size={type.lg}>الطباعة التلقائية للطلبات</T>
+              <T size={type.sm} color="rgba(255,255,255,0.8)">تعمل عند استلام الطلبات الجديدة</T>
+            </View>
+            <View style={styles.printAction}>
+              <T weight="bold" size={11} color={colors.brandPrimary}>إعدادات الطباعة</T>
+              <Feather name="chevron-left" size={15} color={colors.brandPrimary} />
+            </View>
+          </Pressable>
 
           <View style={styles.tip}><Feather name="info" size={17} color={colors.gold} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>تأكد من توفر المندوبين قبل إضافة الطلبات الجديدة للتوصيل.</T></View>
         </ScrollView>
@@ -255,40 +409,60 @@ function QuickAction({ icon, label, count, onPress, testID }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", minHeight: 74 },
+  header: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  headerRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", minHeight: 78 },
   logo: { width: 108, height: 52 },
   greeting: { flex: 1, alignItems: "center", marginHorizontal: spacing.sm },
   profileBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.55)", alignItems: "center", justifyContent: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  statsGrid: { flexDirection: "row-reverse", gap: spacing.xs, marginBottom: spacing.md },
-  statCard: { flex: 1, minHeight: 94, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  statsGrid: { flexDirection: "row-reverse", gap: spacing.sm, marginBottom: spacing.md },
+  statCard: { flex: 1, minHeight: 104, backgroundColor: "#FFFFFF", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   statIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  printBanner: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.md, minHeight: 82 },
+  printBanner: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandSecondary, borderRadius: radius.md, padding: spacing.md, minHeight: 82, marginTop: spacing.sm },
   printIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   printCopy: { flex: 1 },
   printAction: { flexDirection: "row-reverse", alignItems: "center", gap: 2, backgroundColor: "#fff", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "flex-start", gap: spacing.xs, marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionTitleCopy: { flex: 1, alignItems: "flex-end", gap: 2 },
+  actionGroup: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  actionGroupHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xs, marginBottom: spacing.sm },
   quickGrid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.sm },
+  attentionPanel: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
+  attentionRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  attentionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  attentionCopy: { flex: 1, alignItems: "flex-end" },
+  attentionCount: { minWidth: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  attentionEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   stockSectionTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, marginBottom: spacing.sm },
   stockSectionHeading: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  stockPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: "#F2D39A", paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  stockPanel: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.warning, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   stockSummary: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  stockSummaryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFF3D6", alignItems: "center", justifyContent: "center" },
+  stockSummaryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.warningSoft, alignItems: "center", justifyContent: "center" },
   stockSummaryCopy: { flex: 1, alignItems: "flex-end" },
-  stockCount: { minWidth: 38, height: 38, borderRadius: 19, backgroundColor: "#FDE8E7", alignItems: "center", justifyContent: "center" },
+  stockCount: { minWidth: 38, height: 38, borderRadius: 19, backgroundColor: colors.errorSoft, alignItems: "center", justifyContent: "center" },
   stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   stockRowIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   stockRowCopy: { flex: 1, alignItems: "flex-end" },
   stockAction: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
-  stockActionActive: { backgroundColor: "#FBF1DE" },
+  stockActionActive: { backgroundColor: colors.warningSoft },
   stockMore: { alignItems: "center", paddingVertical: spacing.sm },
   stockEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
-  qa: { width: "23.5%", minHeight: 82, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: spacing.xs },
+  qa: { width: "23.5%", minHeight: 82, backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: spacing.xs },
   qaIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   qaBadge: { position: "absolute", top: -3, insetInlineEnd: -5, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   insightsRow: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.lg },
   insightCard: { flex: 1, minHeight: 188, backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+  agentPanel: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm },
+  agentMetrics: { flexDirection: "row-reverse", gap: spacing.xs },
+  agentMetric: { flex: 1, minHeight: 86, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, paddingVertical: spacing.sm, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", gap: 2 },
+  agentMetricIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  agentWarning: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.warningSoft, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.sm },
+  agentList: { marginTop: spacing.sm },
+  agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider, paddingVertical: spacing.sm },
+  agentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  agentCopy: { flex: 1, alignItems: "flex-end" },
+  agentScore: { minWidth: 44, alignItems: "center" },
+  agentEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingVertical: spacing.lg },
   cardTitle: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   statusRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingVertical: 5 },
   statusDot: { width: 9, height: 9, borderRadius: 5 },

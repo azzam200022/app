@@ -31,9 +31,9 @@ export function CategoryCircles({ items, selected, onSelect }: { items: { name: 
 
 const styles = StyleSheet.create({
   row: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  item: { alignItems: "center", width: 74, flexShrink: 0 },
-  circle: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 2, borderColor: "transparent" },
-  circleActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary },
+  item: { alignItems: "center", width: 72, flexShrink: 0 },
+  circle: { width: 62, height: 62, borderRadius: 31, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 2, borderColor: "transparent" },
+  circleActive: { borderColor: colors.gold, backgroundColor: colors.brandTertiary },
   img: { width: "100%", height: "100%" },
-  label: { marginTop: spacing.xs, textAlign: "center", maxWidth: 74 },
+  label: { marginTop: spacing.xs, textAlign: "center", maxWidth: 72 },
 });

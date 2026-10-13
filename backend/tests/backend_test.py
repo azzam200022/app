@@ -194,6 +194,8 @@ class TestCartFavorites:
         assert r2.status_code == 200
         item = next(i for i in r2.json()["items"] if i["product_id"] == pid)
         assert item["quantity"] == 3
+        assert item.get("sale_unit", "piece") == "piece"
+        assert item["stock_quantity"] == 3
         # remove
         r3 = s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
         assert r3.status_code == 200
@@ -215,6 +217,64 @@ class TestCartFavorites:
         assert updated.status_code == 400
         s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
 
+
+    def test_wholesale_cart_prices_and_piece_stock(self, s, manager_token, customer_token):
+        barcode = str(uuid.uuid4().int % 10**13).zfill(13)
+        payload = {
+            "barcode": barcode,
+            "name": f"TEST wholesale {uuid.uuid4().hex[:6]}",
+            "category": "أخرى",
+            "price": 2000,
+            "stock": 13,
+            "wholesale_enabled": True,
+            "wholesale_unit_name": "صندوق",
+            "wholesale_quantity": 6,
+            "wholesale_price": 7000,
+            "wholesale_old_price": 8000,
+        }
+        created = s.post(f"{API}/products", headers=H(manager_token), json=payload, timeout=15)
+        assert created.status_code == 200, created.text
+        product = created.json()
+        pid = product["id"]
+        try:
+            added = s.post(
+                f"{API}/cart/items", headers=H(customer_token),
+                json={"product_id": pid, "sale_unit": "wholesale", "quantity": 1}, timeout=15,
+            )
+            assert added.status_code == 200, added.text
+            item = next(i for i in added.json()["items"] if i["product_id"] == pid)
+            assert item["price"] == 7000
+            assert item["old_price"] == 8000
+            assert item["unit_label"] == "صندوق"
+            assert item["units_per_unit"] == 6
+            assert item["stock_quantity"] == 6
+            assert item["line_total"] == 7000
+
+            updated = s.put(
+                f"{API}/cart/items", headers=H(customer_token),
+                json={"product_id": pid, "sale_unit": "wholesale", "quantity": 2}, timeout=15,
+            )
+            assert updated.status_code == 200, updated.text
+            item = next(i for i in updated.json()["items"] if i["product_id"] == pid and i["sale_unit"] == "wholesale")
+            assert item["stock_quantity"] == 12
+
+            over_package = s.post(
+                f"{API}/cart/items", headers=H(customer_token),
+                json={"product_id": pid, "sale_unit": "wholesale", "quantity": 1}, timeout=15,
+            )
+            assert over_package.status_code == 400
+            over_mixed_stock = s.post(
+                f"{API}/cart/items", headers=H(customer_token),
+                json={"product_id": pid, "sale_unit": "piece", "quantity": 2}, timeout=15,
+            )
+            assert over_mixed_stock.status_code == 400
+
+            removed = s.delete(f"{API}/cart/items/{pid}?sale_unit=wholesale", headers=H(customer_token), timeout=15)
+            assert removed.status_code == 200
+            assert all(i["product_id"] != pid for i in removed.json()["items"])
+        finally:
+            s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
 
     def test_favorites_toggle(self, s, customer_token):
         prods = s.get(f"{API}/products", timeout=15).json()

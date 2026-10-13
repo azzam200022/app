@@ -28,7 +28,7 @@ export default function Home() {
   const [cats, setCats] = useState<any[]>(() => getCachedCategories() || []);
   const [selected, setSelected] = useState("الكل");
   const [products, setProducts] = useState<any[]>(() => getCachedProducts() || []);
-  const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 6) || []);
+  const [offers, setOffers] = useState<any[]>(() => getCachedProducts({ offers: true })?.slice(0, 2) || []);
   const [bestsellers, setBestsellers] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>(() => getCachedBanners() || []);
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -43,16 +43,14 @@ export default function Home() {
   const [isCompactHeader, setIsCompactHeader] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const collapseDistance = 96;
-  const fullBarHeight = insets.top + spacing.xs + 40 + spacing.sm;
-  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, insets.top + 36], extrapolate: "clamp" });
-  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [40, 0], extrapolate: "clamp" });
+  const fullBarHeight = insets.top + spacing.xs + 56 + spacing.sm;
+  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, 0], extrapolate: "clamp" });
+  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [56, 0], extrapolate: "clamp" });
   const fullRowOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [1, 0.35, 0], extrapolate: "clamp" });
   const compactSearchOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
   const compactSearchScale = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [0.8, 1], extrapolate: "clamp" });
-  const logoH = scrollY.interpolate({ inputRange: [0, 70], outputRange: [34, 24], extrapolate: "clamp" });
-  const logoW = scrollY.interpolate({ inputRange: [0, 70], outputRange: [118, 84], extrapolate: "clamp" });
   const barPadBottom = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.sm, 0], extrapolate: "clamp" });
-  const barPadTopExtra = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.xs, 0], extrapolate: "clamp" });
+  const barPadTop = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [insets.top + spacing.xs, 0], extrapolate: "clamp" });
   const handleScroll = useMemo(() => Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     {
@@ -96,13 +94,13 @@ export default function Home() {
     ]);
     const [c, o, p, b, best] = results;
     if (c.status === "fulfilled") setCats(c.value);
-    if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 6) : []);
+    if (o.status === "fulfilled") setOffers(Array.isArray(o.value) ? o.value.slice(0, 2) : []);
     if (p.status === "fulfilled") setProducts(p.value);
     if (b.status === "fulfilled") {
       setBanners(Array.isArray(b.value) ? b.value : []);
       setBannerIndex(0);
     }
-    if (best.status === "fulfilled") setBestsellers(Array.isArray(best.value) ? best.value.slice(0, 10) : []);
+    if (best.status === "fulfilled") setBestsellers(Array.isArray(best.value) ? best.value.slice(0, 3) : []);
     const failed = results.slice(0, 4).find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) show(failed.reason?.message || "تعذر تحميل بعض البيانات", "error");
     setLoading(false);
@@ -134,7 +132,7 @@ export default function Home() {
 
   const quantities = useMemo(() => {
     const result: Record<string, number> = {};
-    cart.items.forEach((item) => { result[item.product_id] = item.quantity; });
+    cart.items.forEach((item) => { if (!item.sale_unit || item.sale_unit === "piece") result[item.product_id] = item.quantity; });
     return result;
   }, [cart.items]);
 
@@ -147,10 +145,10 @@ export default function Home() {
   }, [add, show]);
 
   const onDecrease = useCallback(async (p: any) => {
-    const quantity = cart.items.find((item) => item.product_id === p.id)?.quantity || 0;
+    const quantity = cart.items.find((item) => item.product_id === p.id && (!item.sale_unit || item.sale_unit === "piece"))?.quantity || 0;
     try {
-      if (quantity <= 1) await remove(p.id);
-      else await setQty(p.id, quantity - 1);
+      if (quantity <= 1) await remove(p.id, "piece");
+      else await setQty(p.id, quantity - 1, "piece");
     } catch (e: any) {
       show(e.message, "error");
     }
@@ -158,11 +156,6 @@ export default function Home() {
 
   const header = (
     <View>
-      <Pressable testID="home-search-prompt" onPress={() => router.push("/search")} style={styles.searchPrompt}>
-        <Feather name="search" size={18} color={colors.muted} />
-        <T color={colors.muted} size={type.sm}>ابحث عن منتج أو تصنيف</T>
-      </Pressable>
-
       {/* Offers banner carousel */}
       {banners.length > 0 ? (
         <View style={styles.hero}>
@@ -176,7 +169,7 @@ export default function Home() {
             renderItem={({ item }) => (
               <Pressable style={styles.heroSlide} onPress={() => router.push("/offers")}>
                 <Image source={{ uri: resolveImage(item.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={["rgba(36,83,56,0.15)", "rgba(24,35,27,0.9)"]} style={StyleSheet.absoluteFill} />
                 <View style={styles.heroContent}>
                   <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
                   <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>{item.title || "وفّر أكثر مع خصومات اليوم"}</T>
@@ -191,7 +184,7 @@ export default function Home() {
       ) : (
         <Pressable style={styles.hero} onPress={() => router.push("/offers")}>
           <Image source={{ uri: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&q=85" }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          <LinearGradient colors={["rgba(31,69,41,0.15)", "rgba(26,31,27,0.9)"]} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={["rgba(36,83,56,0.15)", "rgba(24,35,27,0.9)"]} style={StyleSheet.absoluteFill} />
           <View style={styles.heroContent}>
             <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
             <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>وفّر أكثر مع خصومات اليوم</T>
@@ -204,7 +197,7 @@ export default function Home() {
       {/* Categories */}
       <View style={styles.sectionHead}>
         <View>
-          <T weight="displayBold" size={type.xl}>تسوّق حسب التصنيف</T>
+          <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>تسوّق حسب التصنيف</T>
           <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات مرتبة لتصل لما تحب أسرع</T>
         </View>
         <View style={styles.sectionRule} />
@@ -216,7 +209,7 @@ export default function Home() {
         <View>
           <View style={styles.sectionHead}>
             <View>
-              <T weight="displayBold" size={type.xl}>الأكثر شراءً</T>
+              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>الأكثر شراءً</T>
               <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات العملاء هذا الأسبوع</T>
             </View>
             <View style={styles.sectionRule} />
@@ -227,9 +220,9 @@ export default function Home() {
             data={bestsellers}
             keyExtractor={(i) => "bestseller-" + i.id}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
             )}
           />
         </View>
@@ -240,7 +233,7 @@ export default function Home() {
         <View>
           <View style={styles.sectionHead}>
             <View>
-              <T weight="displayBold" size={type.xl}>عروض مميزة</T>
+              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>عروض مميزة</T>
               <T color={colors.muted} size={type.sm} style={styles.sectionHint}>خصومات تستحق التجربة</T>
             </View>
             <Pressable onPress={() => router.push("/offers")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
@@ -251,16 +244,16 @@ export default function Home() {
             data={offers}
             keyExtractor={(i) => i.id}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
             renderItem={({ item }) => (
-              <View style={{ width: 160 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={160} /></View>
+              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
             )}
           />
         </View>
       )}
 
       <View style={styles.sectionHead}>
-        <T weight="displayBold" size={type.xl}>{selected === "الكل" ? "كل المنتجات" : selected}</T>
+        <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>{selected === "الكل" ? "كل المنتجات" : selected}</T>
       </View>
     </View>
   );
@@ -268,12 +261,29 @@ export default function Home() {
   return (
     <View style={styles.root}>
       {/* Collapses to a small search control while scrolling */}
-      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: Animated.add(new Animated.Value(insets.top), barPadTopExtra), paddingBottom: barPadBottom }]}>
+      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: barPadTop, paddingBottom: barPadBottom }]}>
+        <LinearGradient colors={[colors.surface, colors.surfaceSecondary]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
           <View style={styles.topRow}>
-            <Animated.View style={{ width: logoW, height: logoH }}>
-              <Image source={require("../../assets/images/logo-binsaleem.png")} style={StyleSheet.absoluteFill} contentFit="contain" />
-            </Animated.View>
+            <View style={styles.brandLockup} testID="home-brand" accessibilityRole="image" accessibilityLabel="شعار بن سليم سوبرماركت">
+              <View style={styles.brandMarkFrame}>
+                <Image source={require("../../assets/images/bin-saleem-mark.png")} style={styles.brandMark} contentFit="contain" />
+              </View>
+              <View style={styles.brandType}>
+                <T weight="displayBold" size={type.sm} color={colors.brandPrimary} style={styles.brandEnglish}>BIN SALEEM</T>
+                <T weight="bold" size={type.xs} color={colors.brandSecondary} style={styles.brandSubline}>SUPERMARKET</T>
+              </View>
+            </View>
+            <Pressable
+              testID="home-search-prompt"
+              onPress={() => router.push("/search")}
+              style={styles.topSearchPrompt}
+              accessibilityRole="button"
+              accessibilityLabel="ابحث عن منتج أو تصنيف"
+            >
+              <Feather name="search" size={16} color={colors.brandPrimary} />
+              <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
+            </Pressable>
             <View style={styles.topActions}>
             <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
               <Feather name="shopping-bag" size={19} color={colors.onSurface} />
@@ -283,9 +293,6 @@ export default function Home() {
                 </View>
               )}
             </Pressable>
-              <Pressable testID="search-btn" onPress={() => router.push("/search")} style={styles.iconBtn}>
-                <Feather name="search" size={19} color={colors.onSurface} />
-              </Pressable>
               <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
                 <Feather name="heart" size={19} color={colors.onSurface} />
               </Pressable>
@@ -293,20 +300,22 @@ export default function Home() {
           </View>
         </Animated.View>
 
-        <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { top: insets.top + 2, opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
+
+      </Animated.View>
+
+      <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
           <Pressable testID="compact-search-btn" onPress={() => router.push("/search")} style={styles.compactSearchBtn} accessibilityLabel="البحث">
             <Feather name="search" size={17} color={colors.onSurface} />
           </Pressable>
         </Animated.View>
-      </Animated.View>
 
-      <Animated.FlatList
+          <Animated.FlatList
            ref={listRef}
            data={products}
            keyExtractor={(i) => i.id}
            numColumns={2}
            ListHeaderComponent={header}
-           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
+           columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
            contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
            initialNumToRender={12}
            maxToRenderPerBatch={8}
@@ -332,30 +341,36 @@ export default function Home() {
 }
 
 function ProductGridSkeleton() {
-  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2;
+  const cardWidth = (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm) / 2;
   return (
     <View style={styles.loadingGrid}>
-      {[0, 1, 2, 3].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
+      {[0, 1, 2, 3, 4, 5].map((item) => <ProductCardSkeleton key={item} width={cardWidth} />)}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider, overflow: "hidden", zIndex: 10 },
+  topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   fullHeader: { overflow: "hidden" },
-  topRow: { height: 40, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
-  topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  searchPrompt: { height: 52, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.divider, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  iconBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", position: "relative" },
+  topRow: { height: 56, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  brandLockup: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  brandMarkFrame: { width: 50, height: 46, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: colors.surface },
+  brandMark: { width: 48, height: 42 },
+  brandType: { alignItems: "flex-start", justifyContent: "center" },
+  brandEnglish: { textAlign: "left", writingDirection: "ltr", lineHeight: 16, letterSpacing: 0.25 },
+  brandSubline: { textAlign: "left", writingDirection: "ltr", fontSize: 8, lineHeight: 11, letterSpacing: 1.8 },
+  topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  topSearchPrompt: { flex: 1, minWidth: 0, height: 40, marginHorizontal: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  searchLabel: { flex: 1 },
+  iconBtn: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative" },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
-  compactSearch: { position: "absolute", left: spacing.lg, width: 32, height: 32, zIndex: 2 },
-  compactSearchBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  compactSearch: { position: "absolute", right: spacing.lg, bottom: spacing.lg + 56, width: 40, height: 40, zIndex: 20 },
+  compactSearchBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
-  scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
-  brandLogo: { width: 118, height: 34 },
-  hero: { height: 190, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse },
-  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 190 },
+  scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, borderWidth: 1, borderColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
+  hero: { height: 184, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, borderWidth: 1, borderColor: colors.border },
+  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 184 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.gold },
@@ -363,8 +378,9 @@ const styles = StyleSheet.create({
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionTitle: { lineHeight: 30 },
   sectionHint: { marginTop: 2 },
-  sectionRule: { flex: 1, height: 1, backgroundColor: colors.divider, marginStart: spacing.lg, marginTop: spacing.md },
-  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing["2xl"] },
+  sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: spacing.md, borderRadius: 1 },
+  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
