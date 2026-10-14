@@ -25,6 +25,8 @@ export default function Checkout() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponLoading, setCouponLoading] = useState(false);
@@ -62,6 +64,7 @@ export default function Checkout() {
   }, []);
 
   const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual" | "saved") => {
+    setSubmitError(null);
     setCoords(nextCoords);
     setLocationSource(source);
     setDeliveryQuote(null);
@@ -83,6 +86,7 @@ export default function Checkout() {
 
 
   const selectSavedAddress = async (saved: any) => {
+    setSubmitError(null);
     setSelectedAddressId(saved.id);
     setManualMapOpen(false);
     setAddressLabel(saved.label || "عنوان جديد");
@@ -99,6 +103,7 @@ export default function Checkout() {
   };
 
   const startNewAddress = () => {
+    setSubmitError(null);
     setSelectedAddressId(null);
     setManualMapOpen(false);
     setAddressLabel("عنوان جديد");
@@ -182,17 +187,18 @@ export default function Checkout() {
   };
 
   const submit = async () => {
-    if (!name.trim() || !phone.trim() || !address.trim()) return show("يرجى تعبئة الاسم والهاتف والعنوان", "error");
-    if (!coords) return show("حدد موقع التوصيل عبر GPS أو من العنوان أولاً", "error");
-    if (quoteLoading) return show("انتظر حتى يتم حساب رسوم التوصيل", "error");
-    if (!deliveryQuote) return show("تعذر التحقق من منطقة التوصيل. أعد تحديد الموقع وحاول مجدداً.", "error");
+    setSubmitError(null);
+    if (!name.trim() || !phone.trim() || !address.trim()) { setSubmitError("يرجى تعبئة الاسم والهاتف والعنوان"); return; }
+    if (!coords) { setSubmitError("حدد موقع التوصيل عبر GPS أو من الخريطة أولاً"); return; }
+    if (quoteLoading) { setSubmitError("انتظر حتى يتم حساب رسوم التوصيل"); return; }
+    if (!deliveryQuote) { setSubmitError("تعذر التحقق من منطقة التوصيل. أعد تحديد الموقع وحاول مجدداً."); return; }
     setLoading(true);
     try {
       const order = await api.createOrder({ name: name.trim(), phone: phone.trim(), address: address.trim(), notes: notes.trim(), saved_address_id: selectedAddressId || undefined, coupon_code: appliedCoupon?.coupon_code, lat: coords.lat, lng: coords.lng, client_request_id: orderRequestId.current });
       // The order is already committed; a cart refresh must not turn a successful order into an error.
       void reload().catch(() => undefined);
       router.replace(`/order/${order.id}?new=1`);
-    } catch (e: any) { show(e.message, "error"); }
+    } catch (e: any) { setSubmitError(e?.message || "تعذر تنفيذ الطلب. راجع بياناتك وحاول مرة أخرى."); }
     finally { setLoading(false); }
   };
 
@@ -200,34 +206,57 @@ export default function Checkout() {
     <View style={styles.root}>
       <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={{ paddingTop: insets.top + spacing.md }} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled">
           <View style={styles.savedSection}>
             <View style={styles.sectionTitleRow}>
-              <T weight="displayBold" size={type.lg}>العناوين المحفوظة</T>
-              <Pressable onPress={startNewAddress} testID="co-new-address"><T weight="bold" color={colors.brandPrimary} size={type.sm}>+ عنوان جديد</T></Pressable>
-            </View>
-            {addressesLoading ? <ActivityIndicator color={colors.brandPrimary} /> : savedAddresses.length === 0 ? <T color={colors.muted} size={type.sm}>لا توجد عناوين محفوظة؛ املأ البيانات واحفظ العنوان أدناه.</T> : savedAddresses.map((saved) => (
-              <Pressable key={saved.id} testID={"co-address-" + saved.id} onPress={() => void selectSavedAddress(saved)} style={[styles.savedCard, selectedAddressId === saved.id && styles.savedCardActive]}>
-                <View style={styles.savedCardIcon}><Feather name={saved.is_default ? "star" : "map-pin"} size={18} color={saved.is_default ? colors.gold : colors.brandPrimary} /></View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.savedCardTitle}><T weight="bold">{saved.label}</T>{saved.is_default ? <T color={colors.gold} size={type.xs}>افتراضي</T> : null}</View>
-                  <T size={type.sm}>{saved.recipient_name} • {saved.phone}</T>
-                  <T color={colors.muted} size={type.sm} numberOfLines={1}>{saved.address}</T>
-                </View>
-                {selectedAddressId === saved.id ? <Feather name="check-circle" size={21} color={colors.brandPrimary} /> : <Feather name="circle" size={21} color={colors.borderStrong} />}
+              <View style={styles.sectionHeadingText}>
+                <T weight="displayBold" size={type.lg}>عنوان التوصيل</T>
+                <T color={colors.muted} size={type.xs}>اختر عنواناً محفوظاً أو أدخل عنواناً جديداً</T>
+              </View>
+              <Pressable onPress={startNewAddress} testID="co-new-address" style={styles.addAddressButton}>
+                <Feather name="plus" size={16} color={colors.brandPrimary} />
+                <T weight="bold" color={colors.brandPrimary} size={type.sm}>عنوان جديد</T>
               </Pressable>
-            ))}
+            </View>
+            {addressesLoading ? <ActivityIndicator color={colors.brandPrimary} style={styles.addressLoading} /> : savedAddresses.length === 0 ? <View style={styles.addressEmpty}><Feather name="map-pin" size={18} color={colors.muted} /><T color={colors.muted} size={type.sm}>لا توجد عناوين محفوظة بعد.</T></View> : <View style={styles.savedAddressList}>{savedAddresses.map((saved) => (
+              <Pressable key={saved.id} testID={"co-address-" + saved.id} onPress={() => void selectSavedAddress(saved)} style={[styles.savedCard, selectedAddressId === saved.id && styles.savedCardActive]}>
+                <View style={styles.savedCardIcon}><Feather name={saved.is_default ? "star" : "map-pin"} size={17} color={saved.is_default ? colors.gold : colors.brandPrimary} /></View>
+                <View style={styles.savedAddressInfo}>
+                  <View style={styles.savedCardTitle}><T weight="bold">{saved.label || "عنوان"}</T>{saved.is_default ? <View style={styles.defaultBadge}><T color={colors.gold} size={type.xs} weight="semi">افتراضي</T></View> : null}</View>
+                  <T size={type.sm} color={colors.onSurfaceSecondary}>{saved.recipient_name} • {saved.phone}</T>
+                  <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.savedAddressLine}>{saved.address}</T>
+                </View>
+                <View style={[styles.addressSelectMark, selectedAddressId === saved.id && styles.addressSelectMarkActive]}>{selectedAddressId === saved.id ? <Feather name="check" size={14} color="#fff" /> : null}</View>
+              </Pressable>
+            ))}</View>}
+            {selectedAddressId ? (
+              <Pressable testID="co-edit-address-details" onPress={() => setSelectedAddressId(null)} style={styles.editAddressAction}>
+                <Feather name="edit-2" size={15} color={colors.brandPrimary} />
+                <T color={colors.brandPrimary} size={type.sm} weight="semi">تعديل التفاصيل لهذا الطلب</T>
+              </Pressable>
+            ) : (
+              <View style={styles.deliveryForm}>
+                <View style={styles.sectionCaption}><Feather name="user" size={16} color={colors.brandPrimary} /><T weight="bold" size={type.sm}>بيانات المستلم</T></View>
+                <View style={styles.contactRow}>
+                  <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); setSubmitError(null); }} testID="co-name" /></View>
+                  <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); setSubmitError(null); }} keyboardType="phone-pad" testID="co-phone" /></View>
+                </View>
+                <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); setSelectedAddressId(null); setSubmitError(null); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
+                <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" />
+                {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={17} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ العنوان في عناويني"}</T></Pressable> : null}
+              </View>
+            )}
           </View>
-
-          <T weight="displayBold" size={type.lg} style={{ marginBottom: spacing.md }}>معلومات التوصيل</T>
-          <Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); }} testID="co-name" />
-          <Input icon="phone" placeholder="رقم هاتف المستلم" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); }} keyboardType="phone-pad" testID="co-phone" />
-          <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); setSelectedAddressId(null); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
-          {!selectedAddressId ? <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" /> : null}
-          <Input icon="edit-3" placeholder="ملاحظات (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
-          {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={18} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ هذا العنوان ضمن عناويني"}</T></Pressable> : null}
-
-          <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>موقع التوصيل على الخريطة</T>
+          <View style={styles.sectionHeading}>
+            <View style={styles.sectionHeadingText}>
+              <T weight="displayBold" size={type.lg}>موقع التوصيل</T>
+              <T color={colors.muted} size={type.xs}>حدد المكان بدقة لحساب رسوم التوصيل</T>
+            </View>
+            <View style={[styles.locationStatus, coords ? styles.locationStatusReady : styles.locationStatusEmpty]}>
+              <Feather name={coords ? "check-circle" : "map-pin"} size={15} color={coords ? colors.success : colors.muted} />
+              <T color={coords ? colors.success : colors.muted} size={type.xs} weight="semi">{coords ? (quoteLoading ? "جارٍ حساب الرسوم" : deliveryQuote ? deliveryPriceLabel : "بانتظار الرسوم") : "مطلوب"}</T>
+            </View>
+          </View>
           {coords ? (
             <View style={styles.mapCard}>
               <InteractiveMap
@@ -285,20 +314,32 @@ export default function Checkout() {
           </Pressable>
           {deliveryQuote?.area_id === "default_delivery" ? <T color={colors.muted} size={type.sm} style={{ marginTop: spacing.xs }}>طُبّق السعر العام لأن الموقع لا يطابق منطقة ذات سعر خاص.</T> : null}
 
-          <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>كود الخصم</T>
-          <View style={styles.couponRow}>
-            <View style={{ flex: 1 }}>
-              <Input icon="tag" placeholder="أدخل الكود" value={couponCode} onChangeText={(value: string) => { setCouponCode(value); setAppliedCoupon(null); }} autoCapitalize="characters" testID="co-coupon" />
-            </View>
-            <Pressable testID="co-apply-coupon" onPress={applyCoupon} disabled={couponLoading} style={styles.couponBtn}>
-              {couponLoading ? <ActivityIndicator color="#fff" /> : <T weight="bold" color="#fff">تطبيق</T>}
+          <View style={styles.extrasCard}>
+            <Pressable testID="co-extras-toggle" onPress={() => setExtrasOpen((open) => !open)} style={styles.extrasHeader} accessibilityRole="button" accessibilityState={{ expanded: extrasOpen }}>
+              <View style={styles.extrasIcon}><Feather name="sliders" size={17} color={colors.brandPrimary} /></View>
+              <View style={styles.extrasText}>
+                <T weight="bold">خيارات إضافية</T>
+                <T color={appliedCoupon ? colors.success : colors.muted} size={type.xs}>{appliedCoupon ? "تم تطبيق كود الخصم" : "ملاحظات وكود خصم (اختياري)"}</T>
+              </View>
+              <Feather name={extrasOpen ? "chevron-up" : "chevron-down"} size={19} color={colors.muted} />
             </Pressable>
+            {extrasOpen ? <View style={styles.extrasBody}>
+              <Input icon="edit-3" placeholder="ملاحظات للمندوب (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
+              <View style={styles.couponRow}>
+                <View style={{ flex: 1 }}>
+                  <Input icon="tag" placeholder="كود الخصم" value={couponCode} onChangeText={(value: string) => { setCouponCode(value); setAppliedCoupon(null); }} autoCapitalize="characters" testID="co-coupon" />
+                </View>
+                <Pressable testID="co-apply-coupon" onPress={applyCoupon} disabled={couponLoading} style={styles.couponBtn}>
+                  {couponLoading ? <ActivityIndicator color="#fff" /> : <T weight="bold" color="#fff">تطبيق</T>}
+                </Pressable>
+              </View>
+              {appliedCoupon ? <T color={colors.success} size={type.sm} style={styles.couponSuccess}>
+                {appliedCoupon.applies_to === "delivery" ? "خصم على التوصيل" : "خصم على الفاتورة"} — وفرت {formatPrice(appliedCoupon.discount_amount)}
+              </T> : null}
+            </View> : null}
           </View>
-          {appliedCoupon ? <T color={colors.success} size={type.sm} style={{ marginTop: -spacing.sm }}>
-            {appliedCoupon.applies_to === "delivery" ? "خصم على التوصيل" : "خصم على الفاتورة"} — وفرت {formatPrice(appliedCoupon.discount_amount)}
-          </T> : null}
-
           <View style={styles.summary}>
+            <View style={styles.summaryHeading}><View><T weight="displayBold" size={type.lg}>ملخص الطلب</T><T color={colors.muted} size={type.xs} style={{ marginTop: 2 }}>{cart.count} منتجات</T></View><View style={styles.summaryHeadingIcon}><Feather name="shopping-bag" size={18} color={colors.brandPrimary} /></View></View>
             <View style={styles.sumRow}><T color={colors.muted}>المجموع الفرعي</T><T weight="semi">{formatPrice(subtotal)}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>عدد المنتجات</T><T weight="semi">{cart.count}</T></View>
             <View style={styles.sumRow}><T color={colors.muted}>التوصيل</T><T weight="semi" color={deliveryQuote ? (deliveryFee > 0 ? colors.onSurface : colors.success) : colors.muted}>{deliveryLabel}</T></View>
@@ -310,7 +351,8 @@ export default function Checkout() {
           </View>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-          <Button title="تأكيد الطلب" icon="check" onPress={submit} loading={loading} testID="co-submit" />
+          {submitError ? <View testID="co-submit-error" style={styles.submitError}><Feather name="alert-circle" size={18} color={colors.error} /><T color={colors.error} size={type.sm} style={{ flex: 1, textAlign: "right", lineHeight: 19 }}>{submitError}</T></View> : null}
+          <Button title={loading ? "جارٍ تأكيد الطلب..." : deliveryQuote ? "تأكيد الطلب · " + formatPrice(displayedTotal) : "تأكيد الطلب"} icon="check" onPress={submit} loading={loading} testID="co-submit" />
         </View>
       </KeyboardAvoidingView>
       <Modal visible={manualMapOpen} animationType="slide" onRequestClose={() => setManualMapOpen(false)}>
@@ -359,6 +401,7 @@ function Input({ icon, testID, multiline, ...rest }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
+  checkoutContent: { padding: spacing.lg, paddingTop: spacing.md },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
@@ -371,19 +414,47 @@ const styles = StyleSheet.create({
   mapHint: { textAlign: "right", paddingHorizontal: spacing.md, paddingTop: spacing.sm, lineHeight: 18 },
   mapFoot: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.md, paddingTop: spacing.sm },
   mapFootRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  summary: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.xl, gap: spacing.sm },
+  summary: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: spacing.md, gap: spacing.md },
   summaryHint: { marginTop: spacing.xs, textAlign: "right" },
   sumRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
   sumTotal: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.md, marginTop: spacing.xs },
   couponRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: spacing.sm },
   couponBtn: { height: 52, paddingHorizontal: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
-  savedSection: { backgroundColor: "#FFFFFF", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.xl, gap: spacing.sm },
+  savedSection: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.md, gap: spacing.sm },
   sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   savedCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   savedCardActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
   savedCardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   savedCardTitle: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
   saveAddressBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 48, marginBottom: spacing.md },
+  sectionHeadingText: { flex: 1, alignItems: "flex-start", gap: 2 },
+  addAddressButton: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.brandTertiary },
+  addressLoading: { paddingVertical: spacing.md },
+  addressEmpty: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingVertical: spacing.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+  savedAddressList: { gap: spacing.sm },
+  savedAddressInfo: { flex: 1, alignItems: "flex-start" },
+  savedAddressLine: { textAlign: "right", marginTop: 2 },
+  defaultBadge: { paddingHorizontal: spacing.xs, paddingVertical: 1, borderRadius: radius.sm, backgroundColor: "#F7F0D7" },
+  addressSelectMark: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  addressSelectMarkActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  editAddressAction: { alignSelf: "flex-start", flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingVertical: spacing.xs },
+  deliveryForm: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.xs, gap: spacing.xs },
+  sectionCaption: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginBottom: spacing.xs },
+  contactRow: { flexDirection: "row-reverse", gap: spacing.sm },
+  contactField: { flex: 1, minWidth: 0 },
+  sectionHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
+  locationStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.lg },
+  locationStatusReady: { backgroundColor: colors.brandTertiary },
+  locationStatusEmpty: { backgroundColor: colors.surfaceSecondary },
+  extrasCard: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, marginTop: spacing.md, overflow: "hidden" },
+  extrasHeader: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, padding: spacing.md },
+  extrasIcon: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  extrasText: { flex: 1, alignItems: "flex-start", gap: 2 },
+  extrasBody: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, padding: spacing.md },
+  couponSuccess: { marginTop: -spacing.xs, marginBottom: spacing.xs },
+  summaryHeading: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
+  summaryHeadingIcon: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  submitError: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFF1F0", borderWidth: 1, borderColor: colors.errorSoft, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   manualPicker: { flex: 1, backgroundColor: colors.surface },
   manualPickerHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   manualPickerMap: { flex: 1, backgroundColor: colors.surfaceSecondary, overflow: "hidden" },
@@ -392,5 +463,5 @@ const styles = StyleSheet.create({
   manualPickerFooter: { backgroundColor: "#FFFFFF", padding: spacing.lg, gap: spacing.sm, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderTopWidth: 1, borderTopColor: colors.border },
   manualPickerHint: { textAlign: "right" },
   manualPickerSave: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.md, minHeight: 52, marginTop: spacing.sm },
-  footer: { backgroundColor: colors.surface, padding: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, zIndex: 3 },
+  footer: { backgroundColor: colors.surface, padding: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, zIndex: 3 },
 });
