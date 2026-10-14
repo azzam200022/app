@@ -14,6 +14,35 @@ type SupportMessage = { id: string; message: string; sender_role: "customer" | "
 
 type TicketDetails = { ticket: SupportTicket; messages: SupportMessage[] };
 
+function normalizeTickets(value: unknown): SupportTicket[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    const id = String(item?.id ?? "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportTicket[];
+}
+
+function normalizeMessages(value: unknown): SupportMessage[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item: any) => {
+    if (!item || typeof item !== "object") return false;
+    const id = String(item.id ?? "").trim();
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as SupportMessage[];
+}
+
+function appendMessage(messages: SupportMessage[], incoming: SupportMessage): SupportMessage[] {
+  if (incoming?.id && messages.some((item) => item.id === incoming.id)) return messages;
+  return [...messages, incoming];
+}
+
 const CATEGORIES = [
   { value: "order", label: "طلب" },
   { value: "delivery", label: "توصيل" },
@@ -30,10 +59,12 @@ export default function Support() {
   const { show } = useToast();
   const initialTicketId = typeof params.ticketId === "string" ? params.ticketId : undefined;
   const initialOrderId = typeof params.orderId === "string" ? params.orderId : undefined;
+  const [supportView, setSupportView] = useState<"tickets" | "new">(initialOrderId ? "new" : "tickets");
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selected, setSelected] = useState<TicketDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingTicket, setLoadingTicket] = useState(false);
   const [sending, setSending] = useState(false);
   const [subject, setSubject] = useState("");
@@ -43,36 +74,45 @@ export default function Support() {
   const [attachmentUri, setAttachmentUri] = useState<string | null>(null);
   const [replyAttachmentUri, setReplyAttachmentUri] = useState<string | null>(null);
 
-  const loadTickets = useCallback(async () => {
-    try {
-      const [data, unread] = await Promise.all([api.supportTickets(), api.supportUnreadCount()]);
-      const nextTickets = Array.isArray(data) ? data : [];
-      setTickets(nextTickets);
-      setUnreadCount(Number(unread?.count) || 0);
-      if (initialTicketId) {
-        const found = nextTickets.find((item: SupportTicket) => item.id === initialTicketId);
-        if (found) await openTicket(found.id, !!found.customer_unread);
-      }
-    } catch (error: any) {
-      show(error.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [initialTicketId, show]);
-
   const openTicket = useCallback(async (ticketId: string, wasUnread = false) => {
     setLoadingTicket(true);
     try {
-      await api.markSupportRead(ticketId);
-      setSelected(await api.supportTicket(ticketId));
-      setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, customer_unread: false } : item));
-      if (wasUnread) setUnreadCount((current) => Math.max(0, current - 1));
+      const details = await api.supportTicket(ticketId);
+      if (!details?.ticket) throw new Error("تعذّر العثور على تذكرة الدعم.");
+      setSelected({ ...details, messages: normalizeMessages(details.messages) });
+      try {
+        await api.markSupportRead(ticketId);
+        setTickets((current) => current.map((item) => item.id === ticketId ? { ...item, customer_unread: false } : item));
+        if (wasUnread) setUnreadCount((current) => Math.max(0, current - 1));
+      } catch {
+        show("تم فتح المحادثة، لكن تعذّر تحديث علامة القراءة.", "error");
+      }
     } catch (error: any) {
-      show(error.message, "error");
+      show(error?.message || "تعذّر فتح تذكرة الدعم.", "error");
     } finally {
       setLoadingTicket(false);
     }
   }, [show]);
+
+
+  const loadTickets = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [data, unread] = await Promise.all([api.supportTickets(), api.supportUnreadCount().catch(() => null)]);
+      const nextTickets = normalizeTickets(data);
+      setTickets(nextTickets);
+      if (unread) setUnreadCount(Number(unread.count) || 0);
+      if (initialTicketId) {
+        const found = nextTickets.find((item) => item.id === initialTicketId);
+        if (found) await openTicket(found.id, !!found.customer_unread);
+      }
+    } catch (error: any) {
+      setLoadError(error?.message || "تعذّر تحميل طلبات الدعم.");
+    } finally {
+      setLoading(false);
+    }
+  }, [initialTicketId, openTicket]);
 
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
@@ -123,7 +163,9 @@ export default function Support() {
     try {
       const attachment_url = await uploadAttachment(attachmentUri);
       const created = await api.createSupportTicket({ category, subject: subject.trim(), message: newMessage.trim(), order_id: initialOrderId, attachment_url });
-      setSelected(created);
+      setSelected({ ...created, messages: normalizeMessages(created.messages) });
+      setSupportView("tickets");
+      setLoadError(null);
       setTickets((current) => [created.ticket, ...current.filter((item) => item.id !== created.ticket.id)]);
       setSubject("");
       setNewMessage("");
@@ -142,7 +184,13 @@ export default function Support() {
     try {
       const attachment_url = await uploadAttachment(replyAttachmentUri);
       const message = await api.sendSupportMessage(selected.ticket.id, { message: reply.trim(), attachment_url });
-      setSelected((current) => current ? { ...current, messages: [...current.messages, message], ticket: { ...current.ticket, status: "open" } } : current);
+      setSelected((current) => {
+        if (!current) return current;
+        const previousMessages = normalizeMessages(current.messages);
+        const messages = appendMessage(previousMessages, message);
+        const added = messages.length > previousMessages.length;
+        return { ...current, messages, ticket: { ...current.ticket, status: "open", message_count: Number(current.ticket.message_count || 0) + (added ? 1 : 0) } };
+      });
       setTickets((current) => current.map((item) => item.id === selected.ticket.id ? { ...item, status: "open", updated_at: new Date().toISOString() } : item));
       setReply("");
       setReplyAttachmentUri(null);
@@ -185,10 +233,10 @@ export default function Support() {
               <View style={styles.statusDot}><Feather name="message-circle" size={18} color={colors.brandPrimary} /></View>
             </View>
             <View style={styles.messagesCard}>
-              {selected.messages.map((item) => {
+              {normalizeMessages(selected.messages).map((item, index) => {
                 const own = item.sender_role === "customer";
                 return (
-                  <View key={item.id} style={[styles.messageRow, own ? styles.messageRowOwn : styles.messageRowManager]}>
+                  <View key={(item.id || "message") + ":" + index} style={[styles.messageRow, own ? styles.messageRowOwn : styles.messageRowManager]}>
                     <View style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleManager]}>
                       {!own && <T color={colors.brandPrimary} weight="bold" size={type.xs} style={{ marginBottom: 4 }}>{item.sender_name || "الدعم"}</T>}
                       {item.message ? <T color={own ? "#fff" : colors.onSurface} style={{ lineHeight: 22 }}>{item.message}</T> : null}
@@ -208,20 +256,64 @@ export default function Support() {
             </View>
           </View>
         ) : (
-          <View>
-            {tickets.length > 0 && <View style={styles.section}><View style={styles.sectionTitleRow}><T weight="displayBold" size={type.xl}>طلباتي السابقة</T><Pressable onPress={() => { setSubject(""); setNewMessage(""); setAttachmentUri(null); }}><T color={colors.brandPrimary} weight="semi">طلب جديد</T></Pressable></View><View style={styles.ticketList}>{tickets.map((item) => <Pressable key={item.id} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id, !!item.customer_unread)} style={styles.ticketItem}><View style={styles.ticketItemText}><T weight="semi">{item.subject}</T><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginTop: 4 }}><T color={colors.muted} size={type.sm}>{STATUS_LABEL[item.status] || item.status}</T>{item.customer_unread ? <View style={styles.unreadPill}><T size={type.xs} weight="bold" color={colors.error}>رد جديد</T></View> : null}</View></View><Feather name="chevron-left" size={20} color={colors.muted} /></Pressable>)}</View></View>}
-            <View style={styles.section}><T weight="displayBold" size={type.xl}>أرسل رسالة للدعم</T><T color={colors.muted} size={type.sm} style={styles.sectionHint}>صف المشكلة بالتفصيل، ويمكنك إرفاق صورة توضحها.</T></View>
-            <View style={styles.formCard}>
-              {initialOrderId ? <View style={styles.orderLink}><Feather name="package" size={17} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm} weight="semi">الدعم متعلق بالطلب: {initialOrderId}</T></View> : null}
-              <T weight="semi" style={styles.label}>نوع المشكلة</T>
-              <View style={styles.categoryRow}>{CATEGORIES.map((item) => <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, category === item.value && styles.categoryChipActive]}><T color={category === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View>
-              <T weight="semi" style={styles.label}>عنوان المشكلة</T>
-              <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: لم يصل طلبي" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
-              <T weight="semi" style={styles.label}>التفاصيل</T>
-              <TextInput value={newMessage} onChangeText={setNewMessage} placeholder="اكتب تفاصيل المشكلة هنا..." placeholderTextColor={colors.muted} multiline numberOfLines={5} style={[styles.input, styles.multilineInput]} textAlign="right" />
-              {attachmentUri && <View style={styles.attachmentPreview}><Image source={{ uri: attachmentUri }} style={styles.previewImage} contentFit="cover" /><Pressable onPress={() => setAttachmentUri(null)} style={styles.removeAttachment}><Feather name="x" size={15} color="#fff" /></Pressable></View>}
-              <View style={styles.formActions}><Pressable testID="support-add-image" onPress={() => void pickImage(false)} style={styles.attachButton}><Feather name="image" size={20} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm}>إرفاق صورة</T></Pressable><Pressable testID="support-send" onPress={() => void createTicket()} disabled={sending} style={[styles.sendButton, sending && styles.disabled]}><T color="#fff" weight="bold">{sending ? "جارٍ الإرسال" : "إرسال للدعم"}</T><Feather name="send" size={17} color="#fff" /></Pressable></View>
+          <View style={styles.homeContent}>
+            {loadError ? <View testID="support-load-error" style={styles.loadErrorCard}><Feather name="alert-circle" size={18} color={colors.error} /><T color={colors.error} size={type.sm} style={{ flex: 1, textAlign: "right" }}>{loadError}</T><Pressable testID="support-retry" onPress={() => void loadTickets()}><T color={colors.brandPrimary} size={type.sm} weight="bold">إعادة المحاولة</T></Pressable></View> : null}
+            <View style={styles.modeSwitch}>
+              <Pressable testID="support-mode-tickets" onPress={() => setSupportView("tickets")} style={[styles.modeButton, supportView === "tickets" && styles.modeButtonActive]}>
+                <Feather name="inbox" size={17} color={supportView === "tickets" ? colors.brandPrimary : colors.muted} />
+                <T color={supportView === "tickets" ? colors.brandPrimary : colors.muted} size={type.sm} weight="semi">طلباتي</T>
+                <View style={[styles.modeCount, supportView === "tickets" && styles.modeCountActive]}><T color={supportView === "tickets" ? colors.brandPrimary : colors.muted} size={type.xs} weight="bold">{tickets.length}</T></View>
+              </Pressable>
+              <Pressable testID="support-mode-new" onPress={() => setSupportView("new")} style={[styles.modeButton, supportView === "new" && styles.modeButtonActive]}>
+                <Feather name="plus-circle" size={17} color={supportView === "new" ? colors.brandPrimary : colors.muted} />
+                <T color={supportView === "new" ? colors.brandPrimary : colors.muted} size={type.sm} weight="semi">طلب جديد</T>
+              </Pressable>
             </View>
+            {supportView === "tickets" ? (
+              tickets.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionTitleRow}><View><T weight="displayBold" size={type.lg}>طلبات الدعم</T><T color={colors.muted} size={type.sm} style={{ marginTop: 3 }}>تابع آخر مستجدات محادثاتك</T></View><View style={styles.ticketSummary}><Feather name="message-square" size={15} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.xs} weight="bold">{tickets.length}</T></View></View>
+                  <View style={styles.ticketCards}>
+                    {tickets.map((item, index) => (
+                      <Pressable key={(item.id || "ticket") + ":" + index} testID={"support-ticket-" + item.id} onPress={() => void openTicket(item.id, !!item.customer_unread)} style={({ pressed }) => [styles.ticketCard, pressed && styles.ticketCardPressed]}>
+                        <View style={styles.ticketCardTop}>
+                          <View style={styles.customerTicketIcon}><Feather name="message-circle" size={18} color={colors.brandPrimary} /></View>
+                          <View style={styles.customerTicketBadges}>
+                            <View style={[styles.ticketStatus, item.status === "open" ? styles.openStatus : item.status === "pending" ? styles.pendingStatus : styles.closedStatus]}><T color={item.status === "open" ? colors.success : item.status === "pending" ? colors.warning : colors.muted} size={type.xs} weight="bold">{STATUS_LABEL[item.status] || item.status}</T></View>
+                            {item.customer_unread ? <View style={styles.unreadPill}><View style={styles.unreadDot} /><T size={type.xs} weight="bold" color={colors.error}>رد جديد</T></View> : null}
+                          </View>
+                        </View>
+                        <T weight="bold" size={type.lg} style={styles.ticketSubject} numberOfLines={1}>{item.subject}</T>
+                        {item.order_id ? <View style={styles.ticketOrder}><Feather name="package" size={14} color={colors.muted} /><T color={colors.muted} size={type.xs}>مرتبط بالطلب #{item.order_id}</T></View> : null}
+                        <View style={styles.ticketFooter}><View style={styles.ticketMessageCount}><Feather name="message-square" size={14} color={colors.muted} /><T color={colors.muted} size={type.xs}>{item.message_count || 1} رسائل</T></View><View style={styles.openTicketButton}><Feather name="chevron-left" size={17} color={colors.brandPrimary} /></View></View>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.emptyCard}>
+                  <View style={styles.emptyIcon}><Feather name="message-circle" size={27} color={colors.brandPrimary} /></View>
+                  <T weight="displayBold" size={type.lg}>لا توجد طلبات دعم بعد</T>
+                  <T color={colors.muted} size={type.sm} style={styles.emptyText}>أرسل لنا مشكلتك وسيتابع فريق الدعم معك هنا.</T>
+                  <Pressable testID="support-empty-new" onPress={() => setSupportView("new")} style={styles.emptyButton}><T color="#fff" weight="bold">إنشاء طلب دعم</T><Feather name="arrow-left" size={16} color="#fff" /></Pressable>
+                </View>
+              )
+            ) : (
+              <View>
+                <View style={styles.formIntro}><View style={styles.formIntroIcon}><Feather name="headphones" size={20} color={colors.brandPrimary} /></View><View style={styles.formIntroText}><T weight="displayBold" size={type.lg}>أرسل رسالة للدعم</T><T color={colors.muted} size={type.sm} style={{ marginTop: 3 }}>صف المشكلة وسنساعدك في أقرب وقت.</T></View></View>
+                <View style={styles.formCard}>
+                  {initialOrderId ? <View style={styles.orderLink}><Feather name="package" size={17} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm} weight="semi">الدعم متعلق بالطلب: {initialOrderId}</T></View> : null}
+                  <T weight="semi" style={styles.label}>نوع المشكلة</T>
+                  <View style={styles.categoryRow}>{CATEGORIES.map((item) => <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, category === item.value && styles.categoryChipActive]}><T color={category === item.value ? "#fff" : colors.onSurface} size={type.sm} weight="semi">{item.label}</T></Pressable>)}</View>
+                  <T weight="semi" style={styles.label}>عنوان المشكلة</T>
+                  <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: لم يصل طلبي" placeholderTextColor={colors.muted} style={styles.input} textAlign="right" />
+                  <T weight="semi" style={styles.label}>التفاصيل</T>
+                  <TextInput value={newMessage} onChangeText={setNewMessage} placeholder="اكتب تفاصيل المشكلة هنا..." placeholderTextColor={colors.muted} multiline numberOfLines={5} style={[styles.input, styles.multilineInput]} textAlign="right" />
+                  {attachmentUri && <View style={styles.attachmentPreview}><Image source={{ uri: attachmentUri }} style={styles.previewImage} contentFit="cover" /><Pressable onPress={() => setAttachmentUri(null)} style={styles.removeAttachment}><Feather name="x" size={15} color="#fff" /></Pressable></View>}
+                  <View style={styles.formActions}><Pressable testID="support-add-image" onPress={() => void pickImage(false)} style={styles.attachButton}><Feather name="image" size={20} color={colors.brandPrimary} /><T color={colors.brandPrimary} size={type.sm}>إرفاق صورة</T></Pressable><Pressable testID="support-send" onPress={() => void createTicket()} disabled={sending} style={[styles.sendButton, sending && styles.disabled]}><T color="#fff" weight="bold">{sending ? "جارٍ الإرسال" : "إرسال للدعم"}</T><Feather name="send" size={17} color="#fff" /></Pressable></View>
+                </View>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -242,10 +334,41 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.lg },
   sectionTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md },
   sectionHint: { marginTop: spacing.xs, lineHeight: 21 },
+  loadErrorCard: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.errorSoft, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   ticketList: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden" },
   ticketItem: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
   ticketItemText: { flex: 1 },
-  unreadPill: { borderRadius: radius.pill, backgroundColor: colors.errorSoft, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  unreadPill: { flexDirection: "row-reverse", alignItems: "center", gap: 4, borderRadius: radius.pill, backgroundColor: colors.errorSoft, paddingHorizontal: spacing.sm, paddingVertical: 5 },
+  unreadDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.error },
+  homeContent: { gap: spacing.md },
+  modeSwitch: { flexDirection: "row-reverse", gap: spacing.xs, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: 4, marginBottom: spacing.sm },
+  modeButton: { flex: 1, minHeight: 46, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, borderRadius: radius.md, paddingHorizontal: spacing.sm },
+  modeButtonActive: { backgroundColor: "#fff", shadowColor: "#1C4932", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
+  modeCount: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(117,117,117,0.12)", paddingHorizontal: 4 },
+  modeCountActive: { backgroundColor: colors.brandTertiary },
+  ticketSummary: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill },
+  ticketCards: { gap: spacing.md },
+  ticketCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: 22, padding: spacing.lg, shadowColor: "#1C4932", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.055, shadowRadius: 10, elevation: 1 },
+  ticketCardPressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+  ticketCardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  customerTicketIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
+  customerTicketBadges: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  ticketStatus: { borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 5 },
+  openStatus: { backgroundColor: "rgba(46,125,50,0.12)" },
+  pendingStatus: { backgroundColor: "rgba(230,145,56,0.14)" },
+  closedStatus: { backgroundColor: "rgba(117,117,117,0.12)" },
+  ticketSubject: { textAlign: "right", marginTop: spacing.md },
+  ticketOrder: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm },
+  ticketFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
+  ticketMessageCount: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.surface, borderRadius: radius.pill },
+  openTicketButton: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
+  emptyCard: { alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: spacing["2xl"], marginTop: spacing.sm },
+  emptyIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", marginBottom: spacing.md },
+  emptyText: { textAlign: "center", lineHeight: 21, marginTop: spacing.xs },
+  emptyButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, marginTop: spacing.lg },
+  formIntro: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  formIntroIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  formIntroText: { flex: 1, alignItems: "flex-end" },
   formCard: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   orderLink: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.brandTertiary, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
   label: { textAlign: "right", marginBottom: spacing.sm, marginTop: spacing.sm },

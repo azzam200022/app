@@ -2710,8 +2710,9 @@ async def admin_review_return(return_id: str, user=Depends(require_manager)):
 @api.post("/support/tickets")
 async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user)):
     message_text = body.message.strip()
-    if not message_text:
-        raise HTTPException(status_code=400, detail="اكتب تفاصيل المشكلة أولاً")
+    attachment_url = (body.attachment_url or "").strip() or None
+    if not message_text and not attachment_url:
+        raise HTTPException(status_code=400, detail="اكتب تفاصيل المشكلة أو أرفق صورة")
     order = None
     if body.order_id:
         order = await db.orders.find_one(
@@ -2736,7 +2737,7 @@ async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user
         "message_count": 1,
         "manager_unread": True,
         "customer_unread": False,
-        "last_message_preview": message_text[:160],
+        "last_message_preview": message_text[:160] or ("مرفق صورة" if attachment_url else ""),
         "created_at": now,
         "updated_at": now,
     }
@@ -2748,7 +2749,7 @@ async def create_support_ticket(body: SupportTicketIn, user=Depends(require_user
         "sender_role": "customer",
         "sender_name": user.get("name") or "مستخدم",
         "message": message_text,
-        "attachment_url": body.attachment_url,
+        "attachment_url": attachment_url,
         "created_at": now,
     }
     await db.support_tickets.insert_one(ticket)
