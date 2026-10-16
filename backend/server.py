@@ -3153,12 +3153,17 @@ async def _load_agent_accounting_data(agent_ids):
     unique_ids = list(dict.fromkeys(str(agent_id) for agent_id in agent_ids if agent_id))
     for start in range(0, len(unique_ids), 30):
         batch_ids = unique_ids[start : start + 30]
-        query = {"agent_id": {"$in": batch_ids}}
-        order_documents.extend(
-            await db.orders.find(query, _AGENT_STATS_ORDER_PROJECTION).to_list(None)
-        )
+        agent_filter = {"agent_id": {"$in": batch_ids}}
+        for status in ("delivered", "out_for_delivery"):
+            order_documents.extend(
+                await db.orders.find(
+                    {**agent_filter, "status": status}, _AGENT_STATS_ORDER_PROJECTION
+                ).to_list(None)
+            )
         receipt_documents.extend(
-            await db.agent_cash_receipts.find(query, _AGENT_STATS_RECEIPT_PROJECTION).to_list(None)
+            await db.agent_cash_receipts.find(
+                agent_filter, _AGENT_STATS_RECEIPT_PROJECTION
+            ).to_list(None)
         )
     return order_documents, receipt_documents
 
@@ -3181,7 +3186,7 @@ def _agent_statistics(agent, order_documents, receipt_documents, target_date, tz
 
     def earnings_total(orders):
         return round(sum(
-            max(_agent_safe_amount(item.get("agent_fee", item.get("delivery_fee", 0))), 0.0)
+            max(_agent_safe_amount(item.get("agent_fee") if item.get("agent_fee") is not None else item.get("delivery_fee", 0)), 0.0)
             for item in orders
         ), 2)
 
