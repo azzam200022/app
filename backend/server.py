@@ -7,6 +7,7 @@ import json
 import io
 import asyncio
 import logging
+import math
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
@@ -340,6 +341,11 @@ class AssignIn(BaseModel):
 
 class AgentUpdateIn(BaseModel):
     phone: Optional[str] = Field(None, max_length=30)
+
+
+class AgentCashReceiptIn(BaseModel):
+    amount: float = Field(..., gt=0, le=1000000000)
+    settlement_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ReturnItemIn(BaseModel):
@@ -3073,6 +3079,282 @@ async def admin_assign(oid: str, body: AssignIn, user=Depends(require_manager)):
 async def admin_users(user=Depends(require_manager)):
     docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
     return docs
+
+
+
+_AGENT_STATS_ORDER_PROJECTION = {
+    "_id": 0,
+    "agent_id": 1,
+    "status": 1,
+    "total": 1,
+    "returned_total": 1,
+    "return_status": 1,
+    "delivery_fee": 1,
+    "agent_fee": 1,
+    "delivered_at": 1,
+    "agent_location": 1,
+}
+_AGENT_STATS_RECEIPT_PROJECTION = {
+    "_id": 0,
+    "id": 1,
+    "agent_id": 1,
+    "amount": 1,
+    "settlement_date": 1,
+    "received_at": 1,
+    "receiver_id": 1,
+    "receiver_name": 1,
+}
+
+
+def _agent_stats_date(date_value, tz_offset_minutes):
+    if date_value:
+        try:
+            return datetime.strptime(date_value, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="التاريخ غير صالح")
+    current = now_utc()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    local_zone = timezone(timedelta(minutes=-tz_offset_minutes))
+    return current.astimezone(local_zone).date()
+
+
+def _agent_parse_timestamp(value):
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _agent_date_matches(value, target_date, tz_offset_minutes):
+    parsed = _agent_parse_timestamp(value)
+    if parsed is None:
+        return False
+    local_zone = timezone(timedelta(minutes=-tz_offset_minutes))
+    return parsed.astimezone(local_zone).date() == target_date
+
+
+def _agent_safe_amount(value):
+    try:
+        amount = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return amount if math.isfinite(amount) else 0.0
+
+
+async def _load_agent_accounting_data(agent_ids):
+    order_documents = []
+    receipt_documents = []
+    unique_ids = list(dict.fromkeys(str(agent_id) for agent_id in agent_ids if agent_id))
+    for start in range(0, len(unique_ids), 30):
+        batch_ids = unique_ids[start : start + 30]
+        agent_filter = {"agent_id": {"$in": batch_ids}}
+        for status in ("delivered", "out_for_delivery"):
+            order_documents.extend(
+                await db.orders.find(
+                    {**agent_filter, "status": status}, _AGENT_STATS_ORDER_PROJECTION
+                ).to_list(None)
+            )
+        receipt_documents.extend(
+            await db.agent_cash_receipts.find(
+                agent_filter, _AGENT_STATS_RECEIPT_PROJECTION
+            ).to_list(None)
+        )
+    return order_documents, receipt_documents
+
+
+def _agent_statistics(agent, order_documents, receipt_documents, target_date, tz_offset_minutes):
+    agent_id = str(agent.get("user_id") or "")
+    agent_orders = [item for item in order_documents if str(item.get("agent_id") or "") == agent_id]
+    delivered_orders = [item for item in agent_orders if item.get("status") == "delivered"]
+    today_orders = [
+        item for item in delivered_orders
+        if _agent_date_matches(item.get("delivered_at"), target_date, tz_offset_minutes)
+    ]
+    receipts = [
+        item for item in receipt_documents
+        if str(item.get("agent_id") or "") == agent_id
+    ]
+
+    def invoice_total(orders):
+        return round(sum(max(order_amounts(item)[1], 0.0) for item in orders), 2)
+
+    def earnings_total(orders):
+        return round(sum(
+            max(_agent_safe_amount(item.get("agent_fee") if item.get("agent_fee") is not None else item.get("delivery_fee", 0)), 0.0)
+            for item in orders
+        ), 2)
+
+    total_invoices = invoice_total(delivered_orders)
+    total_earnings = earnings_total(delivered_orders)
+    total_received = round(sum(max(_agent_safe_amount(item.get("amount")), 0.0) for item in receipts), 2)
+    today_received = round(sum(
+        max(_agent_safe_amount(item.get("amount")), 0.0)
+        for item in receipts
+        if item.get("settlement_date") == target_date.isoformat()
+        or (not item.get("settlement_date") and _agent_date_matches(item.get("received_at"), target_date, tz_offset_minutes))
+    ), 2)
+    active_orders = [item for item in agent_orders if item.get("status") == "out_for_delivery"]
+
+    last_location = None
+    last_location_at = None
+    for order in active_orders:
+        candidate = order.get("agent_location")
+        if not isinstance(candidate, dict) or candidate.get("lat") is None or candidate.get("lng") is None:
+            continue
+        candidate_at = _agent_parse_timestamp(candidate.get("at"))
+        if last_location is None or (candidate_at and (last_location_at is None or candidate_at > last_location_at)):
+            last_location = candidate
+            last_location_at = candidate_at
+
+    now = now_utc()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    location_age = now.astimezone(timezone.utc) - last_location_at if last_location_at else None
+    location_is_live = bool(location_age is not None and timedelta(0) <= location_age <= timedelta(minutes=5))
+
+    return {
+        "user_id": agent_id,
+        "name": agent.get("name") or "مندوب",
+        "email": agent.get("email"),
+        "phone": agent.get("phone") or agent.get("phone_number"),
+        "today_delivered_count": len(today_orders),
+        "today_invoice_total": invoice_total(today_orders),
+        "today_earnings": earnings_total(today_orders),
+        "all_time_delivered_count": len(delivered_orders),
+        "all_time_invoice_total": total_invoices,
+        "all_time_earnings": total_earnings,
+        "today_cash_received": today_received,
+        "total_cash_received": total_received,
+        "cash_outstanding": round(max(total_invoices - total_earnings - total_received, 0.0), 2),
+        "active_orders": len(active_orders),
+        "last_location": ({
+            "lat": last_location.get("lat"),
+            "lng": last_location.get("lng"),
+            "at": last_location.get("at"),
+        } if last_location else None),
+        "location_is_live": location_is_live,
+    }
+
+
+def _agent_receipt_view(receipt):
+    return {
+        "id": receipt.get("id"),
+        "amount": round(max(_agent_safe_amount(receipt.get("amount")), 0.0), 2),
+        "settlement_date": receipt.get("settlement_date"),
+        "received_at": receipt.get("received_at"),
+        "receiver_id": receipt.get("receiver_id"),
+        "receiver_name": receipt.get("receiver_name") or "الإدارة",
+    }
+
+
+@api.get("/admin/agents/overview")
+async def admin_agent_overview(
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz_offset_minutes: int = Query(0, ge=-840, le=840),
+    user=Depends(require_manager),
+):
+    target_date = _agent_stats_date(date, tz_offset_minutes)
+    agents = await db.users.find(
+        {"role": "delivery"}, {"_id": 0, "password_hash": 0}
+    ).to_list(200)
+    order_documents, receipt_documents = await _load_agent_accounting_data(
+        [agent.get("user_id") for agent in agents]
+    )
+    summaries = [
+        _agent_statistics(agent, order_documents, receipt_documents, target_date, tz_offset_minutes)
+        for agent in agents
+        if agent.get("user_id")
+    ]
+    summaries.sort(key=lambda item: item["name"].casefold())
+    totals = {
+        "agents_count": len(summaries),
+        "active_agents": sum(1 for item in summaries if item["active_orders"] > 0),
+        "delivered_today": sum(item["today_delivered_count"] for item in summaries),
+        "invoices_today": round(sum(item["today_invoice_total"] for item in summaries), 2),
+        "earnings_today": round(sum(item["today_earnings"] for item in summaries), 2),
+        "cash_received_today": round(sum(item["today_cash_received"] for item in summaries), 2),
+        "cash_outstanding": round(sum(item["cash_outstanding"] for item in summaries), 2),
+    }
+    return {"date": target_date.isoformat(), "agents": summaries, "totals": totals}
+
+
+@api.get("/admin/agents/{user_id}/summary")
+async def admin_agent_summary(
+    user_id: str,
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz_offset_minutes: int = Query(0, ge=-840, le=840),
+    user=Depends(require_manager),
+):
+    agent = await db.users.find_one(
+        {"user_id": user_id, "role": "delivery"}, {"_id": 0, "password_hash": 0}
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="المندوب غير موجود")
+    target_date = _agent_stats_date(date, tz_offset_minutes)
+    order_documents, receipt_documents = await _load_agent_accounting_data([user_id])
+    agent_summary = _agent_statistics(agent, order_documents, receipt_documents, target_date, tz_offset_minutes)
+    receipts = [item for item in receipt_documents if str(item.get("agent_id") or "") == str(user_id)]
+    receipts.sort(key=lambda item: _agent_parse_timestamp(item.get("received_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return {
+        "date": target_date.isoformat(),
+        "agent": agent_summary,
+        "receipts": [_agent_receipt_view(item) for item in receipts[:50]],
+    }
+
+
+@api.post("/admin/agents/{user_id}/cash-receipts")
+async def admin_receive_agent_cash(
+    user_id: str,
+    body: AgentCashReceiptIn,
+    user=Depends(require_manager),
+):
+    agent = await db.users.find_one(
+        {"user_id": user_id, "role": "delivery"}, {"_id": 0, "password_hash": 0}
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="المندوب غير موجود")
+    try:
+        settlement_date = datetime.strptime(body.settlement_date, "%Y-%m-%d").date().isoformat()
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="تاريخ التسوية غير صالح")
+    amount = round(float(body.amount), 2)
+    if not math.isfinite(amount) or amount <= 0:
+        raise HTTPException(status_code=400, detail="المبلغ غير صالح")
+
+    order_documents, receipt_documents = await _load_agent_accounting_data([user_id])
+    current_summary = _agent_statistics(
+        agent,
+        order_documents,
+        receipt_documents,
+        datetime.strptime(settlement_date, "%Y-%m-%d").date(),
+        0,
+    )
+    if amount > current_summary["cash_outstanding"] + 0.009:
+        raise HTTPException(status_code=400, detail="المبلغ أكبر من الرصيد النقدي المستحق")
+
+    received_at = now_utc().isoformat()
+    receipt = {
+        "id": "RCV" + uuid.uuid4().hex[:12].upper(),
+        "agent_id": user_id,
+        "agent_name": agent.get("name") or "مندوب",
+        "amount": amount,
+        "settlement_date": settlement_date,
+        "received_at": received_at,
+        "receiver_id": user.get("user_id"),
+        "receiver_name": user.get("name") or user.get("email") or "الإدارة",
+    }
+    await db.agent_cash_receipts.insert_one(receipt)
+    return {
+        "ok": True,
+        "receipt": _agent_receipt_view(receipt),
+        "cash_outstanding": round(max(current_summary["cash_outstanding"] - amount, 0.0), 2),
+    }
 
 
 @api.get("/admin/agents")
