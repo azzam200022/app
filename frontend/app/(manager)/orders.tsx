@@ -244,6 +244,20 @@ export default function ManagerOrders() {
 
     useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter, 1, false, search); }, [load, filter, search, printPrefsReady]));
 
+  // Keep the manager's list current in web and native while the screen is open.
+  // Web push registration is disabled, so do not tie list refresh to auto-print.
+  useFocusEffect(useCallback(() => {
+    if (!printPrefsReady || autoPrint || pagination.page > 1) return;
+    const iv = setInterval(async () => {
+      try {
+        const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
+        setOrders(result.items);
+        setPagination(result.pagination);
+      } catch {}
+    }, 10000);
+    return () => clearInterval(iv);
+  }, [autoPrint, filter, search, printPrefsReady, pagination.page]));
+
   // poll for new orders while auto-print is enabled
   useEffect(() => {
       if (!autoPrint || !printPrefsReady) return;
