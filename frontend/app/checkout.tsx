@@ -391,10 +391,25 @@ export default function Checkout() {
 }
 
 function Input({ icon, testID, multiline, ...rest }: any) {
+  const [focused, setFocused] = useState(false);
+  const { onFocus, onBlur, style: inputStyle, ...inputProps } = rest;
+
   return (
-    <View style={[styles.field, multiline && { alignItems: "flex-start", minHeight: 64, paddingVertical: spacing.md }]}>
-      <Feather name={icon} size={18} color={colors.muted} style={multiline ? { marginTop: 2 } : {}} />
-      <TextInput testID={testID} style={[styles.input, multiline && { height: undefined, textAlignVertical: "top" }]} placeholderTextColor={colors.muted} textAlign="right" multiline={multiline} {...rest} />
+    <View style={[styles.field, focused && styles.fieldFocused, multiline && styles.multilineField]}>
+      <View style={[styles.fieldIcon, focused && styles.fieldIconFocused, multiline && styles.fieldIconMultiline]}>
+        <Feather name={icon} size={18} color={focused ? colors.brandPrimary : colors.muted} />
+      </View>
+      <TextInput
+        testID={testID}
+        style={[styles.input, multiline && styles.multilineInput, Platform.OS === "web" && styles.inputWeb, inputStyle]}
+        placeholderTextColor={colors.muted}
+        textAlign="right"
+        writingDirection="rtl"
+        multiline={multiline}
+        onFocus={(event) => { setFocused(true); onFocus?.(event); }}
+        onBlur={(event) => { setFocused(false); onBlur?.(event); }}
+        {...inputProps}
+      />
     </View>
   );
 }
@@ -404,8 +419,15 @@ const styles = StyleSheet.create({
   checkoutContent: { padding: spacing.lg, paddingTop: spacing.md },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 52, marginBottom: spacing.sm },
-  input: { flex: 1, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 52 },
+  field: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 56, marginBottom: spacing.sm, minWidth: 0, width: "100%" },
+  fieldFocused: { borderColor: colors.gold, backgroundColor: "#FFFFFF", shadowColor: colors.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 7, elevation: 1 },
+  fieldIcon: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  fieldIconFocused: { backgroundColor: colors.brandTertiary },
+  fieldIconMultiline: { alignSelf: "flex-start", marginTop: 2 },
+  multilineField: { alignItems: "flex-start", minHeight: 84, paddingVertical: spacing.md },
+  input: { flex: 1, flexShrink: 1, minWidth: 0, fontFamily: font.body, fontSize: type.base, color: colors.onSurface, height: 52, lineHeight: 22, paddingHorizontal: 0, paddingVertical: 0, textAlign: "right", writingDirection: "rtl", includeFontPadding: false },
+  multilineInput: { height: undefined, minHeight: 56, textAlignVertical: "top", paddingTop: 2 },
+  inputWeb: { outlineStyle: "none" } as any,
   locateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.brandSecondary, borderStyle: "dashed", borderRadius: radius.md, padding: spacing.lg, minHeight: 64 },
   locateIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   manualLocateBtn: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, minHeight: 64, marginTop: spacing.sm },
