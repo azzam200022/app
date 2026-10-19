@@ -196,10 +196,7 @@ export default function Home() {
 
       {/* Categories */}
       <View style={styles.sectionHead}>
-        <View>
-          <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>تسوّق حسب التصنيف</T>
-          <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات مرتبة لتصل لما تحب أسرع</T>
-        </View>
+        <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>تسوّق حسب التصنيف</T>
         <View style={styles.sectionRule} />
       </View>
       <CategoryCircles items={[{ name: "الكل" }, ...cats.map((c: any) => ({ name: c.name, image: c.image }))]} selected={selected} onSelect={onSelect} />
@@ -208,10 +205,7 @@ export default function Home() {
       {bestsellers.length > 0 && selected === "الكل" && (
         <View>
           <View style={styles.sectionHead}>
-            <View>
-              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>الأكثر شراءً</T>
-              <T color={colors.muted} size={type.sm} style={styles.sectionHint}>اختيارات العملاء هذا الأسبوع</T>
-            </View>
+            <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>الأكثر شراءً</T>
             <View style={styles.sectionRule} />
           </View>
           <FlatList
@@ -232,10 +226,7 @@ export default function Home() {
       {offers.length > 0 && selected === "الكل" && (
         <View>
           <View style={styles.sectionHead}>
-            <View>
-              <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>عروض مميزة</T>
-              <T color={colors.muted} size={type.sm} style={styles.sectionHint}>خصومات تستحق التجربة</T>
-            </View>
+            <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>عروض مميزة</T>
             <Pressable onPress={() => router.push("/offers")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
           </View>
           <FlatList
@@ -379,8 +370,7 @@ const styles = StyleSheet.create({
   heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
   sectionTitle: { lineHeight: 30 },
-  sectionHint: { marginTop: 2 },
-  sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: spacing.md, borderRadius: 1 },
+  sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: 0, borderRadius: 1 },
   loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
