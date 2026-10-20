@@ -1,0 +1,86 @@
+name: Android preview APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-apk:
+    name: Build and package preview APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Configure Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build Android preview APK
+        id: eas-build
+        working-directory: frontend
+        run: |
+          build_json="$(eas build --platform android --profile preview --non-interactive --wait --json --message \"GitHub preview $GITHUB_SHA\")"
+          build_id="$(printf '%s' "$build_json" | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const b = JSON.parse(s); console.log(Array.isArray(b) ? (b[0]?.id ?? "") : (b?.id ?? "")); });')"
+          if [ -z "$build_id" ]; then
+            echo "EAS did not return a build ID." >&2
+            exit 1
+          fi
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the completed APK from EAS
+        id: download-apk
+        working-directory: frontend
+        env:
+          BUILD_ID: ${{ steps.eas-build.outputs.build_id }}
+        run: |
+          download_json="$(eas build:download --build-id "$BUILD_ID" --non-interactive --json)"
+          apk_path="$(printf '%s' "$download_json" | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { console.log(JSON.parse(s).path ?? ""); });')"
+          if [ ! -f "$apk_path" ]; then
+            echo "The EAS APK was not downloaded." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/preview-apk"
+          cp "$apk_path" "$RUNNER_TEMP/preview-apk/market-bin-saleem-preview.apk"
+          echo "artifact_path=$RUNNER_TEMP/preview-apk/market-bin-saleem-preview.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        id: upload-apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-bin-saleem-preview-apk
+          path: ${{ steps.download-apk.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Add download link to run summary
+        env:
+          ARTIFACT_URL: ${{ steps.upload-apk.outputs.artifact-url }}
+        run: |
+          {
+            echo "## APK preview is ready"
+            echo ""
+            echo "[Download the APK]($ARTIFACT_URL)"
+            echo ""
+            echo "Build profile: preview"
+          } >> "$GITHUB_STEP_SUMMARY"
