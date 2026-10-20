@@ -29,6 +29,12 @@ function setCachedValue(key: string, value: any, ttl: number) {
   responseCache.set(key, { value: cloneValue(value), expiresAt: Date.now() + ttl });
 }
 
+function invalidateCachedValue(key: string) {
+  cacheEpochs.set(key, (cacheEpochs.get(key) || 0) + 1);
+  responseCache.delete(key);
+  inflightRequests.delete(key);
+}
+
 function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, force = false): Promise<T> {
   const inFlight = inflightRequests.get(key);
   if (inFlight && !force) return inFlight.then(cloneValue) as Promise<T>;
@@ -205,7 +211,12 @@ export const api = {
   setCartItem: async (product_id: string, quantity: number, sale_unit = "piece") => { const result = await req("/cart/items", { method: "PUT", body: JSON.stringify({ product_id, quantity, sale_unit }) }); setCachedCart(result); return result; },
   removeCartItem: async (id: string, sale_unit = "piece") => { const result = await req("/cart/items/" + id + "?sale_unit=" + encodeURIComponent(sale_unit), { method: "DELETE" }); setCachedCart(result); return result; },
   validateCoupon: (code: string, location?: { lat: number; lng: number }) => req("/coupons/validate", { method: "POST", body: JSON.stringify({ code, ...location }) }),
-  createOrder: async (body: any) => { const result = await req("/orders", { method: "POST", body: JSON.stringify(body) }); setCachedCart({ items: [], total: 0, count: 0 }); return result; },
+  createOrder: async (body: any) => {
+    const result = await req("/orders", { method: "POST", body: JSON.stringify(body) });
+    invalidateCachedValue("orders");
+    setCachedCart({ items: [], total: 0, count: 0 });
+    return result;
+  },
   myOrders: (force = false) => cachedRequest("orders", () => req("/orders"), CACHE_TTLS.orders, force),
   order: (id: string, force = false) => {
     const orders = responseCache.get("orders")?.value;
