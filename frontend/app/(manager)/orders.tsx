@@ -44,6 +44,7 @@ export default function ManagerOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [pagination, setPagination] = useState({ page: 1, page_size: PAGE_SIZE, total: 0, has_more: false });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [assignFor, setAssignFor] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [autoPrint, setAutoPrint] = useState(false);
@@ -229,17 +230,23 @@ export default function ManagerOrders() {
 
   const load = useCallback(async (f: string, page = 1, append = false, searchTerm = search) => {
       setLoading(!append);
+      setLoadError(null);
       try {
         const result = normalizeOrdersResponse(await api.adminOrders({ status: f, page, page_size: PAGE_SIZE, search: searchTerm }));
         setOrders((current) => append ? [...current, ...result.items] : result.items);
         setPagination(result.pagination);
+        setLoadError(null);
         if (autoRef.current) {
           const confirmed = normalizeOrdersResponse(
             await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 }),
           ).items;
           await autoPrintNew(confirmed);
         }
-      } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); }
+      } catch (e: any) {
+        const message = e?.message || "تعذّر تحميل الطلبات. تحقق من الاتصال ثم حاول مرة أخرى.";
+        setLoadError(message);
+        show(message, "error");
+      } finally { setLoading(false); }
     }, [show, autoPrintNew, search]);
 
     useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter, 1, false, search); }, [load, filter, search, printPrefsReady]));
@@ -253,6 +260,7 @@ export default function ManagerOrders() {
         const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
         setOrders(result.items);
         setPagination(result.pagination);
+        setLoadError(null);
       } catch {}
     }, 10000);
     return () => clearInterval(iv);
@@ -266,6 +274,7 @@ export default function ManagerOrders() {
           const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
           setOrders(result.items);
           setPagination(result.pagination);
+          setLoadError(null);
           const printData = normalizeOrdersResponse(
             await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 }),
           ).items;
@@ -584,7 +593,12 @@ export default function ManagerOrders() {
           </View>
                   <CategoryChips categories={FILTERS.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = FILTERS.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
       </View>
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : orders.length === 0 ? (
+      {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : orders.length === 0 && loadError ? (
+        <View style={styles.center}>
+          <EmptyState icon="alert-circle" title="تعذّر تحميل الطلبات" subtitle={loadError} />
+          <Button title="إعادة المحاولة" icon="refresh-cw" variant="outline" onPress={() => { void load(filter, 1, false, search); }} style={{ marginTop: spacing.lg }} />
+        </View>
+      ) : orders.length === 0 ? (
         <View style={styles.center}><EmptyState icon="clipboard" title="لا توجد طلبات" /></View>
       ) : (
         <FlatList data={orders} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} onEndReached={loadMore} onEndReachedThreshold={0.5} ListHeaderComponent={<T color={colors.muted} size={type.sm} style={styles.resultsSummary}>عرض {orders.length} من {pagination.total} طلب</T>} ListFooterComponent={pagination.has_more ? <View style={styles.loadMoreFooter}><ActivityIndicator color={colors.brandPrimary} /></View> : null}
