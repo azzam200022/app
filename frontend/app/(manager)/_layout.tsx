@@ -29,6 +29,7 @@ export default function ManagerLayout() {
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 2 },
         tabBarStyle: { backgroundColor: colors.surface, direction: "rtl", borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, ...(Platform.OS === "web" ? { height: 64 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen name="index" options={{ title: "لوحة التحكم", tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} /> }} />
