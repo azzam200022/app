@@ -40,7 +40,7 @@ jobs:
         id: eas-build
         working-directory: frontend
         run: |
-          build_json="$(eas build --platform android --profile preview --non-interactive --wait --json --message \"GitHub preview $GITHUB_SHA\")"
+          build_json="$(eas build --platform android --profile preview --non-interactive --wait --json --message "GitHub preview $GITHUB_SHA")"
           build_id="$(printf '%s' "$build_json" | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const b = JSON.parse(s); console.log(Array.isArray(b) ? (b[0]?.id ?? "") : (b?.id ?? "")); });')"
           if [ -z "$build_id" ]; then
             echo "EAS did not return a build ID." >&2
