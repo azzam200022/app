@@ -329,7 +329,7 @@ export async function uploadImage(uri: string, platformWeb: boolean, endpoint = 
     form.append("file", { uri, name, type: mime } as any);
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
     const res = await fetch(BACKEND + endpoint, { method: "POST", headers: { Authorization: "Bearer " + token } as any, body: form, signal: controller.signal });
     const text = await res.text();
