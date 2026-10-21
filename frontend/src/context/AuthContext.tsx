@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import {
   createUserWithEmailAndPassword,
@@ -47,6 +47,7 @@ function firebaseMessage(error: any): string {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
+  const firebaseSyncInFlight = useRef(new Map<string, Promise<void>>());
 
   const clearSession = async () => {
     await storage.secureRemove(TOKEN_KEY);
@@ -55,11 +56,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const syncFirebaseUser = async (firebaseUser: any) => {
-    const token = await firebaseUser.getIdToken();
-    await storage.secureSet(TOKEN_KEY, token);
-    setAuthToken(token);
-    const res = await api.me();
-    setUser(res.user);
+    const uid = String(firebaseUser.uid || "");
+    const pending = firebaseSyncInFlight.current.get(uid);
+    if (pending) return pending;
+
+    const sync = (async () => {
+      const token = await firebaseUser.getIdToken();
+      await storage.secureSet(TOKEN_KEY, token);
+      setAuthToken(token);
+      const res = await api.me();
+      setUser(res.user);
+    })();
+    firebaseSyncInFlight.current.set(uid, sync);
+
+    try {
+      await sync;
+    } finally {
+      if (firebaseSyncInFlight.current.get(uid) === sync) {
+        firebaseSyncInFlight.current.delete(uid);
+      }
+    }
   };
 
   useEffect(() => {
