@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator, Modal } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator, Modal, Keyboard } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -162,6 +162,7 @@ export default function Checkout() {
   };
 
   const openManualMap = () => {
+    Keyboard.dismiss();
     setManualMapCenter(coords || DEFAULT_MAP_CENTER);
     setManualMapOpen(true);
   };
@@ -205,8 +206,8 @@ export default function Checkout() {
   return (
     <View style={styles.root}>
       <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={{ paddingTop: insets.top + spacing.md }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}>
           <View style={styles.savedSection}>
             <View style={styles.sectionTitleRow}>
               <View style={styles.sectionHeadingText}>
@@ -241,7 +242,18 @@ export default function Checkout() {
                   <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); setSubmitError(null); }} testID="co-name" /></View>
                   <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); setSubmitError(null); }} keyboardType="phone-pad" testID="co-phone" /></View>
                 </View>
-                <Input icon="map-pin" placeholder="العنوان بالتفصيل" value={address} onChangeText={(value: string) => { setAddress(value); setSelectedAddressId(null); setSubmitError(null); if (locationSource !== "gps") { setCoords(null); setLocationSource(null); setDeliveryQuote(null); setAppliedCoupon(null); } }} multiline testID="co-address" />
+                <Input
+                  icon="map-pin"
+                  placeholder="العنوان بالتفصيل"
+                  value={address}
+                  onChangeText={(value: string) => {
+                    setAddress(value);
+                    setSelectedAddressId(null);
+                    setSubmitError(null);
+                  }}
+                  multiline
+                  testID="co-address"
+                />
                 <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" />
                 {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={17} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ العنوان في عناويني"}</T></Pressable> : null}
               </View>
@@ -390,7 +402,7 @@ export default function Checkout() {
   );
 }
 
-function Input({ icon, testID, multiline, ...rest }: any) {
+function Input({ icon, testID, multiline, keyboardType = "default", ...rest }: any) {
   const [focused, setFocused] = useState(false);
   const { onFocus, onBlur, style: inputStyle, ...inputProps } = rest;
 
@@ -401,6 +413,7 @@ function Input({ icon, testID, multiline, ...rest }: any) {
       </View>
       <TextInput
         testID={testID}
+        keyboardType={keyboardType}
         style={[styles.input, multiline && styles.multilineInput, Platform.OS === "web" && styles.inputWeb, inputStyle]}
         placeholderTextColor={colors.muted}
         textAlign="right"
