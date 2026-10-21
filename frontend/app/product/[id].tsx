@@ -158,7 +158,9 @@ export default function ProductDetail() {
             </View>
           )}
           <View style={styles.priceRow}>
-            <T weight="displayBold" size={type["3xl"]} color={colors.brandPrimary}>{formatPrice(activePrice)}</T>
+            <View style={styles.priceHighlight}>
+              <T weight="displayBold" size={type["3xl"]} color={colors.onBrandPrimary}>{formatPrice(activePrice)}</T>
+            </View>
             {activeOldPrice > activePrice ? <T size={type.lg} color={colors.muted} style={{ textDecorationLine: "line-through" }}>{formatPrice(activeOldPrice)}</T> : null}
           </View>
 
@@ -220,7 +222,8 @@ const styles = StyleSheet.create({
   saleUnitButton: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.sm, backgroundColor: "#fff" },
   saleUnitButtonActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
   saleUnitButtonDisabled: { opacity: 0.4 },
-  priceRow: { flexDirection: "row-reverse", alignItems: "flex-end", gap: spacing.md, marginTop: spacing.md },
+  priceRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
+  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderColor: colors.brandSecondary, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   unavailableBox: { marginTop: spacing.md, backgroundColor: colors.warningSoft, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.warning },
   unavailableStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
