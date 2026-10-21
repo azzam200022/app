@@ -30,6 +30,12 @@ from firebase_admin import firestore
 from firebase_admin import storage as firebase_storage
 from firestore_store import FirestoreDatabase
 from delivery_routing import calculate_driving_distance_km
+from cloudinary_storage import (
+    CloudinaryConfigurationError,
+    CloudinaryStorageError,
+    is_cloudinary_configured,
+    upload_image_bytes,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -3610,14 +3616,6 @@ def init_storage():
     return FIREBASE_BUCKET
 
 
-def put_object(path, data, content_type):
-    blob = init_storage().blob(path)
-    blob.upload_from_string(data, content_type=content_type)
-    blob.cache_control = "public,max-age=86400"
-    blob.patch()
-    return {"path": path}
-
-
 def get_object(path):
     blob = init_storage().blob(path)
     if not blob.exists():
@@ -3643,12 +3641,27 @@ async def remove_background(file: UploadFile = File(...), user=Depends(require_m
         raise HTTPException(status_code=502, detail="تعذر عزل المنتج عن الخلفية")
     path = f"{APP_NAME}/processed/{user['user_id']}/{uuid.uuid4().hex}.png"
     try:
-        await run_in_threadpool(put_object, path, output, "image/png")
-    except Exception as e:
-        logger.error(f"processed image upload failed: {e}")
-        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة المعزولة")
-    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": "background_removed", "created_at": now_utc().isoformat()})
-    return {"path": path, "url": f"/api/files/{path}", "processed": True}
+        stored = await run_in_threadpool(upload_image_bytes, path, output, "image/png")
+    except CloudinaryConfigurationError:
+        logger.error("Cloudinary image storage is not configured")
+        raise HTTPException(status_code=503, detail="تخزين الصور عبر Cloudinary غير مُعد على الخادم")
+    except CloudinaryStorageError as e:
+        logger.error("processed image upload to Cloudinary failed: %s", e)
+        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة المعزولة في Cloudinary")
+    await db.uploads.insert_one({
+        "path": stored["path"],
+        "public_id": stored["public_id"],
+        "url": stored["url"],
+        "provider": "cloudinary",
+        "format": stored["format"],
+        "width": stored["width"],
+        "height": stored["height"],
+        "bytes": stored["bytes"],
+        "owner_id": user["user_id"],
+        "kind": "background_removed",
+        "created_at": now_utc().isoformat(),
+    })
+    return {**stored, "processed": True}
 
 
 async def _store_uploaded_image(file: UploadFile, user, folder: str = "uploads"):
@@ -3669,12 +3682,27 @@ async def _store_uploaded_image(file: UploadFile, user, folder: str = "uploads")
         content_type = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[ext]
     path = f"{APP_NAME}/{folder}/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     try:
-        await run_in_threadpool(put_object, path, data, content_type)
-    except Exception as e:
-        logger.error(f"upload failed: {e}")
-        raise HTTPException(status_code=502, detail="تعذر حفظ الصورة. تحقق من إعداد تخزين الملفات ثم حاول مرة أخرى")
-    await db.uploads.insert_one({"path": path, "owner_id": user["user_id"], "kind": folder, "created_at": now_utc().isoformat()})
-    return {"path": path, "url": f"/api/files/{path}"}
+        stored = await run_in_threadpool(upload_image_bytes, path, data, content_type)
+    except CloudinaryConfigurationError:
+        logger.error("Cloudinary image storage is not configured")
+        raise HTTPException(status_code=503, detail="تخزين الصور عبر Cloudinary غير مُعد على الخادم")
+    except CloudinaryStorageError as e:
+        logger.error("image upload to Cloudinary failed: %s", e)
+        raise HTTPException(status_code=502, detail="تعذر رفع الصورة إلى Cloudinary. تحقق من إعدادات Cloudinary على Render ثم حاول مرة أخرى")
+    await db.uploads.insert_one({
+        "path": stored["path"],
+        "public_id": stored["public_id"],
+        "url": stored["url"],
+        "provider": "cloudinary",
+        "format": stored["format"],
+        "width": stored["width"],
+        "height": stored["height"],
+        "bytes": stored["bytes"],
+        "owner_id": user["user_id"],
+        "kind": folder,
+        "created_at": now_utc().isoformat(),
+    })
+    return stored
 
 
 @api.post("/upload")
@@ -3703,7 +3731,12 @@ async def root():
 
 @api.get("/healthz")
 async def healthz():
-    return {"ok": True, "firebase": FIREBASE_APP is not None, "firestore": FIRESTORE_CLIENT is not None}
+    return {
+        "ok": True,
+        "firebase": FIREBASE_APP is not None,
+        "firestore": FIRESTORE_CLIENT is not None,
+        "cloudinary_configured": is_cloudinary_configured(),
+    }
 
 
 app.include_router(api)
@@ -3853,8 +3886,10 @@ async def on_startup():
         await seed()
     except Exception as e:
         logger.error(f"seed error: {e}")
+    if not is_cloudinary_configured():
+        logger.warning("Cloudinary is not configured; image uploads are disabled")
     if FIREBASE_BUCKET is None:
-        logger.warning("Firebase Storage is not configured; image uploads are disabled")
+        logger.info("Firebase Storage is not configured; legacy Firebase image URLs may be unavailable")
 
 
 @app.on_event("shutdown")
