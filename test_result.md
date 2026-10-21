@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Keyboard visibility and input focus on the mobile manager product form."
+user_problem_statement: "Fix the wrong keyboard for saved-address text fields and checkout form jumps while editing delivery details."
 frontend:
   - task: "Keyboard-aware product form and next-field focus navigation"
     implemented: true
@@ -115,18 +115,33 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Added keyboard avoidance, Next-key focus refs, and hide-on-keyboard manager tabs. Static checks passed; no Android runtime test was available."
+  - task: "Fix saved-address text keyboard and checkout address-layout jump"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/addresses.tsx, frontend/app/checkout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Made text inputs explicitly use the default keyboard, kept selected map coordinates while editing, and dismissed the keyboard before map modals. Static checks only; Android runtime test is pending."
 backend: []
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 test_plan:
   current_focus:
     - "Verify Android product-form scrolling, keyboard Next focus, and tab-bar hide/restore on a device or emulator."
+    - "Verify My Addresses text fields show an Arabic/text keyboard, not the phone keypad."
+    - "Verify map selection and return leave fields usable, and typing delivery details does not collapse the map or jump checkout layout."
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 agent_communication:
   - agent: "main"
     message: "This patch affects only the mobile product-entry UI; backend and storage settings are unchanged."
+  - agent: "main"
+    message: "Address-flow update preserves selected coordinates while editing text and standardizes keyboard handling; Android device validation remains pending."
