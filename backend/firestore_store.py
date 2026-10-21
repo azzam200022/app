@@ -8,6 +8,7 @@ screen request scale with the size of the collection.
 
 from copy import deepcopy
 import asyncio
+import hashlib
 import logging
 import re
 import uuid
@@ -274,7 +275,11 @@ class FirestoreCollection:
         for key in ("id", "user_id", "session_token", "key", "barcode", "path"):
             value = document.get(key)
             if value:
-                return str(value)
+                document_id = str(value)
+                if "/" in document_id:
+                    digest = hashlib.sha256(f"{key}:{document_id}".encode("utf-8")).hexdigest()
+                    return f"{key}_{digest}"
+                return document_id
         return uuid.uuid4().hex
 
     async def insert_one(self, document):
