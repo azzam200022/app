@@ -6,6 +6,7 @@ export const TOKEN_KEY = "souq_auth_token";
 
 let authToken: string | null = null;
 const REQUEST_TIMEOUT_MS = 12000;
+const AUTH_REQUEST_TIMEOUT_MS = 60000;
 const CACHE_TTLS = {
   products: 60 * 1000,
   categories: 5 * 60 * 1000,
@@ -127,13 +128,13 @@ export function formatPrice(n: number): string {
   return v.toLocaleString("en-US") + " د.ع";
 }
 
-async function req(path: string, opts: RequestInit = {}) {
+async function req(path: string, opts: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
   let token = authToken;
   if (!token) token = await storage.secureGet(TOKEN_KEY, "");
   const headers: any = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (token) headers["Authorization"] = "Bearer " + token;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(BACKEND + "/api" + path, { ...opts, headers, signal: opts.signal || controller.signal });
@@ -160,7 +161,7 @@ export const api = {
   login: (body: any) => req("/auth/login", { method: "POST", body: JSON.stringify(body) }),
   previewLogin: (role: "manager" | "delivery" | "customer") => req("/auth/preview/" + role, { method: "POST" }),
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
-  me: () => req("/auth/me"),
+  me: () => req("/auth/me", {}, AUTH_REQUEST_TIMEOUT_MS),
   logout: () => req("/auth/logout", { method: "POST" }),
   inventoryPdfLogs: () => req("/admin/inventory/pdf/logs"),
   products: (params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}, force = false) => {
