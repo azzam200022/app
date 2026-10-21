@@ -39,6 +39,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withRawbtQueries",
       "expo-camera",
       "expo-image-picker",
       [

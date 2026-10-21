@@ -306,6 +306,15 @@ export function buildReceiptHTML(
   </body></html>`;
 }
 
+
+export async function canOpenRawBT(): Promise<boolean> {
+  try {
+    return Platform.OS === "android" && await Linking.canOpenURL("rawbt:");
+  } catch {
+    return false;
+  }
+}
+
 export async function printOrder(
   order: any,
   printerUrl?: string | null,
@@ -313,27 +322,29 @@ export async function printOrder(
 ): Promise<"sent-to-rawbt" | "sent-to-system"> {
   const width = options.width ?? 80;
   const receipt = normalizeReceiptOrder(order);
-  const assets = await getReceiptAssets();
-  const qrSvg = makeReceiptQrSvg(receipt.id);
-  const barcodeSvg = makeReceiptBarcodeSvg(receipt.orderNumber);
-  const html = buildReceiptHTML(order, { width, ...assets });
 
   if (Platform.OS === "android" && options.rasterize) {
+    if (!(await canOpenRawBT())) {
+      throw new Error("تطبيق RawBT غير مثبت أو لا يقبل روابط الطباعة؛ تأكد من تثبيته ثم افتحه مرة واحدة.");
+    }
+    const assets = await getReceiptAssets();
     const payload = await options.rasterize({
-      id: `${Date.now()}`,
+      id: String(Date.now()),
       width,
       receipt,
       ...assets,
-      qrSvg,
-      barcodeSvg,
+      qrSvg: makeReceiptQrSvg(receipt.id),
+      barcodeSvg: makeReceiptBarcodeSvg(receipt.orderNumber),
     });
     if (!payload || !/^[A-Za-z0-9+/]+=*$/.test(payload)) {
       throw new Error("تعذّر تجهيز صورة الفاتورة للطباعة.");
     }
-    await Linking.openURL(`rawbt:base64,${payload}`);
+    await Linking.openURL("rawbt:base64," + payload);
     return "sent-to-rawbt";
   }
 
+  const assets = await getReceiptAssets();
+  const html = buildReceiptHTML(order, { width, ...assets });
   if (Platform.OS === "ios" && printerUrl) {
     await Print.printAsync({ html, printerUrl });
   } else {

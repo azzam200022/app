@@ -9,7 +9,7 @@ import { StatusPill } from "../(customer)/orders";
 import { CategoryChips } from "@/src/components/CategoryChips";
 import { api, formatPrice, STATUS_LABEL } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
-import { printOrder, selectPrinter, type ReceiptWidth } from "@/src/lib/receipt";
+import { canOpenRawBT, printOrder, selectPrinter, type ReceiptWidth } from "@/src/lib/receipt";
 import { ReceiptRasterizer, type ReceiptRasterizerRef } from "@/src/components/ReceiptRasterizer";
 import { storage } from "@/src/utils/storage";
 
@@ -17,6 +17,20 @@ const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery
 const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL };
 const PAGE_SIZE = 30;
 const MAX_PRINT_ATTEMPTS = 5;
+function getPrintErrorMessage(error: unknown): string {
+  const rawMessage = String((error as any)?.message ?? error ?? "");
+  const safeMessage = rawMessage
+    .replace(/rawbt:base64,[^\s'")]+/gi, "rawbt:base64,[بيانات مخفية]")
+    .replace(/[A-Za-z0-9+/]{120,}={0,2}/g, "[محتوى محجوب]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!safeMessage) return "تعذّر إرسال الفاتورة إلى RawBT.";
+  if (/no activity|no handler|cannot open url|could not open url|unsupported url|not supported/i.test(safeMessage)) {
+    return "تعذّر فتح RawBT. تحقق من تثبيت التطبيق وإعداد الطابعة.";
+  }
+  return safeMessage.slice(0, 180);
+}
+
 
 type ReceiptPrintJob = {
   orderId: string;
@@ -85,7 +99,7 @@ export default function ManagerOrders() {
             nextAttemptAt: Number.isFinite(Number(job.nextAttemptAt)) ? Number(job.nextAttemptAt) : 0,
             lastError: job.status === "sending"
               ? "قد تكون أُرسلت قبل إغلاق التطبيق؛ تحقّق من الطابعة قبل إعادة الإرسال."
-              : job.lastError,
+              : job.lastError ? getPrintErrorMessage(job.lastError) : undefined,
           }));
         const enabled = !!on;
         setAutoPrint(enabled);
@@ -178,15 +192,15 @@ export default function ManagerOrders() {
             ...sending,
             status: canRetry ? "queued" : "failed",
             nextAttemptAt: Date.now() + retryDelay,
-            lastError: String(error?.message || "تعذّر إرسال الفاتورة").slice(0, 240),
+            lastError: getPrintErrorMessage(error),
           };
           await persistQueue(queueRef.current.map((candidate) =>
             candidate.orderId === sending.orderId ? updated : candidate,
           ));
           show(
             canRetry
-              ? "تعذّرت الطباعة الآن؛ أُضيفت الفاتورة لقائمة إعادة المحاولة."
-              : "تعذّرت الطباعة بعد عدة محاولات؛ أعد المحاولة من قائمة الطباعة.",
+              ? "تعذّرت الطباعة: " + updated.lastError + "؛ أُضيفت الفاتورة لقائمة إعادة المحاولة."
+              : "تعذّرت الطباعة: " + updated.lastError + "؛ أعد المحاولة من قائمة الطباعة.",
             "error",
           );
           break;
@@ -327,6 +341,10 @@ export default function ManagerOrders() {
   const choosePrinter = async () => {
     if (Platform.OS === "android") {
       try {
+        if (!(await canOpenRawBT())) {
+          show("لم يتم العثور على RawBT أو لا يقبل روابط الطباعة. تأكد من تثبيته وتحديثه.", "error");
+          return;
+        }
         await Linking.openURL("rawbt:");
         show("اختر الطابعة واتصالها من إعدادات RawBT.", "info");
       } catch {
@@ -383,7 +401,7 @@ export default function ManagerOrders() {
         nextAttemptAt: 0,
         lastError: submitted
           ? "ربما أُرسلت الفاتورة، لكن تعذّر حفظ اكتمالها. تحقّق من الطابعة قبل الإعادة."
-          : String(error?.message || "تعذّرت الطباعة").slice(0, 240),
+          : getPrintErrorMessage(error),
       };
       const next = existing
         ? queueRef.current.map((job) => job.orderId === orderId ? retryJob : job)
@@ -397,7 +415,7 @@ export default function ManagerOrders() {
       show(
         submitted
           ? retryJob.lastError!
-          : "تعذّرت الطباعة؛ أُضيف الطلب إلى قائمة إعادة المحاولة.",
+          : "تعذّرت الطباعة: " + retryJob.lastError + "؛ أُضيف الطلب إلى قائمة إعادة المحاولة.",
         "error",
       );
     } finally {
@@ -459,7 +477,7 @@ export default function ManagerOrders() {
         "info",
       );
     } catch (error: any) {
-      show(error?.message || "تعذّر إرسال فاتورة الاختبار", "error");
+      show("تعذّرت فاتورة الاختبار: " + getPrintErrorMessage(error), "error");
     } finally {
       printingRef.current = false;
     }
@@ -575,6 +593,11 @@ export default function ManagerOrders() {
               </Pressable>
             ) : null}
           </View>
+        ) : null}
+        {printQueue.some((job) => job.lastError) ? (
+          <T size={11} color={colors.error} numberOfLines={2} style={{ marginHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+            {"آخر خطأ: " + (printQueue.find((job) => job.lastError)?.lastError ?? "")}
+          </T>
         ) : null}
         <View style={styles.searchRow}>
             <Feather name="search" size={18} color={colors.muted} />
