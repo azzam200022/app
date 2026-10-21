@@ -28,7 +28,7 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials as firebase_credentials
 from firebase_admin import firestore
 from firebase_admin import storage as firebase_storage
-from firestore_store import FirestoreDatabase
+from firestore_store import FirestoreDatabase, favorite_document_id
 from delivery_routing import calculate_driving_distance_km
 from cloudinary_storage import (
     CloudinaryConfigurationError,
@@ -1796,7 +1796,12 @@ async def toggle_favorite(pid: str, user=Depends(require_user)):
     if existing:
         await db.favorites.delete_one({"user_id": user["user_id"], "product_id": pid})
         return {"is_favorite": False}
-    await db.favorites.insert_one({"user_id": user["user_id"], "product_id": pid, "created_at": now_utc().isoformat()})
+    await db.favorites.insert_one({
+        "id": favorite_document_id(user["user_id"], pid),
+        "user_id": user["user_id"],
+        "product_id": pid,
+        "created_at": now_utc().isoformat(),
+    })
     return {"is_favorite": True}
 
 
