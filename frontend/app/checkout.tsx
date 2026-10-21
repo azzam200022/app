@@ -33,6 +33,7 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const addressFormEdited = useRef(false);
   const [addressLabel, setAddressLabel] = useState("عنوان جديد");
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressesLoading, setAddressesLoading] = useState(true);
@@ -85,7 +86,8 @@ export default function Checkout() {
   };
 
 
-  const selectSavedAddress = async (saved: any) => {
+  const selectSavedAddress = async (saved: any, initialLoad = false) => {
+    if (!initialLoad) addressFormEdited.current = true;
     setSubmitError(null);
     setSelectedAddressId(saved.id);
     setManualMapOpen(false);
@@ -103,6 +105,7 @@ export default function Checkout() {
   };
 
   const startNewAddress = () => {
+    addressFormEdited.current = true;
     setSubmitError(null);
     setSelectedAddressId(null);
     setManualMapOpen(false);
@@ -137,7 +140,7 @@ export default function Checkout() {
       const list = Array.isArray(items) ? items : [];
       setSavedAddresses(list);
       const preferred = list.find((item) => item.is_default) || list[0];
-      if (preferred) void selectSavedAddress(preferred);
+      if (preferred && !addressFormEdited.current) void selectSavedAddress(preferred, true);
     }).catch((e: any) => { if (active) show(e.message, "error"); }).finally(() => { if (active) setAddressesLoading(false); });
     return () => { active = false; };
   }, []);
@@ -206,8 +209,8 @@ export default function Checkout() {
   return (
     <View style={styles.root}>
       <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={{ paddingTop: insets.top + spacing.md }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}>
           <View style={styles.savedSection}>
             <View style={styles.sectionTitleRow}>
               <View style={styles.sectionHeadingText}>
@@ -239,14 +242,15 @@ export default function Checkout() {
               <View style={styles.deliveryForm}>
                 <View style={styles.sectionCaption}><Feather name="user" size={16} color={colors.brandPrimary} /><T weight="bold" size={type.sm}>بيانات المستلم</T></View>
                 <View style={styles.contactRow}>
-                  <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { setName(value); setSelectedAddressId(null); setSubmitError(null); }} testID="co-name" /></View>
-                  <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={(value: string) => { setPhone(value); setSelectedAddressId(null); setSubmitError(null); }} keyboardType="phone-pad" testID="co-phone" /></View>
+                  <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { addressFormEdited.current = true; setName(value); setSelectedAddressId(null); setSubmitError(null); }} testID="co-name" /></View>
+                  <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={(value: string) => { addressFormEdited.current = true; setPhone(value); setSelectedAddressId(null); setSubmitError(null); }} keyboardType="phone-pad" testID="co-phone" /></View>
                 </View>
                 <Input
                   icon="map-pin"
                   placeholder="العنوان بالتفصيل"
                   value={address}
                   onChangeText={(value: string) => {
+                    addressFormEdited.current = true;
                     setAddress(value);
                     setSelectedAddressId(null);
                     setSubmitError(null);
@@ -254,7 +258,7 @@ export default function Checkout() {
                   multiline
                   testID="co-address"
                 />
-                <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" />
+                <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { addressFormEdited.current = true; setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" />
                 {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={17} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ العنوان في عناويني"}</T></Pressable> : null}
               </View>
             )}

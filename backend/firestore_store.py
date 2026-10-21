@@ -33,6 +33,14 @@ def _set_value(document, field, value):
     current[parts[-1]] = deepcopy(value)
 
 
+def favorite_document_id(user_id, product_id):
+    """Return a stable, per-user/product Firestore document ID."""
+    user_id = str(user_id)
+    product_id = str(product_id)
+    identity = f"{len(user_id)}:{user_id}{product_id}".encode("utf-8")
+    return "favorite_" + hashlib.sha256(identity).hexdigest()
+
+
 def _matches(document, query):
     for field, expected in (query or {}).items():
         actual = _value(document, field)

@@ -2,7 +2,7 @@ import copy
 import hashlib
 import unittest
 
-from firestore_store import FirestoreCollection
+from firestore_store import FirestoreCollection, favorite_document_id
 
 
 class FakeDocumentReference:
@@ -39,6 +39,23 @@ class FirestoreDocumentIdTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collection._document_id(upload_record), expected_id)
         self.assertEqual(collection_ref.writes, {expected_id: upload_record})
 
+
+    async def test_favorites_use_stable_ids_for_each_user_and_product(self):
+        collection_ref = FakeCollectionReference()
+        collection = FirestoreCollection(collection_ref)
+        user_id = "customer-1"
+        product_ids = ["product-1", "product-2"]
+        favorite_ids = [favorite_document_id(user_id, product_id) for product_id in product_ids]
+
+        self.assertEqual(favorite_ids[0], favorite_document_id(user_id, product_ids[0]))
+        self.assertNotEqual(favorite_ids[0], favorite_ids[1])
+        self.assertNotEqual(favorite_ids[0], favorite_document_id("customer-2", product_ids[0]))
+
+        for product_id, favorite_id in zip(product_ids, favorite_ids):
+            await collection.insert_one({"id": favorite_id, "user_id": user_id, "product_id": product_id})
+
+        self.assertEqual(set(collection_ref.writes), set(favorite_ids))
+        self.assertEqual(len(collection_ref.writes), 2)
 
 if __name__ == "__main__":
     unittest.main()
