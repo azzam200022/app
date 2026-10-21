@@ -101,3 +101,32 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Keyboard visibility and input focus on the mobile manager product form."
+frontend:
+  - task: "Keyboard-aware product form and next-field focus navigation"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(manager)/scan.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added keyboard avoidance, Next-key focus refs, and hide-on-keyboard manager tabs. Static checks passed; no Android runtime test was available."
+backend: []
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+test_plan:
+  current_focus:
+    - "Verify Android product-form scrolling, keyboard Next focus, and tab-bar hide/restore on a device or emulator."
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+agent_communication:
+  - agent: "main"
+    message: "This patch affects only the mobile product-entry UI; backend and storage settings are unchanged."

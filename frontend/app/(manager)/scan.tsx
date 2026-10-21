@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform, Linking, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform, Linking, ActivityIndicator, Keyboard, KeyboardAvoidingView } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -20,6 +20,13 @@ export default function Scan() {
   const [manual, setManual] = useState("");
   const [looking, setLooking] = useState(false);
   const scannedRef = useRef(false);
+  const nameInputRef = useRef<any>(null);
+  const priceInputRef = useRef<any>(null);
+  const oldPriceInputRef = useRef<any>(null);
+  const wholesaleUnitInputRef = useRef<any>(null);
+  const wholesaleQuantityInputRef = useRef<any>(null);
+  const wholesalePriceInputRef = useRef<any>(null);
+  const wholesaleOldPriceInputRef = useRef<any>(null);
 
   // form state
   const [barcode, setBarcode] = useState("");
@@ -191,7 +198,8 @@ export default function Scan() {
           <T weight="displayBold" size={type.xl}>بيانات المنتج</T>
           <View style={{ width: 40 }} />
         </View>
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView style={styles.formKeyboardAvoiding} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["3xl"] }} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}>
           {!!barcode && <View style={styles.bcChip}><Feather name="maximize" size={14} color={colors.brandPrimary} /><T size={type.sm} weight="semi" color={colors.brandPrimary}>باركود: {barcode}</T></View>}
 
           <View style={styles.templatePreview}>
@@ -228,7 +236,7 @@ export default function Scan() {
           <T color={colors.muted} size={type.xs} style={styles.imageHint}>الصورة تُعالج داخل خادم التطبيق مجانًا، ثم يظهر المنتج بخلفية شفافة داخل القالب.</T>
 
           <Label text="اسم المنتج" />
-          <TextInput testID="f-name" style={styles.input} value={name} onChangeText={setName} placeholder="اسم المنتج" placeholderTextColor={colors.muted} textAlign="right" />
+          <TextInput testID="f-name" ref={nameInputRef} style={styles.input} value={name} onChangeText={setName} placeholder="اسم المنتج" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => priceInputRef.current?.focus()} />
 
           <Label text="التصنيف" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: 4 }}>
@@ -255,11 +263,11 @@ export default function Scan() {
           <View style={styles.priceGrid}>
             <View style={{ flex: 1 }}>
               <Label text="السعر (د.ع)" />
-              <TextInput testID="f-price" style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+              <TextInput testID="f-price" ref={priceInputRef} style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => oldPriceInputRef.current?.focus()} />
             </View>
             <View style={{ flex: 1 }}>
               <Label text="السعر قبل الخصم (اختياري)" />
-              <TextInput testID="f-oldprice" style={styles.input} value={oldPrice} onChangeText={setOldPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+              <TextInput testID="f-oldprice" ref={oldPriceInputRef} style={styles.input} value={oldPrice} onChangeText={setOldPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="done" onSubmitEditing={() => wholesaleEnabled ? wholesaleUnitInputRef.current?.focus() : Keyboard.dismiss()} />
             </View>
           </View>
 
@@ -274,20 +282,20 @@ export default function Scan() {
             <View style={styles.wholesaleFields}>
               <View style={{ flex: 1.2 }}>
                 <Label text="اسم وحدة الجملة" />
-                <TextInput testID="f-wholesale-unit" style={styles.input} value={wholesaleUnitName} onChangeText={setWholesaleUnitName} maxLength={40} placeholder="مثال: كرتون" placeholderTextColor={colors.muted} textAlign="right" />
+                <TextInput testID="f-wholesale-unit" ref={wholesaleUnitInputRef} style={styles.input} value={wholesaleUnitName} onChangeText={setWholesaleUnitName} maxLength={40} placeholder="مثال: كرتون" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => wholesaleQuantityInputRef.current?.focus()} />
               </View>
               <View style={{ flex: 0.8 }}>
                 <Label text="عدد القطع في الوحدة" />
-                <TextInput testID="f-wholesale-quantity" style={styles.input} value={wholesaleQuantity} onChangeText={setWholesaleQuantity} keyboardType="numeric" placeholder="مثال: 12" placeholderTextColor={colors.muted} textAlign="right" />
+                <TextInput testID="f-wholesale-quantity" ref={wholesaleQuantityInputRef} style={styles.input} value={wholesaleQuantity} onChangeText={setWholesaleQuantity} keyboardType="numeric" placeholder="مثال: 12" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => wholesalePriceInputRef.current?.focus()} />
               </View>
               <View style={styles.priceGrid}>
                 <View style={{ flex: 1 }}>
                   <Label text="سعر الجملة (د.ع)" />
-                  <TextInput testID="f-wholesale-price" style={styles.input} value={wholesalePrice} onChangeText={setWholesalePrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+                  <TextInput testID="f-wholesale-price" ref={wholesalePriceInputRef} style={styles.input} value={wholesalePrice} onChangeText={setWholesalePrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => wholesaleOldPriceInputRef.current?.focus()} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Label text="السعر السابق (اختياري)" />
-                  <TextInput testID="f-wholesale-oldprice" style={styles.input} value={wholesaleOldPrice} onChangeText={setWholesaleOldPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" />
+                  <TextInput testID="f-wholesale-oldprice" ref={wholesaleOldPriceInputRef} style={styles.input} value={wholesaleOldPrice} onChangeText={setWholesaleOldPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} textAlign="right" returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
                 </View>
               </View>
             </View>
@@ -299,7 +307,8 @@ export default function Scan() {
           </View>
 
           <Button title="حفظ ونشر المنتج" icon="check" onPress={save} loading={saving} testID="f-save" style={{ marginTop: spacing.lg }} />
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     );
   }
@@ -380,6 +389,7 @@ function Label({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
+  formKeyboardAvoiding: { flex: 1 },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   cameraBox: { height: 300, borderRadius: radius.lg, overflow: "hidden", backgroundColor: "#1A1F1B", alignItems: "center", justifyContent: "center" },
