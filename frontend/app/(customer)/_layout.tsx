@@ -19,13 +19,13 @@ export default function CustomerLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
-        tabBarInactiveTintColor: colors.muted,
+        tabBarActiveTintColor: colors.onBrandPrimary,
+        tabBarInactiveTintColor: colors.surfaceTertiary,
         tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 2 },
         tabBarStyle: {
-          backgroundColor: colors.surfaceSecondary,
+          backgroundColor: colors.brandPrimary,
           direction: "rtl",
-          borderTopColor: colors.brandTertiary,
+          borderTopColor: colors.brandSecondary,
           borderTopWidth: 1,
           paddingTop: 8,
           shadowColor: colors.brandPrimary,
@@ -67,5 +67,5 @@ export default function CustomerLayout() {
 
 const styles = StyleSheet.create({
   tabIcon: { width: 36, height: 28, alignItems: "center", justifyContent: "center", borderRadius: radius.pill },
-  tabIconActive: { backgroundColor: colors.brandTertiary },
+  tabIconActive: { backgroundColor: colors.brandSecondary },
 });
