@@ -33,6 +33,7 @@ export default function Home() {
   const [banners, setBanners] = useState<any[]>(() => getCachedBanners() || []);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [loading, setLoading] = useState(() => getCachedProducts() === undefined);
+  const [initialSectionsLoaded, setInitialSectionsLoaded] = useState(false);
   const [productsLoading, setProductsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const categoryRequest = React.useRef(0);
@@ -104,6 +105,7 @@ export default function Home() {
     const failed = results.slice(0, 4).find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) show(failed.reason?.message || "تعذر تحميل بعض البيانات", "error");
     setLoading(false);
+    setInitialSectionsLoaded(true);
   }, [selected, show]);
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
@@ -202,44 +204,48 @@ export default function Home() {
       <CategoryCircles items={[{ name: "الكل" }, ...cats.map((c: any) => ({ name: c.name, image: c.image }))]} selected={selected} onSelect={onSelect} />
 
       {/* Bestsellers row */}
-      {bestsellers.length > 0 && selected === "الكل" && (
+      {(bestsellers.length > 0 || !initialSectionsLoaded) && selected === "الكل" && (
         <View>
           <View style={styles.sectionHead}>
             <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>الأكثر شراءً</T>
             <View style={styles.sectionRule} />
           </View>
-          <FlatList
-            horizontal
-            inverted={Platform.OS !== "web"}
-            data={bestsellers}
-            keyExtractor={(i) => "bestseller-" + i.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
-            renderItem={({ item }) => (
-              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
-            )}
-          />
+          {bestsellers.length > 0 ? (
+            <FlatList
+              horizontal
+              inverted={Platform.OS !== "web"}
+              data={bestsellers}
+              keyExtractor={(i) => "bestseller-" + i.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
+              renderItem={({ item }) => (
+                <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
+              )}
+            />
+          ) : <ProductRowSkeletons />}
         </View>
       )}
 
       {/* Offers row */}
-      {offers.length > 0 && selected === "الكل" && (
+      {(offers.length > 0 || !initialSectionsLoaded) && selected === "الكل" && (
         <View>
           <View style={styles.sectionHead}>
             <T weight="displayBold" size={type["2xl"]} color={colors.brandPrimary} style={styles.sectionTitle}>عروض مميزة</T>
             <Pressable onPress={() => router.push("/offers")}><T color={colors.brandPrimary} weight="semi">عرض الكل</T></Pressable>
           </View>
-          <FlatList
-            horizontal
-            inverted={Platform.OS !== "web"}
-            data={offers}
-            keyExtractor={(i) => i.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
-            renderItem={({ item }) => (
-              <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
-            )}
-          />
+          {offers.length > 0 ? (
+            <FlatList
+              horizontal
+              inverted={Platform.OS !== "web"}
+              data={offers}
+              keyExtractor={(i) => i.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
+              renderItem={({ item }) => (
+                <View style={{ width: 168 }}><ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} width={168} /></View>
+              )}
+            />
+          ) : <ProductRowSkeletons />}
         </View>
       )}
 
@@ -328,6 +334,22 @@ export default function Home() {
         </View>
       )}
     </View>
+  );
+}
+
+function ProductRowSkeletons() {
+  return (
+    <FlatList
+      horizontal
+      inverted={Platform.OS !== "web"}
+      data={["product-skeleton-1", "product-skeleton-2"]}
+      keyExtractor={(item) => item}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
+      renderItem={() => (
+        <View style={{ width: 168 }}><ProductCardSkeleton width={168} /></View>
+      )}
+    />
   );
 }
 
