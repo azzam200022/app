@@ -4,8 +4,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as NavigationBar from "expo-navigation-bar";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
@@ -58,15 +57,6 @@ export default function Home() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== "android") return;
-      void NavigationBar.setVisibilityAsync("hidden").catch(() => {});
-      return () => {
-        void NavigationBar.setVisibilityAsync("visible").catch(() => {});
-      };
-    }, []),
-  );
 
   const loadProducts = useCallback(async (cat: string, force = false) => {
     const requestId = ++categoryRequest.current;
