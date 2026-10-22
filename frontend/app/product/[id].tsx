@@ -17,13 +17,14 @@ export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { add } = useCart();
+  const { cart, add, setQty: setCartQty } = useCart();
   const { user } = useAuth();
   const { show } = useToast();
   const initialProduct = id ? getCachedProduct(id) : undefined;
   const [product, setProduct] = useState<any>(initialProduct || null);
   const [qty, setQty] = useState(1);
   const [saleUnit, setSaleUnit] = useState<"piece" | "wholesale">("piece");
+  const cartQuantity = cart.items.find((item) => item.product_id === id && (item.sale_unit || "piece") === saleUnit)?.quantity || 0;
   const [fav, setFav] = useState(false);
   const [loading, setLoading] = useState(!initialProduct);
   const [adding, setAdding] = useState(false);
@@ -53,6 +54,10 @@ export default function ProductDetail() {
     })();
     return () => { active = false; };
   }, [id]); // eslint-disable-line
+
+  useEffect(() => {
+    setQty(cartQuantity || 1);
+  }, [id, saleUnit, cartQuantity]);
 
   const toggleFav = async () => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
@@ -88,9 +93,14 @@ export default function ProductDetail() {
   const addToCart = async () => {
     setAdding(true);
     try {
-      await add(id!, qty, saleUnit);
+      if (cartQuantity > 0) {
+        await setCartQty(id!, qty, saleUnit);
+        show("تم تحديث الكمية في السلة");
+      } else {
+        await add(id!, qty, saleUnit);
+        show("تمت الإضافة إلى السلة");
+      }
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      show("تمت الإضافة إلى السلة");
     } catch (e: any) { show(e.message, "error"); }
     finally { setAdding(false); }
   };
@@ -199,7 +209,7 @@ export default function ProductDetail() {
             <T weight="bold" size={type.lg} style={{ minWidth: 28, textAlign: "center" }}>{qty}</T>
             <Pressable testID="pd-dec" onPress={() => setQty((q) => Math.max(1, q - 1))} style={styles.stepBtn}><Feather name="minus" size={18} color={colors.onSurface} /></Pressable>
           </View>
-          <Button title="أضف إلى السلة" icon="shopping-cart" onPress={addToCart} loading={adding} testID="pd-add" style={{ flex: 1 }} />
+          <Button title={cartQuantity > 0 ? "تحديث الكمية" : "أضف إلى السلة"} icon="shopping-cart" onPress={addToCart loading={adding} testID="pd-add" style={{ flex: 1 }} />
         </View>
       )}
     </View>
