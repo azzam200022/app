@@ -163,6 +163,7 @@ export const api = {
   googleSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
   me: () => req("/auth/me", {}, AUTH_REQUEST_TIMEOUT_MS),
   logout: () => req("/auth/logout", { method: "POST" }),
+  registerPushToken: (body: { platform: "ios" | "android"; device_token: string }) => req("/register-push", { method: "POST", body: JSON.stringify(body) }),
   inventoryPdfLogs: () => req("/admin/inventory/pdf/logs"),
   products: (params: { category?: string; branch_id?: string; search?: string; offers?: boolean } = {}, force = false) => {
     const key = productsCacheKey(params);
@@ -228,6 +229,8 @@ export const api = {
   cancelOrder: (id: string) => req("/orders/" + id + "/cancel", { method: "POST" }),
   reorderOrder: async (id: string) => { const result = await req("/orders/" + id + "/reorder", { method: "POST" }); if (result?.cart) setCachedCart(result.cart); return result; },
   adminStats: () => req("/admin/stats"),
+  adminPushStatus: () => req("/admin/push/status"),
+  sendCustomerNotification: (body: { title: string; message: string }) => req("/admin/push/send", { method: "POST", body: JSON.stringify(body) }),
   supportTickets: () => req("/support/tickets"),
   supportUnreadCount: () => req("/support/unread-count"),
   markSupportRead: (id: string) => req("/support/tickets/" + id + "/read", { method: "POST" }),
