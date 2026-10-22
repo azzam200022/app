@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
+import * as NavigationBar from "expo-navigation-bar";
 import { Feather } from "@expo/vector-icons";
 import { colors, font, radius } from "@/src/lib/theme";
 import { useCart } from "@/src/context/CartContext";
@@ -15,25 +16,39 @@ function CustomerTabIcon({ icon, color, size, focused }: { icon: "home" | "shopp
 
 export default function CustomerLayout() {
   const { cart } = useCart();
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    void NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+    return () => {
+      void NavigationBar.setVisibilityAsync("visible").catch(() => {});
+    };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.onBrandPrimary,
         tabBarInactiveTintColor: colors.surfaceTertiary,
-        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 2 },
+        tabBarHideOnKeyboard: true,
+        tabBarLabelStyle: { fontFamily: font.bodySemi, fontSize: 11, marginTop: 3 },
         tabBarStyle: {
           backgroundColor: colors.brandPrimary,
           direction: "rtl",
-          borderTopColor: colors.brandSecondary,
-          borderTopWidth: 1,
-          paddingTop: 8,
+          borderTopColor: "transparent",
+          borderTopWidth: 0,
+          borderRadius: radius.lg,
+          marginHorizontal: 12,
+          marginBottom: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
           shadowColor: colors.brandPrimary,
           shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          elevation: 8,
-          ...(Platform.OS === "web" ? { height: 64 } : {}),
+          shadowOpacity: 0.14,
+          shadowRadius: 14,
+          elevation: 10,
+          ...(Platform.OS === "web" ? { height: 72 } : {}),
         },
         tabBarItemStyle: { alignSelf: "center" },
       }}
@@ -66,6 +81,6 @@ export default function CustomerLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabIcon: { width: 36, height: 28, alignItems: "center", justifyContent: "center", borderRadius: radius.pill },
-  tabIconActive: { backgroundColor: colors.brandSecondary },
+  tabIcon: { width: 42, height: 34, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, borderWidth: 1, borderColor: "transparent" },
+  tabIconActive: { backgroundColor: colors.brandSecondary, borderColor: "rgba(255, 255, 255, 0.18)" },
 });

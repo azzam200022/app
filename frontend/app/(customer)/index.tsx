@@ -3,11 +3,9 @@ import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicato
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import * as NavigationBar from "expo-navigation-bar";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, font, radius, spacing, type } from "@/src/lib/theme";
+import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ProductCard, ProductCardSkeleton } from "@/src/components/ProductCard";
 import { CategoryCircles } from "@/src/components/CategoryCircles";
@@ -57,16 +55,6 @@ export default function Home() {
       setShowScrollTop(nextShowScrollTop);
     }
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== "android") return;
-      void NavigationBar.setVisibilityAsync("hidden").catch(() => {});
-      return () => {
-        void NavigationBar.setVisibilityAsync("visible").catch(() => {});
-      };
-    }, []),
-  );
 
   const loadProducts = useCallback(async (cat: string, force = false) => {
     const requestId = ++categoryRequest.current;
