@@ -8,7 +8,7 @@ import { T, EmptyState } from "@/src/components/ui";
 import { api } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
 
-const ROLE_LABEL: Record<string, string> = { customer: "زبون", delivery: "مندوب توصيل", manager: "مدير" };
+const ROLE_LABEL: Record<string, string> = { customer: "زبون", delivery: "مندوب توصيل", order_receiver: "مستلم الطلبات", manager: "مدير" };
 
 export default function Agents() {
   const insets = useSafeAreaInsets();
@@ -29,7 +29,7 @@ export default function Agents() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const setRole = async (u: any, role: string) => {
-    try { await api.adminSetRole(u.user_id, role); show(role === "delivery" ? "تم تعيينه مندوباً" : "تم التحويل إلى زبون"); setUsers((prev) => prev.map((x) => x.user_id === u.user_id ? { ...x, role } : x)); }
+    try { await api.adminSetRole(u.user_id, role); show(role === "delivery" ? "تم تعيينه مندوباً" : role === "order_receiver" ? "تم تعيينه مستلم طلبات" : "تم التحويل إلى زبون"); setUsers((prev) => prev.map((x) => x.user_id === u.user_id ? { ...x, role } : x)); }
     catch (e: any) { show(e.message, "error"); }
   };
 
@@ -46,7 +46,7 @@ export default function Agents() {
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable testID="agents-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>
-        <T weight="displayBold" size={type.xl}>المستخدمون والمندوبون</T>
+        <T weight="displayBold" size={type.xl}>المستخدمون والأدوار</T>
         <View style={{ width: 40 }} />
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : (
@@ -54,7 +54,7 @@ export default function Agents() {
           ListEmptyComponent={<EmptyState icon="users" title="لا يوجد مستخدمون" />}
           renderItem={({ item }) => (
             <View style={styles.card} testID={`user-${item.user_id}`}>
-              <View style={styles.avatar}><Feather name={item.role === "manager" ? "shield" : item.role === "delivery" ? "truck" : "user"} size={18} color={colors.brandPrimary} /></View>
+              <View style={styles.avatar}><Feather name={item.role === "manager" ? "shield" : item.role === "delivery" ? "truck" : item.role === "order_receiver" ? "printer" : "user"} size={18} color={colors.brandPrimary} /></View>
               <View style={{ flex: 1 }}>
                 <T weight="semi">{item.name}</T>
                 <T color={colors.muted} size={type.sm}>{item.email}</T>
@@ -74,15 +74,20 @@ export default function Agents() {
                 <View style={styles.roleBadge}><T size={11} weight="bold" color={colors.brandPrimary}>{ROLE_LABEL[item.role]}</T></View>
               </View>
               {item.role !== "manager" && (
-                item.role === "delivery" ? (
-                  <Pressable testID={`demote-${item.user_id}`} onPress={() => setRole(item, "customer")} style={[styles.roleBtn, { borderColor: colors.error }]}>
-                    <T size={type.sm} weight="bold" color={colors.error}>إلغاء</T>
-                  </Pressable>
-                ) : (
-                  <Pressable testID={`promote-${item.user_id}`} onPress={() => setRole(item, "delivery")} style={[styles.roleBtn, { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary }]}>
-                    <T size={type.sm} weight="bold" color="#fff">تعيين مندوب</T>
-                  </Pressable>
-                )
+                <View style={styles.roleActions}>
+                  {(item.role === "customer" ? ["delivery", "order_receiver"] : item.role === "delivery" ? ["order_receiver", "customer"] : ["delivery", "customer"]).map((role) => (
+                    <Pressable
+                      key={role}
+                      testID={"role-" + role + "-" + item.user_id}
+                      onPress={() => setRole(item, role)}
+                      style={[styles.roleBtn, role === "customer" ? styles.roleBtnDanger : styles.roleBtnPrimary]}
+                    >
+                      <T size={11} weight="bold" color={role === "customer" ? colors.error : "#fff"}>
+                        {role === "delivery" ? "مندوب" : role === "order_receiver" ? "استلام" : "زبون"}
+                      </T>
+                    </Pressable>
+                  ))}
+                </View>
               )}
             </View>
           )} />
@@ -102,5 +107,8 @@ const styles = StyleSheet.create({
   phoneRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
   phoneInput: { flex: 1, minWidth: 120, height: 34, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, color: colors.onSurface, textAlign: "right", fontSize: 12 },
   savePhoneBtn: { height: 34, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  roleBtn: { paddingHorizontal: spacing.md, height: 40, borderRadius: radius.sm, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  roleActions: { maxWidth: 132, flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "flex-end", gap: spacing.xs },
+  roleBtn: { paddingHorizontal: spacing.sm, minHeight: 36, borderRadius: radius.sm, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  roleBtnPrimary: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary },
+  roleBtnDanger: { borderColor: colors.error, backgroundColor: "#fff" },
 });

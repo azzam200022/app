@@ -14,6 +14,8 @@ import { ReceiptRasterizer, type ReceiptRasterizerRef } from "@/src/components/R
 import { storage } from "@/src/utils/storage";
 
 const FILTERS = ["all", "pending", "confirmed", "preparing", "ready_for_delivery", "out_for_delivery", "delivered", "delivery_failed"];
+const RECEIVER_FILTERS = ["all", "pending", "confirmed", "preparing"];
+const RECEIVER_ACTIVE_STATUSES = ["pending", "confirmed", "preparing"];
 const FILTER_LABEL: Record<string, string> = { all: "الكل", ...STATUS_LABEL };
 const PAGE_SIZE = 30;
 const MAX_PRINT_ATTEMPTS = 5;
@@ -48,10 +50,11 @@ function normalizeOrdersResponse(result: any) {
   };
 }
 
-export default function ManagerOrders() {
+export default function ManagerOrders({ receiver = false }: { receiver?: boolean }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { show } = useToast();
+  const filterOptions = receiver ? RECEIVER_FILTERS : FILTERS;
   const [filter, setFilter] = useState("all");
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -71,15 +74,17 @@ export default function ManagerOrders() {
   const queueRef = useRef<ReceiptPrintJob[]>([]);
   const printingRef = useRef(false);
   const rasterizerRef = useRef<ReceiptRasterizerRef>(null);
+  const autoPrintStorageKey = receiver ? "receiver_autoprint_on" : "autoprint_on";
+  const printQueueStorageKey = receiver ? "receiver_receipt_print_queue" : "receipt_print_queue";
 
   useEffect(() => {
     (async () => {
       try {
         const [on, purl, printed, storedQueueRaw, storedWidth] = await Promise.all([
-          storage.getItem("autoprint_on", false),
+          storage.getItem(autoPrintStorageKey, false),
           storage.getItem("printer_url", ""),
           storage.getItem("printed_orders", [] as string[]),
-          storage.getItem("receipt_print_queue", "[]"),
+          storage.getItem(printQueueStorageKey, "[]"),
           storage.getItem("receipt_width", 80),
         ]);
         let storedQueue: any[] = [];
@@ -117,7 +122,7 @@ export default function ManagerOrders() {
         setPrintPrefsReady(true);
       }
     })();
-  }, [show]);
+  }, [show, autoPrintStorageKey, printQueueStorageKey]);
 
   const persistPrinted = useCallback(async () => {
     const ok = await storage.setItem("printed_orders", Array.from(printedRef.current).slice(-200));
@@ -125,11 +130,11 @@ export default function ManagerOrders() {
   }, []);
 
   const persistQueue = useCallback(async (next: ReceiptPrintJob[]) => {
-    const ok = await storage.setItem("receipt_print_queue", JSON.stringify(next));
+    const ok = await storage.setItem(printQueueStorageKey, JSON.stringify(next));
     if (!ok) throw new Error("تعذّر حفظ قائمة الطباعة.");
     queueRef.current = next;
     setPrintQueue(next);
-  }, []);
+  }, [printQueueStorageKey]);
 
   const sendReceipt = useCallback((order: any) => {
     return printOrder(order, printerUrl, {
@@ -218,7 +223,8 @@ export default function ManagerOrders() {
     const queuedIds = new Set(queueRef.current.map((job) => job.orderId));
     const fresh = list.filter((order) => {
       const id = String(order?.id ?? "");
-      return order?.status === "confirmed" && id &&
+      const printableStatus = receiver ? RECEIVER_ACTIVE_STATUSES.includes(order?.status) : order?.status === "confirmed";
+      return printableStatus && id &&
         !printedRef.current.has(id) && !queuedIds.has(id);
     });
     if (fresh.length) {
@@ -240,63 +246,83 @@ export default function ManagerOrders() {
       }
     }
     await processPrintQueue();
-  }, [persistQueue, printPrefsReady, processPrintQueue, show]);
+  }, [persistQueue, printPrefsReady, processPrintQueue, receiver, show]);
+
+  const fetchOrderPage = useCallback(async (currentFilter: string, page = 1, searchTerm = search) => {
+    if (receiver) {
+      const allItems = normalizeOrdersResponse(await api.receiverOrders()).items;
+      const normalizedSearch = searchTerm.trim().toLocaleLowerCase();
+      const items = allItems.filter((order: any) => {
+        const matchesStatus = currentFilter === "all" || order.status === currentFilter;
+        const searchable = [order.id, order.customer_name, order.phone].join(" ").toLocaleLowerCase();
+        return matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch));
+      });
+      return {
+        items,
+        pagination: { page: 1, page_size: PAGE_SIZE, total: items.length, has_more: false },
+        allItems,
+      };
+    }
+    const result = normalizeOrdersResponse(
+      await api.adminOrders({ status: currentFilter, page, page_size: PAGE_SIZE, search: searchTerm }),
+    );
+    return { ...result, allItems: [] as any[] };
+  }, [receiver, search]);
 
   const load = useCallback(async (f: string, page = 1, append = false, searchTerm = search) => {
-      setLoading(!append);
+    setLoading(!append);
+    setLoadError(null);
+    try {
+      const result = await fetchOrderPage(f, page, searchTerm);
+      setOrders((current) => append ? [...current, ...result.items] : result.items);
+      setPagination(result.pagination);
       setLoadError(null);
-      try {
-        const result = normalizeOrdersResponse(await api.adminOrders({ status: f, page, page_size: PAGE_SIZE, search: searchTerm }));
-        setOrders((current) => append ? [...current, ...result.items] : result.items);
-        setPagination(result.pagination);
-        setLoadError(null);
-        if (autoRef.current) {
-          const confirmed = normalizeOrdersResponse(
-            await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 }),
-          ).items;
-          await autoPrintNew(confirmed);
-        }
-      } catch (e: any) {
-        const message = e?.message || "تعذّر تحميل الطلبات. تحقق من الاتصال ثم حاول مرة أخرى.";
-        setLoadError(message);
-        show(message, "error");
-      } finally { setLoading(false); }
-    }, [show, autoPrintNew, search]);
+      if (autoRef.current) {
+        const printData = receiver
+          ? result.allItems
+          : normalizeOrdersResponse(await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 })).items;
+        await autoPrintNew(printData);
+      }
+    } catch (e: any) {
+      const message = e?.message || "تعذّر تحميل الطلبات. تحقق من الاتصال ثم حاول مرة أخرى.";
+      setLoadError(message);
+      show(message, "error");
+    } finally { setLoading(false); }
+  }, [show, autoPrintNew, fetchOrderPage, receiver, search]);
 
-    useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter, 1, false, search); }, [load, filter, search, printPrefsReady]));
 
-  // Keep the manager's list current in web and native while the screen is open.
-  // Web push registration is disabled, so do not tie list refresh to auto-print.
+  useFocusEffect(useCallback(() => { if (printPrefsReady) load(filter, 1, false, search); }, [load, filter, search, printPrefsReady]));
+
   useFocusEffect(useCallback(() => {
     if (!printPrefsReady || autoPrint || pagination.page > 1) return;
     const iv = setInterval(async () => {
       try {
-        const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
+        const result = await fetchOrderPage(filter, 1, search);
         setOrders(result.items);
         setPagination(result.pagination);
         setLoadError(null);
       } catch {}
     }, 10000);
     return () => clearInterval(iv);
-  }, [autoPrint, filter, search, printPrefsReady, pagination.page]));
+  }, [autoPrint, filter, search, printPrefsReady, pagination.page, fetchOrderPage]));
 
-  // poll for new orders while auto-print is enabled
   useEffect(() => {
-      if (!autoPrint || !printPrefsReady) return;
-      const iv = setInterval(async () => {
-        try {
-          const result = normalizeOrdersResponse(await api.adminOrders({ status: filter, page: 1, page_size: PAGE_SIZE, search }));
-          setOrders(result.items);
-          setPagination(result.pagination);
-          setLoadError(null);
-          const printData = normalizeOrdersResponse(
-            await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 }),
-          ).items;
-          await autoPrintNew(printData);
-        } catch {}
-      }, 5000);
-      return () => clearInterval(iv);
-    }, [autoPrint, filter, search, autoPrintNew, printPrefsReady]);
+    if (!autoPrint || !printPrefsReady) return;
+    const iv = setInterval(async () => {
+      try {
+        const result = await fetchOrderPage(filter, 1, search);
+        setOrders(result.items);
+        setPagination(result.pagination);
+        setLoadError(null);
+        const printData = receiver
+          ? result.allItems
+          : normalizeOrdersResponse(await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 })).items;
+        await autoPrintNew(printData);
+      } catch {}
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [autoPrint, filter, search, autoPrintNew, printPrefsReady, receiver, fetchOrderPage]);
+
 
   const toggleAuto = async (v: boolean) => {
     if (v) {
@@ -309,16 +335,16 @@ export default function ManagerOrders() {
         return;
       }
       try {
-        const currentConfirmed = normalizeOrdersResponse(
-          await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 }),
-        ).items;
-        currentConfirmed.forEach((order: any) => printedRef.current.add(String(order.id)));
+        const currentOrders = receiver
+          ? normalizeOrdersResponse(await api.receiverOrders()).items
+          : normalizeOrdersResponse(await api.adminOrders({ status: "confirmed", page: 1, page_size: 100 })).items;
+        currentOrders.forEach((order: any) => printedRef.current.add(String(order.id)));
         await persistPrinted();
       } catch (error: any) {
         show(error?.message || "تعذّر تجهيز الطباعة التلقائية", "error");
         return;
       }
-      const saved = await storage.setItem("autoprint_on", true);
+      const saved = await storage.setItem(autoPrintStorageKey, true);
       if (!saved) {
         show("تعذّر حفظ إعداد الطباعة التلقائية.", "error");
         return;
@@ -327,7 +353,7 @@ export default function ManagerOrders() {
       setAutoPrint(true);
       show("تم تفعيل الطباعة التلقائية للطلبات الجديدة", "info");
     } else {
-      const saved = await storage.setItem("autoprint_on", false);
+      const saved = await storage.setItem(autoPrintStorageKey, false);
       if (!saved) {
         show("تعذّر حفظ إعداد الطباعة التلقائية.", "error");
         return;
@@ -484,7 +510,11 @@ export default function ManagerOrders() {
   };
 
   const setStatus = async (id: string, status: string) => {
-    try { await api.adminSetStatus(id, status); show("تم تحديث الحالة"); load(filter, 1, false, search); } catch (e: any) { show(e.message, "error"); }
+    try {
+      if (receiver) await api.receiverSetReady(id); else await api.adminSetStatus(id, status);
+      show(receiver ? "أصبح الطلب جاهزًا لاستلام المندوب" : "تم تحديث الحالة");
+      load(filter, 1, false, search);
+    } catch (e: any) { show(e.message, "error"); }
   };
 
   const openAssign = async (order: any) => {
@@ -513,6 +543,10 @@ export default function ManagerOrders() {
     };
 
     const nextAction = (o: any) => {
+    if (receiver && RECEIVER_ACTIVE_STATUSES.includes(o.status)) {
+      return { label: "تم تجهيز الطلب", icon: "check-circle", onPress: () => setStatus(o.id, "ready_for_delivery") };
+    }
+    if (receiver) return null;
     if (o.status === "pending") return { label: "تأكيد الطلب", icon: "check", onPress: () => setStatus(o.id, "confirmed") };
     if (o.status === "confirmed") return { label: "بدء التجهيز", icon: "package", onPress: () => setStatus(o.id, "preparing") };
     if (o.status === "preparing") return { label: "تم تجهيز الطلب", icon: "check-circle", onPress: () => setStatus(o.id, "ready_for_delivery") };
@@ -523,17 +557,17 @@ export default function ManagerOrders() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <T weight="displayBold" size={type.xl} style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>إدارة الطلبات</T>
+        <T weight="displayBold" size={type.xl} style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>{receiver ? "استلام الطلبات" : "إدارة الطلبات"}</T>
         <View style={styles.autoRow}>
           <View style={styles.autoLeft}>
             <View style={styles.printIcon}><Feather name="printer" size={18} color={colors.brandPrimary} /></View>
             <View>
               <T weight="semi" size={type.sm}>طباعة تلقائية للطلبات الجديدة</T>
-              <T color={colors.muted} size={11}>تُرسل الفاتورة بعد تأكيد الطلب، وليس عند استلامه</T>
+              <T color={colors.muted} size={11}>{receiver ? "يمكن طباعة الطلب يدويًا أو تفعيل الطباعة عند وصول طلب جديد" : "تُرسل الفاتورة بعد تأكيد الطلب، وليس عند استلامه"}</T>
             </View>
           </View>
           <Switch
-            testID="autoprint-toggle"
+            testID={receiver ? "receiver-autoprint-toggle" : "autoprint-toggle"}
             value={autoPrint}
             onValueChange={toggleAuto}
             trackColor={{ true: colors.brandPrimary, false: colors.borderStrong }}
@@ -614,7 +648,7 @@ export default function ManagerOrders() {
             />
             {searchDraft ? <Pressable testID="clear-orders-search" onPress={clearSearch}><Feather name="x-circle" size={18} color={colors.muted} /></Pressable> : null}
           </View>
-                  <CategoryChips categories={FILTERS.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = FILTERS.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
+                  <CategoryChips categories={filterOptions.map((f) => FILTER_LABEL[f])} selected={FILTER_LABEL[filter]} onSelect={(label) => { const f = filterOptions.find((x) => FILTER_LABEL[x] === label) || "all"; setFilter(f); }} />
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : orders.length === 0 && loadError ? (
         <View style={styles.center}>
@@ -628,7 +662,7 @@ export default function ManagerOrders() {
           renderItem={({ item }) => {
             const action = nextAction(item);
             return (
-              <View style={styles.card} testID={`mo-${item.id}`}>
+              <View style={styles.card} testID={receiver ? "receiver-order-" + item.id : "mo-" + item.id}>
                 <View style={styles.cardTop}>
                   <T weight="bold">#{item.id.replace("ORD", "")}</T>
                   <StatusPill status={item.status} />

@@ -560,6 +560,12 @@ async def require_delivery(user=Depends(require_user)):
     return user
 
 
+async def require_order_receiver(user=Depends(require_user)):
+    if user.get("role") != "order_receiver":
+        raise HTTPException(status_code=403, detail="مخصص لمستلم الطلبات")
+    return user
+
+
 def public_user(u):
     return {k: u.get(k) for k in ("user_id", "name", "email", "role", "picture", "phone")}
 
@@ -2315,6 +2321,22 @@ ORDER_STATUS_TRANSITIONS = {
 }
 
 
+def receiver_ready_status_path(current_status):
+    """Return the valid order-status steps from the receiver's current stage to delivery-ready."""
+    if current_status == "ready_for_delivery":
+        return []
+    path = []
+    progress_order = ("confirmed", "preparing", "ready_for_delivery")
+    while current_status != "ready_for_delivery":
+        allowed = ORDER_STATUS_TRANSITIONS.get(current_status, set())
+        next_status = next((status for status in progress_order if status in allowed), None)
+        if next_status is None:
+            return None
+        path.append(next_status)
+        current_status = next_status
+    return path
+
+
 DELIVERY_AVAILABLE_STATUSES = ("ready_for_delivery",)
 
 
@@ -3123,6 +3145,51 @@ async def admin_update_status(oid: str, body: StatusUpdateIn, user=Depends(requi
     return {"ok": True}
 
 
+@api.get("/receiver/orders")
+async def receiver_orders(user=Depends(require_order_receiver)):
+    orders = []
+    for status in ("pending", "confirmed", "preparing"):
+        orders.extend(
+            await db.orders.find({"status": status}, {"_id": 0})
+            .sort("created_at", -1)
+            .to_list(100)
+        )
+    orders.sort(key=lambda order: str(order.get("created_at") or ""), reverse=True)
+    for order in orders:
+        order.pop("delivery_otp", None)
+    return orders
+
+
+@api.post("/receiver/orders/{oid}/ready")
+async def receiver_mark_ready(oid: str, user=Depends(require_order_receiver)):
+    order = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+
+    current_status = order.get("status")
+    if current_status == "ready_for_delivery":
+        return {"ok": True, "status": current_status}
+
+    transition_path = receiver_ready_status_path(current_status)
+    if transition_path is None:
+        raise HTTPException(status_code=409, detail="لا يمكن تجهيز الطلب بهذه الحالة")
+
+    timeline = order.get("timeline")
+    timeline = list(timeline) if isinstance(timeline, list) else []
+    for status in transition_path:
+        timeline.append({"status": status, "at": now_utc().isoformat()})
+
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "status": current_status},
+        {"$set": {"status": "ready_for_delivery", "timeline": timeline}},
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="تم تغيير حالة الطلب؛ حدّث القائمة وحاول مجددًا")
+
+    await notify_customer_status(oid, "ready_for_delivery")
+    return {"ok": True, "status": "ready_for_delivery"}
+
+
 @api.post("/admin/orders/{oid}/assign")
 async def admin_assign(oid: str, body: AssignIn, user=Depends(require_manager)):
     agent = await db.users.find_one({"user_id": body.agent_id, "role": "delivery"}, {"_id": 0})
@@ -3467,7 +3534,7 @@ async def admin_sync_config(user=Depends(require_manager)):
 
 @api.post("/admin/set-role")
 async def admin_set_role(body: RoleIn, user=Depends(require_manager)):
-    if body.role not in ("customer", "delivery", "manager"):
+    if body.role not in ("customer", "delivery", "manager", "order_receiver"):
         raise HTTPException(status_code=400, detail="دور غير صالح")
     await db.users.update_one({"user_id": body.user_id}, {"$set": {"role": body.role}})
     return {"ok": True}
