@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Animated, Dimensions } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import * as NavigationBar from "expo-navigation-bar";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
@@ -37,40 +38,35 @@ export default function Home() {
   const [productsLoading, setProductsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const categoryRequest = React.useRef(0);
-  const scrollY = React.useRef(new Animated.Value(0)).current;
   const listRef = React.useRef<FlatList<any>>(null);
   const compactHeaderRef = React.useRef(false);
   const scrollTopRef = React.useRef(false);
   const [isCompactHeader, setIsCompactHeader] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const collapseDistance = 96;
   const fullBarHeight = insets.top + spacing.xs + 56 + spacing.sm;
-  const barHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [fullBarHeight, 0], extrapolate: "clamp" });
-  const fullRowHeight = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [56, 0], extrapolate: "clamp" });
-  const fullRowOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [1, 0.35, 0], extrapolate: "clamp" });
-  const compactSearchOpacity = scrollY.interpolate({ inputRange: [0, 56, collapseDistance], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
-  const compactSearchScale = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [0.8, 1], extrapolate: "clamp" });
-  const barPadBottom = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [spacing.sm, 0], extrapolate: "clamp" });
-  const barPadTop = scrollY.interpolate({ inputRange: [0, collapseDistance], outputRange: [insets.top + spacing.xs, 0], extrapolate: "clamp" });
-  const handleScroll = useMemo(() => Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    {
-      useNativeDriver: false,
-      listener: (event: any) => {
-        const offset = event.nativeEvent.contentOffset.y;
-        const nextCompact = offset > 48;
-        const nextShowScrollTop = offset > 220;
-        if (nextCompact !== compactHeaderRef.current) {
-          compactHeaderRef.current = nextCompact;
-          setIsCompactHeader(nextCompact);
-        }
-        if (nextShowScrollTop !== scrollTopRef.current) {
-          scrollTopRef.current = nextShowScrollTop;
-          setShowScrollTop(nextShowScrollTop);
-        }
-      },
-    },
-  ), [scrollY]);
+  const handleScroll = useCallback((event: any) => {
+    const offset = event.nativeEvent.contentOffset.y;
+    const nextCompact = offset > 48;
+    const nextShowScrollTop = offset > 220;
+    if (nextCompact !== compactHeaderRef.current) {
+      compactHeaderRef.current = nextCompact;
+      setIsCompactHeader(nextCompact);
+    }
+    if (nextShowScrollTop !== scrollTopRef.current) {
+      scrollTopRef.current = nextShowScrollTop;
+      setShowScrollTop(nextShowScrollTop);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android") return;
+      void NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+      return () => {
+        void NavigationBar.setVisibilityAsync("visible").catch(() => {});
+      };
+    }, []),
+  );
 
   const loadProducts = useCallback(async (cat: string, force = false) => {
     const requestId = ++categoryRequest.current;
@@ -156,8 +152,49 @@ export default function Home() {
     }
   }, [cart.items, remove, setQty, show]);
 
+  const topBar = (
+    <View style={[styles.topBar, { height: fullBarHeight, paddingTop: insets.top + spacing.xs, paddingBottom: spacing.sm }]}>
+      <LinearGradient colors={[colors.surface, colors.surfaceSecondary]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <View style={styles.topRow}>
+        <View style={styles.brandLockup} testID="home-brand" accessibilityRole="image" accessibilityLabel="شعار بن سليم سوبرماركت">
+          <View style={styles.brandMarkFrame}>
+            <Image source={require("../../assets/images/bin-saleem-mark.png")} style={styles.brandMark} contentFit="contain" />
+          </View>
+          <View style={styles.brandType}>
+            <T weight="displayBold" size={type.sm} color={colors.brandPrimary} style={styles.brandEnglish}>BIN SALEEM</T>
+            <T weight="bold" size={type.xs} color={colors.brandSecondary} style={styles.brandSubline}>SUPERMARKET</T>
+          </View>
+        </View>
+        <Pressable
+          testID="home-search-prompt"
+          onPress={() => router.push("/search")}
+          style={styles.topSearchPrompt}
+          accessibilityRole="button"
+          accessibilityLabel="ابحث عن منتج أو تصنيف"
+        >
+          <Feather name="search" size={16} color={colors.brandPrimary} />
+          <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
+        </Pressable>
+        <View style={styles.topActions}>
+          <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
+            <Feather name="shopping-bag" size={19} color={colors.onSurface} />
+            {cart.count > 0 && (
+              <View style={styles.cartBadge}>
+                <T size={type.xs} weight="bold" color={colors.onBrandPrimary}>{cart.count > 9 ? "9+" : String(cart.count)}</T>
+              </View>
+            )}
+          </Pressable>
+          <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
+            <Feather name="heart" size={19} color={colors.onSurface} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
   const header = (
     <View>
+      {topBar}
       {/* Offers banner carousel */}
       {banners.length > 0 ? (
         <View style={styles.hero}>
@@ -257,56 +294,15 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
-      {/* Collapses to a small search control while scrolling */}
-      <Animated.View style={[styles.topBar, { height: barHeight, paddingTop: barPadTop, paddingBottom: barPadBottom }]}>
-        <LinearGradient colors={[colors.surface, colors.surfaceSecondary]} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <Animated.View style={[styles.fullHeader, { height: fullRowHeight, opacity: fullRowOpacity }]}>
-          <View style={styles.topRow}>
-            <View style={styles.brandLockup} testID="home-brand" accessibilityRole="image" accessibilityLabel="شعار بن سليم سوبرماركت">
-              <View style={styles.brandMarkFrame}>
-                <Image source={require("../../assets/images/bin-saleem-mark.png")} style={styles.brandMark} contentFit="contain" />
-              </View>
-              <View style={styles.brandType}>
-                <T weight="displayBold" size={type.sm} color={colors.brandPrimary} style={styles.brandEnglish}>BIN SALEEM</T>
-                <T weight="bold" size={type.xs} color={colors.brandSecondary} style={styles.brandSubline}>SUPERMARKET</T>
-              </View>
-            </View>
-            <Pressable
-              testID="home-search-prompt"
-              onPress={() => router.push("/search")}
-              style={styles.topSearchPrompt}
-              accessibilityRole="button"
-              accessibilityLabel="ابحث عن منتج أو تصنيف"
-            >
-              <Feather name="search" size={16} color={colors.brandPrimary} />
-              <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.searchLabel}>ابحث عن منتج أو تصنيف</T>
-            </Pressable>
-            <View style={styles.topActions}>
-            <Pressable testID="cart-btn" onPress={() => router.push("/cart")} style={styles.iconBtn}>
-              <Feather name="shopping-bag" size={19} color={colors.onSurface} />
-              {cart.count > 0 && (
-                <View style={styles.cartBadge}>
-                  <T size={type.xs} weight="bold" color={colors.onBrandPrimary}>{cart.count > 9 ? "9+" : String(cart.count)}</T>
-                </View>
-              )}
-            </Pressable>
-              <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
-                <Feather name="heart" size={19} color={colors.onSurface} />
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
-
-
-      </Animated.View>
-
-      <Animated.View pointerEvents={isCompactHeader ? "auto" : "none"} style={[styles.compactSearch, { opacity: compactSearchOpacity, transform: [{ scale: compactSearchScale }] }]}>
+      {isCompactHeader && (
+        <View style={styles.compactSearch}>
           <Pressable testID="compact-search-btn" onPress={() => router.push("/search")} style={styles.compactSearchBtn} accessibilityLabel="البحث">
             <Feather name="search" size={17} color={colors.onSurface} />
           </Pressable>
-        </Animated.View>
+        </View>
+      )}
 
-          <Animated.FlatList
+          <FlatList
            ref={listRef}
            data={products}
            keyExtractor={(i) => i.id}
@@ -318,7 +314,7 @@ export default function Home() {
            maxToRenderPerBatch={8}
            windowSize={5}
            removeClippedSubviews={Platform.OS !== "web"}
-           scrollEventThrottle={16}
+           scrollEventThrottle={32}
            onScroll={handleScroll}
            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
            renderItem={({ item }) => <ProductCard product={item} onAdd={onAdd} onIncrease={onIncrease} onDecrease={onDecrease} quantity={quantities[item.id] || 0} />}
@@ -365,7 +361,6 @@ function ProductGridSkeleton() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   topBar: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, overflow: "hidden", zIndex: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  fullHeader: { overflow: "hidden" },
   topRow: { height: 56, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   brandLockup: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   brandMarkFrame: { width: 50, height: 46, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: colors.surface },
