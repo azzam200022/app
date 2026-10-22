@@ -1,20 +1,33 @@
 import { Platform } from "react-native";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import { BACKEND } from "@/src/lib/api";
+import { api } from "@/src/lib/api";
 
-export async function registerForPush(userId: string) {
-  if (Platform.OS === "web" || !Device.isDevice) return;
+export async function registerForPush() {
+  if ((Platform.OS !== "ios" && Platform.OS !== "android") || !Device.isDevice) return;
+
   try {
-    const { status } = await Notifications.requestPermissionsAsync();
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Default",
+        importance: Notifications.AndroidImportance.MAX,
+        sound: "default",
+      });
+    }
+
+    let { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    if (status !== "granted" && canAskAgain) {
+      const permission = await Notifications.requestPermissionsAsync();
+      status = permission.status;
+    }
     if (status !== "granted") return;
-    const tokenResp = await Notifications.getDevicePushTokenAsync();
-    await fetch(`${BACKEND}/api/register-push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, platform: Platform.OS, device_token: tokenResp.data }),
+
+    const tokenResponse = await Notifications.getDevicePushTokenAsync();
+    await api.registerPushToken({
+      platform: Platform.OS,
+      device_token: String(tokenResponse.data),
     });
-  } catch (e) {
-    // non-blocking
+  } catch (error) {
+    console.warn("[push] Device registration failed", error);
   }
 }

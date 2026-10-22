@@ -134,6 +134,7 @@ export default function ManagerDashboard() {
         { icon: "tag", label: "فروع الأقسام", onPress: () => router.push("/(manager)/branches"), testID: "qa-branches" },
         { icon: "tag", label: "كود الخصم", count: stats?.coupons || 0, onPress: () => router.push("/(manager)/coupons"), testID: "qa-discounts" },
         { icon: "image", label: "البانرات", count: stats?.banners || 0, onPress: () => router.push("/(manager)/banners"), testID: "qa-banners" },
+        { icon: "bell", label: "إشعارات العملاء", onPress: () => router.push("/(manager)/notifications"), testID: "qa-notifications" },
         { icon: "file-text", label: "تحديث PDF", onPress: () => router.push("/(manager)/sync-settings"), testID: "qa-pdf" },
       ],
     },

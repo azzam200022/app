@@ -39,7 +39,7 @@ function AppServices() {
 
   // register for push whenever a user is present
   useEffect(() => {
-    if (user?.user_id) registerForPush(user.user_id);
+    if (user?.user_id) void registerForPush();
   }, [user?.user_id]);
 
   // notification tap handling + denied nudge

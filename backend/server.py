@@ -30,6 +30,7 @@ from firebase_admin import firestore
 from firebase_admin import storage as firebase_storage
 from firestore_store import FirestoreDatabase, favorite_document_id
 from delivery_routing import calculate_driving_distance_km
+from push_notifications import push_batches
 from cloudinary_storage import (
     CloudinaryConfigurationError,
     CloudinaryStorageError,
@@ -661,14 +662,20 @@ async def logout(authorization: Optional[str] = Header(None)):
 
 
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
-PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
-_push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": PUSH_KEY}, timeout=10.0)
+PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "").strip()
+_push_client = httpx.AsyncClient(
+    base_url=PUSH_BASE_URL,
+    headers={"X-Push-Key": PUSH_KEY} if PUSH_KEY else {},
+    timeout=10.0,
+)
 
 
 async def send_push(recipients, data, idempotency_key=None):
     recipients = [r for r in (recipients or []) if r]
     if not recipients:
         return
+    if not PUSH_KEY:
+        raise RuntimeError("EMERGENT_PUSH_KEY is not configured")
     payload = {"recipients": recipients[:100], "data": data}
     if idempotency_key:
         payload["$idempotency_key"] = idempotency_key
@@ -677,20 +684,76 @@ async def send_push(recipients, data, idempotency_key=None):
 
 
 class RegisterPushBody(BaseModel):
-    user_id: str
-    platform: str
-    device_token: str
+    platform: str = Field(..., pattern="^(ios|android)$")
+    device_token: str = Field(..., min_length=1, max_length=4096)
+
+
+class CustomerNotificationIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)
+    message: str = Field(..., min_length=1, max_length=300)
 
 
 @api.post("/register-push", status_code=201)
-async def register_push(body: RegisterPushBody):
-    resp = await _push_client.post("/api/v1/push/users/register", json=body.model_dump())
+async def register_push(body: RegisterPushBody, user=Depends(require_user)):
+    if not PUSH_KEY:
+        raise HTTPException(status_code=503, detail="خدمة الإشعارات غير مهيأة على الخادم")
+    device_token = body.device_token.strip()
+    if not device_token:
+        raise HTTPException(status_code=400, detail="رمز الجهاز غير صالح")
+    payload = {
+        "user_id": user["user_id"],
+        "platform": body.platform,
+        "device_token": device_token,
+    }
+    try:
+        resp = await _push_client.post("/api/v1/push/users/register", json=payload)
+    except httpx.RequestError as exc:
+        logger.warning("Push device registration request failed")
+        raise HTTPException(status_code=502, detail="تعذر الاتصال بخدمة الإشعارات") from exc
     if resp.status_code == 401:
-        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
-    if resp.status_code >= 500:
-        raise HTTPException(502, "Push provider unavailable")
-    resp.raise_for_status()
+        raise HTTPException(status_code=503, detail="مفتاح خدمة الإشعارات غير صالح")
+    if resp.is_error:
+        logger.warning("Push provider rejected device registration with status %s", resp.status_code)
+        raise HTTPException(status_code=502, detail="تعذر تسجيل جهاز الإشعارات")
     return {"status": "registered"}
+
+
+@api.get("/admin/push/status")
+async def admin_push_status(user=Depends(require_manager)):
+    return {"push_key_configured": bool(PUSH_KEY)}
+
+
+@api.post("/admin/push/send")
+async def admin_send_customer_notification(body: CustomerNotificationIn, user=Depends(require_manager)):
+    if not PUSH_KEY:
+        raise HTTPException(status_code=503, detail="خدمة الإشعارات غير مهيأة على الخادم")
+    title = body.title.strip()
+    message = body.message.strip()
+    if not title or not message:
+        raise HTTPException(status_code=400, detail="العنوان ونص الإشعار مطلوبان")
+
+    customers = await db.users.find(
+        {"role": "customer"}, {"_id": 0, "user_id": 1}
+    ).to_list()
+    recipients = [customer.get("user_id") for customer in customers if customer.get("user_id")]
+    campaign_id = uuid.uuid4().hex
+    batches = push_batches(recipients)
+    requested_count = sum(len(batch) for batch in batches)
+    batch_count = 0
+    try:
+        for batch_count, batch in enumerate(batches, start=1):
+            await send_push(
+                batch,
+                {"title": title, "message": message},
+                idempotency_key="customer_campaign_" + campaign_id + "_" + str(batch_count),
+            )
+    except Exception as exc:
+        logger.warning("Customer push campaign failed for manager %s", user.get("user_id"))
+        raise HTTPException(
+            status_code=502,
+            detail="تعذر إكمال إرسال الإشعارات؛ قد تكون بعض الرسائل قد أُرسلت بالفعل",
+        ) from exc
+    return {"requested_count": requested_count, "batch_count": batch_count}
 
 
 async def manager_ids():
