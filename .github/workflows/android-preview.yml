@@ -1,4 +1,4 @@
-name: Android preview APK
+name: Android preview APK (Gradle)
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "frontend/**"
+      - ".github/workflows/android-preview.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +14,7 @@ permissions:
 
 jobs:
   preview-apk:
-    name: Build and package preview APK
+    name: Build preview APK with Gradle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,50 +27,41 @@ jobs:
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
 
-      - name: Configure Expo and EAS
-        uses: expo/expo-github-action@v8
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1"
 
       - name: Install dependencies
         working-directory: frontend
         run: yarn install --frozen-lockfile
 
-      - name: Build Android preview APK
-        id: eas-build
+      - name: Generate Android project
         working-directory: frontend
-        run: |
-          build_json="$(eas build --platform android --profile preview --non-interactive --wait --json --message "GitHub preview $GITHUB_SHA")"
-          build_id="$(printf '%s' "$build_json" | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const b = JSON.parse(s); console.log(Array.isArray(b) ? (b[0]?.id ?? "") : (b?.id ?? "")); });')"
-          if [ -z "$build_id" ]; then
-            echo "EAS did not return a build ID." >&2
-            exit 1
-          fi
-          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+        run: npx expo prebuild --platform android --no-install
 
-      - name: Download the completed APK from EAS
-        id: download-apk
-        working-directory: frontend
-        env:
-          BUILD_ID: ${{ steps.eas-build.outputs.build_id }}
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK with Gradle
+        working-directory: frontend/android
         run: |
-          download_json="$(eas build:download --build-id "$BUILD_ID" --non-interactive --json)"
-          apk_path="$(printf '%s' "$download_json" | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { console.log(JSON.parse(s).path ?? ""); });')"
-          if [ ! -f "$apk_path" ]; then
-            echo "The EAS APK was not downloaded." >&2
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/preview-apk"
-          cp "$apk_path" "$RUNNER_TEMP/preview-apk/market-bin-saleem-preview.apk"
-          echo "artifact_path=$RUNNER_TEMP/preview-apk/market-bin-saleem-preview.apk" >> "$GITHUB_OUTPUT"
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         id: upload-apk
         uses: actions/upload-artifact@v4
         with:
-          name: market-bin-saleem-preview-apk
-          path: ${{ steps.download-apk.outputs.artifact_path }}
+          name: market-bin-saleem-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -78,9 +70,9 @@ jobs:
           ARTIFACT_URL: ${{ steps.upload-apk.outputs.artifact-url }}
         run: |
           {
-            echo "## APK preview is ready"
+            echo "## Android debug APK is ready"
             echo ""
-            echo "[Download the APK]($ARTIFACT_URL)"
+            echo "[Download the APK artifact]($ARTIFACT_URL)"
             echo ""
-            echo "Build profile: preview"
+            echo "Built with Gradle assembleDebug on ubuntu-latest (debug-signed; for testing)."
           } >> "$GITHUB_STEP_SUMMARY"
