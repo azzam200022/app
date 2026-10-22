@@ -266,6 +266,7 @@ export const api = {
   adminAgents: () => req("/admin/agents"),
   adminUpdateAgent: (id: string, body: any) => req("/admin/agents/" + id, { method: "PUT", body: JSON.stringify(body) }),
   adminUsers: () => req("/admin/users"),
+  adminProducts: () => req("/admin/products"),
   adminSetRole: (user_id: string, role: string) => req("/admin/set-role", { method: "POST", body: JSON.stringify({ user_id, role }) }),
   syncConfig: () => req("/admin/sync-config"),
   adminCoupons: () => req("/admin/coupons"),

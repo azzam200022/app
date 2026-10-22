@@ -155,6 +155,7 @@ CART_PRODUCT_PROJECTION = {
     "wholesale_old_price": 1,
     "image_url": 1,
     "stock": 1,
+    "is_published": 1,
     "coming_soon": 1,
     "deleted_at": 1,
 }
@@ -1312,15 +1313,22 @@ def clean_product(p, favorites=None, availability_alerted=None):
     p.pop("_id", None)
     stock = p.get("stock", 0) or 0
     coming = bool(p.get("coming_soon"))
+    published = p.get("is_published") is True
     p["coming_soon"] = coming
     p["stock"] = stock
-    p["available"] = (stock > 0) and (not coming)
+    p["available"] = (stock > 0) and (not coming) and published
     p["stock_status"] = "coming_soon" if coming else ("out" if stock <= 0 else "in")
     if favorites is not None:
         p["is_favorite"] = p["id"] in favorites
     if availability_alerted is not None:
         p["availability_alerted"] = availability_alerted
     return p
+
+
+@api.get("/admin/products")
+async def admin_products(user=Depends(require_manager)):
+    docs = await db.products.find({"deleted_at": None}, {"_id": 0}).to_list()
+    return [clean_product(product) for product in docs]
 
 
 @api.get("/products")
@@ -1410,6 +1418,8 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
     d, user = await asyncio.gather(product_task, user_task)
     if not d:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if d.get("is_published") is not True and (not user or user.get("role") != "manager"):
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
     fav = set()
     availability_alerted = False
     if user:
@@ -1428,9 +1438,11 @@ async def get_product(pid: str, authorization: Optional[str] = Header(None)):
 async def subscribe_availability_alert(pid: str, user=Depends(require_user)):
     product = await db.products.find_one(
         {"id": pid, "deleted_at": None},
-        {"_id": 0, "id": 1, "stock": 1, "coming_soon": 1},
+        {"_id": 0, "id": 1, "stock": 1, "coming_soon": 1, "is_published": 1},
     )
     if not product:
+        raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if product.get("is_published") is not True:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     available = (int(product.get("stock", 0) or 0) > 0) and not bool(product.get("coming_soon"))
     if available:
@@ -2140,6 +2152,8 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
     cart, prod = await asyncio.gather(cart_task, product_task)
     if not prod:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if prod.get("is_published") is not True:
+        raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
     if prod.get("coming_soon"):
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     if body.quantity <= 0:
@@ -2179,6 +2193,8 @@ async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
     cart, prod = await asyncio.gather(cart_task, product_task)
     if not prod:
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
+    if body.quantity > 0 and prod.get("is_published") is not True:
+        raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
     if prod.get("coming_soon") and body.quantity > 0:
         raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     sale_unit = body.sale_unit or "piece"
@@ -2441,6 +2457,25 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
     cart = await build_cart(user["user_id"])
     if not cart["items"]:
         raise HTTPException(status_code=400, detail="السلة فارغة")
+    product_ids = list(dict.fromkeys(str(item.get("product_id") or "") for item in cart["items"]))
+    product_id_batches = [product_ids[index:index + 10] for index in range(0, len(product_ids), 10)]
+    published_batches = await asyncio.gather(*[
+        db.products.find(
+            {
+                "id": {"$in": batch},
+                "deleted_at": None,
+                "is_published": True,
+            },
+            {"_id": 0, "id": 1},
+        ).to_list(len(batch))
+        for batch in product_id_batches
+    ])
+    published_ids = {product["id"] for batch in published_batches for product in batch}
+    if any(product_id not in published_ids for product_id in product_ids):
+        raise HTTPException(
+            status_code=409,
+            detail="أحد المنتجات في السلة لم يعد متاحاً؛ حدّث السلة قبل إكمال الطلب",
+        )
     for item in cart["items"]:
         available_stock = max(int(item.get("stock", 0) or 0), 0)
         if order_item_stock_quantity(item) > available_stock:
@@ -3218,8 +3253,8 @@ async def admin_assign(oid: str, body: AssignIn, user=Depends(require_manager)):
 
 @api.get("/admin/users")
 async def admin_users(user=Depends(require_manager)):
-    docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
-    return docs
+    docs = await db.users.find({}, {"_id": 0}).to_list()
+    return [public_user(doc) for doc in docs]
 
 
 

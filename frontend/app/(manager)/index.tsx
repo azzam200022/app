@@ -124,6 +124,7 @@ export default function ManagerDashboard() {
       actions: [
         { icon: "clipboard", label: "الطلبات", onPress: () => router.push("/(manager)/orders"), testID: "qa-orders" },
         { icon: "plus-circle", label: "إضافة منتج", onPress: () => router.push("/(manager)/scan"), testID: "qa-add" },
+        { icon: "package", label: "جميع المنتجات", count: stats?.products || 0, onPress: () => router.push("/(manager)/products"), testID: "qa-products" },
         { icon: "alert-triangle", label: "مخزون منخفض", count: lowStockProducts.length, onPress: () => router.push("/(manager)/products"), testID: "qa-low-stock" },
       ],
     },
@@ -142,6 +143,7 @@ export default function ManagerDashboard() {
       title: "الفريق والدعم",
       hint: "المتابعة والتواصل اليومي",
       actions: [
+        { icon: "users", label: "الحسابات والأدوار", onPress: () => router.push("/(manager)/agents"), testID: "qa-users" },
         { icon: "users", label: "إحصاءات المندوبين", onPress: () => router.push("/(manager)/agent-statistics"), testID: "qa-agents" },
         { icon: "message-circle", label: "الدعم", count: supportUnread, onPress: () => router.push("/(manager)/support"), testID: "qa-support" },
         { icon: "rotate-ccw", label: "المرتجعات", count: stats?.returns || 0, onPress: () => router.push("/(manager)/returns"), testID: "qa-returns" },
