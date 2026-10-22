@@ -1,0 +1,48 @@
+name: Publish APK direct download
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Successful Android standalone build run ID"
+        required: true
+        default: "39748757076"
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-apk:
+    name: Publish APK as a direct GitHub Release asset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the standalone APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: market-bin-saleem-standalone-apk
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: release
+
+      - name: Validate and rename APK
+        run: |
+          test -s release/app-release.apk
+          mv release/app-release.apk release/market-bin-saleem.apk
+
+      - name: Publish public direct download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          tag="apk-${BUILD_RUN_ID}"
+          gh release create "$tag" release/market-bin-saleem.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Market Bin Saleem APK (${BUILD_RUN_ID})" \
+            --notes "Standalone Android APK built with Gradle. Signed with a test key; not for Google Play." \
+            --target main
+          echo "## Direct APK download" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download market-bin-saleem.apk](https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/market-bin-saleem.apk)" >> "$GITHUB_STEP_SUMMARY"
