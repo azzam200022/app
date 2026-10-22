@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { View, StyleSheet, FlatList, Pressable, Modal, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -21,9 +21,19 @@ export default function ManagerProducts() {
   const [branchId, setBranchId] = useState("");
   const [branches, setBranches] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [availabilitySaving, setAvailabilitySaving] = useState<string | null>(null);
 
-  const load = useCallback(async () => { try { setItems(await api.products()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); } }, [show]);
+  const load = useCallback(async () => { try { setItems(await api.adminProducts()); } catch (e: any) { show(e.message, "error"); } finally { setLoading(false); } }, [show]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return items;
+    return items.filter((item) => [item.name, item.category, item.barcode]
+      .filter(Boolean)
+      .some((value) => String(value).toLocaleLowerCase().includes(query)));
+  }, [items, search]);
 
   const openEdit = async (p: any) => {
     setEditing(p);
@@ -54,16 +64,44 @@ export default function ManagerProducts() {
     } catch (e: any) { show(e.message, "error"); }
   };
 
+  const toggleAvailability = async (item: any) => {
+    if (availabilitySaving === item.id) return;
+    const next = item.is_published !== true;
+    setAvailabilitySaving(item.id);
+    try {
+      await api.updateProduct(item.id, { is_published: next });
+      setItems((current) => current.map((product) => product.id === item.id ? { ...product, is_published: next } : product));
+      show(next ? "أُعيد المنتج إلى المتجر" : "أصبح المنتج غير متوفر وأُخفي عن العملاء");
+    } catch (e: any) {
+      show(e.message, "error");
+    } finally {
+      setAvailabilitySaving(null);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <T weight="displayBold" size={type.xl}>إدارة المنتجات</T>
         <T color={colors.muted}>{items.length} منتج</T>
       </View>
+      <View style={styles.searchWrap}>
+        <Feather name="search" size={17} color={colors.muted} />
+        <TextInput
+          testID="admin-products-search"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="ابحث باسم المنتج أو القسم أو الباركود"
+          placeholderTextColor={colors.muted}
+          style={styles.searchInput}
+          textAlign="right"
+        />
+      </View>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View> : items.length === 0 ? (
         <View style={styles.center}><EmptyState icon="box" title="لا توجد منتجات" subtitle="أضف منتجاً جديداً بمسح الباركود" /></View>
       ) : (
-        <FlatList data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+        <FlatList data={filteredItems} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+          ListEmptyComponent={<EmptyState icon="search" title="لا توجد نتائج" subtitle="جرّب البحث باسم أو قسم آخر" />}
           renderItem={({ item }) => (
             <View style={styles.card} testID={`mp-${item.id}`}>
               <Image source={{ uri: resolveImage(item.image_url) }} style={styles.img} contentFit="cover" />
@@ -85,6 +123,18 @@ export default function ManagerProducts() {
                 <Pressable testID={`coming-${item.id}`} onPress={() => toggleComing(item)} style={[styles.comingBtn, item.coming_soon && styles.comingActive]}>
                   <Feather name={item.coming_soon ? "clock" : "check"} size={12} color={item.coming_soon ? colors.gold : colors.brandPrimary} />
                   <T size={11} weight="bold" color={item.coming_soon ? colors.gold : colors.brandPrimary}>{item.coming_soon ? "إتاحة المنتج للبيع" : "وضعه كيتوفر قريباً"}</T>
+                </Pressable>
+                <Pressable
+                  testID={`availability-${item.id}`}
+                  accessibilityLabel={item.is_published === true ? `جعل ${item.name} غير متوفر` : `إعادة ${item.name} إلى المتجر`}
+                  onPress={() => toggleAvailability(item)}
+                  disabled={availabilitySaving === item.id}
+                  style={[styles.availabilityBtn, item.is_published === true ? styles.makeUnavailableBtn : styles.makeAvailableBtn]}
+                >
+                  <Feather name={item.is_published === true ? "eye-off" : "eye"} size={13} color={item.is_published === true ? colors.error : colors.success} />
+                  <T size={11} weight="bold" color={item.is_published === true ? colors.error : colors.success}>
+                    {availabilitySaving === item.id ? "جارٍ التحديث..." : item.is_published === true ? "جعل المنتج غير متوفر" : "إعادة إتاحة المنتج"}
+                  </T>
                 </Pressable>
               </View>
               <View style={styles.actions}>
@@ -142,6 +192,8 @@ export default function ManagerProducts() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row-reverse", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchWrap: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, height: 46, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md },
+  searchInput: { flex: 1, fontFamily: font.body, fontSize: type.sm, color: colors.onSurface },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   card: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   img: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
@@ -158,6 +210,9 @@ const styles = StyleSheet.create({
   actions: { gap: spacing.sm },
   comingBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: spacing.sm, backgroundColor: colors.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.sm },
   comingActive: { backgroundColor: colors.warningSoft },
+  availabilityBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, alignSelf: "stretch", marginTop: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 7, borderRadius: radius.sm, borderWidth: 1 },
+  makeUnavailableBtn: { backgroundColor: colors.errorSoft, borderColor: colors.error },
+  makeAvailableBtn: { backgroundColor: colors.successSoft, borderColor: colors.success },
   actionBtn: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   editBtn: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
   deleteBtn: { backgroundColor: colors.errorSoft, borderColor: colors.error },
