@@ -209,7 +209,7 @@ export default function ProductDetail() {
             <T weight="bold" size={type.lg} style={{ minWidth: 28, textAlign: "center" }}>{qty}</T>
             <Pressable testID="pd-dec" onPress={() => setQty((q) => Math.max(1, q - 1))} style={styles.stepBtn}><Feather name="minus" size={18} color={colors.onSurface} /></Pressable>
           </View>
-          <Button title={cartQuantity > 0 ? "تحديث الكمية" : "أضف إلى السلة"} icon="shopping-cart" onPress={addToCart loading={adding} testID="pd-add" style={{ flex: 1 }} />
+          <Button title={cartQuantity > 0 ? "تحديث الكمية" : "أضف إلى السلة"} icon="shopping-cart" onPress={addToCart} loading={adding} testID="pd-add" style={{ flex: 1 }} />
         </View>
       )}
     </View>
