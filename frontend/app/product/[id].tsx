@@ -159,10 +159,10 @@ export default function ProductDetail() {
 
           {hasWholesale && (
             <View style={styles.saleUnitRow}>
-              <Pressable testID="pd-unit-piece" onPress={() => { setSaleUnit("piece"); setQty(1); }} style={[styles.saleUnitButton, saleUnit === "piece" && styles.saleUnitButtonActive]}>
+              <Pressable testID="pd-unit-piece" onPress={() => setSaleUnit("piece")} style={[styles.saleUnitButton, saleUnit === "piece" && styles.saleUnitButtonActive]}>
                 <T size={type.sm} weight="semi" color={saleUnit === "piece" ? colors.brandPrimary : colors.onSurfaceSecondary}>قطعة</T>
               </Pressable>
-              <Pressable testID="pd-unit-wholesale" disabled={Number(product.stock || 0) < Number(product.wholesale_quantity)} onPress={() => { setSaleUnit("wholesale"); setQty(1); }} style={[styles.saleUnitButton, saleUnit === "wholesale" && styles.saleUnitButtonActive, Number(product.stock || 0) < Number(product.wholesale_quantity) && styles.saleUnitButtonDisabled]}>
+              <Pressable testID="pd-unit-wholesale" disabled={Number(product.stock || 0) < Number(product.wholesale_quantity)} onPress={() => setSaleUnit("wholesale")} style={[styles.saleUnitButton, saleUnit === "wholesale" && styles.saleUnitButtonActive, Number(product.stock || 0) < Number(product.wholesale_quantity) && styles.saleUnitButtonDisabled]}>
                 <T size={type.sm} weight="semi" color={saleUnit === "wholesale" ? colors.brandPrimary : colors.onSurfaceSecondary}>{product.wholesale_unit_name} • {product.wholesale_quantity} قطع</T>
               </Pressable>
             </View>
