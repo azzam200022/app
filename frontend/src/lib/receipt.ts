@@ -57,8 +57,33 @@ let assetsPromise: Promise<ReceiptAssets> | null = null;
 async function readAssetBase64(moduleId: number): Promise<string> {
   const asset = Asset.fromModule(moduleId);
   await asset.downloadAsync();
-  const uri = asset.localUri || asset.uri;
-  if (!uri) throw new Error("تعذّر تحميل أحد أصول الفاتورة.");
+  const sourceUri = asset.localUri || asset.uri;
+  if (!sourceUri) throw new Error("تعذّر تحميل أحد أصول الفاتورة.");
+
+  let uri = sourceUri;
+  if (Platform.OS === "android" && !uri.startsWith("file://")) {
+    const cacheDirectory = FileSystem.cacheDirectory;
+    if (!cacheDirectory) throw new Error("تعذّر الوصول إلى مساحة التخزين المؤقت للفواتير.");
+
+    const cacheUri = cacheDirectory + "receipt-" + (asset.hash || String(moduleId)) + "." + (asset.type || "bin");
+    const cachedFile = await FileSystem.getInfoAsync(cacheUri);
+    if (!cachedFile.exists) {
+      if (uri.startsWith("http://") || uri.startsWith("https://")) {
+        const downloaded = await FileSystem.downloadAsync(uri, cacheUri);
+        uri = downloaded.uri;
+      } else {
+        // Android production builds may expose bundled drawables as resource names, not file URIs.
+        await FileSystem.copyAsync({ from: uri, to: cacheUri });
+        uri = cacheUri;
+      }
+    } else {
+      uri = cacheUri;
+    }
+  }
+
+  if (!uri.startsWith("file://")) {
+    throw new Error("تعذّر الوصول إلى ملف محلي لأحد أصول الفاتورة.");
+  }
   return FileSystem.readAsStringAsync(uri, { encoding: "base64" });
 }
 
