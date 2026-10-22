@@ -254,6 +254,8 @@ export const api = {
       const suffix = query.toString();
       return req("/admin/orders" + (suffix ? "?" + suffix : ""));
     },
+  receiverOrders: () => req("/receiver/orders"),
+  receiverSetReady: (id: string) => req("/receiver/orders/" + encodeURIComponent(id) + "/ready", { method: "POST" }),
   adminReturns: () => req("/admin/returns"),
   adminReviewReturn: (id: string) => req("/admin/returns/" + encodeURIComponent(id) + "/review", { method: "POST" }),
   adminSetStatus: (id: string, status: string) => req("/admin/orders/" + id + "/status", { method: "POST", body: JSON.stringify({ status }) }),
