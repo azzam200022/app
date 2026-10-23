@@ -205,13 +205,13 @@ class TestCartFavorites:
         barcode = str(uuid.uuid4().int % 10**13).zfill(13)
         created = s.post(
             f"{API}/products", headers=H(manager_token),
-            json={"barcode": barcode, "name": f"TEST zero stock {uuid.uuid4().hex[:6]}",
-                  "category": "أخرى", "price": 1000, "stock": 0,
-                  "is_published": True, "coming_soon": True},
+            json={"barcode": barcode, "name": f"TEST low stock {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
             timeout=15,
         )
         assert created.status_code == 200, created.text
-        assert created.json().get("available") is False
+        assert created.json().get("available") is True
         assert created.json().get("purchasable") is True
         pid = created.json()["id"]
         try:
@@ -352,13 +352,13 @@ class TestOrders:
         assert r.status_code == 200
         assert any(x["id"] == placed_order["order"]["id"] for x in r.json())
 
-    def test_order_and_cancel_do_not_require_or_mutate_pdf_stock(self, s, manager_token, customer_token):
+    def test_order_and_cancel_do_not_reserve_or_decrement_pdf_stock(self, s, manager_token, customer_token):
         barcode = str(uuid.uuid4().int % 10**13).zfill(13)
         created_product = s.post(
             f"{API}/products", headers=H(manager_token),
-            json={"barcode": barcode, "name": f"TEST order zero stock {uuid.uuid4().hex[:6]}",
-                  "category": "أخرى", "price": 1000, "stock": 0,
-                  "is_published": True, "coming_soon": True},
+            json={"barcode": barcode, "name": f"TEST order low stock {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
             timeout=15,
         )
         assert created_product.status_code == 200, created_product.text
@@ -368,6 +368,9 @@ class TestOrders:
             added = s.post(f"{API}/cart/items", headers=H(customer_token),
                            json={"product_id": pid, "quantity": 1}, timeout=15)
             assert added.status_code == 200, added.text
+            updated_cart = s.put(f"{API}/cart/items", headers=H(customer_token),
+                                 json={"product_id": pid, "quantity": 25}, timeout=15)
+            assert updated_cart.status_code == 200, updated_cart.text
             created = s.post(
                 f"{API}/orders",
                 headers=H(customer_token),
@@ -379,16 +382,59 @@ class TestOrders:
             oid = created.json()["id"]
             assert created.json().get("stock_reserved") is False
             after_create = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
-            assert int(after_create.get("stock", 0)) == 0
+            assert int(after_create.get("stock", 0)) == 3
             cancelled = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
             assert cancelled.status_code == 200, cancelled.text
             after_cancel = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
-            assert int(after_cancel.get("stock", 0)) == 0
+            assert int(after_cancel.get("stock", 0)) == 3
             repeated = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
             assert repeated.status_code == 400
         finally:
             if oid:
                 s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
+
+
+    def test_coming_soon_products_cannot_be_added_or_checked_out(self, s, manager_token, customer_token):
+        barcode = str(uuid.uuid4().int % 10**13).zfill(13)
+        created = s.post(
+            f"{API}/products", headers=H(manager_token),
+            json={"barcode": barcode, "name": f"TEST coming soon {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
+            timeout=15,
+        )
+        assert created.status_code == 200, created.text
+        pid = created.json()["id"]
+        try:
+            added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                           json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert added.status_code == 200, added.text
+
+            marked_soon = s.put(
+                f"{API}/products/{pid}", headers=H(manager_token),
+                json={"stock": 0, "coming_soon": True}, timeout=15,
+            )
+            assert marked_soon.status_code == 200, marked_soon.text
+            current = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+            assert current.get("purchasable") is False
+
+            add_again = s.post(f"{API}/cart/items", headers=H(customer_token),
+                               json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert add_again.status_code == 400
+            set_quantity = s.put(f"{API}/cart/items", headers=H(customer_token),
+                                 json={"product_id": pid, "quantity": 2}, timeout=15)
+            assert set_quantity.status_code == 400
+            checkout = s.post(
+                f"{API}/orders", headers=H(customer_token),
+                json={"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
+                      "lat": 33.3152, "lng": 44.3661, "notes": "TEST coming soon checkout guard"},
+                timeout=15,
+            )
+            assert checkout.status_code == 409, checkout.text
+            assert "يتوفر قريباً" in checkout.json().get("detail", "")
+        finally:
             s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
             s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
 

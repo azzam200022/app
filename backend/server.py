@@ -1404,8 +1404,8 @@ def clean_product(p, favorites=None, availability_alerted=None):
     p["coming_soon"] = coming
     p["stock"] = stock
     p["available"] = (stock > 0) and (not coming) and published
-    # Keep purchasing independent from the stock status synchronized by PDF.
-    p["purchasable"] = published
+    # Ignore numeric stock limits; only the explicit PDF coming-soon state blocks ordering.
+    p["purchasable"] = published and not coming
     p["stock_status"] = "coming_soon" if coming else ("out" if stock <= 0 else "in")
     if favorites is not None:
         p["is_favorite"] = p["id"] in favorites
@@ -2243,6 +2243,8 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("is_published") is not True:
         raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
+    if prod.get("coming_soon"):
+        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="يجب أن تكون الكمية أكبر من صفر")
     sale_unit = body.sale_unit or "piece"
@@ -2271,6 +2273,8 @@ async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if body.quantity > 0 and prod.get("is_published") is not True:
         raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
+    if body.quantity > 0 and prod.get("coming_soon"):
+        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     sale_unit = body.sale_unit or "piece"
     if sale_unit not in {"piece", "wholesale"}:
         raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
@@ -2497,22 +2501,23 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         raise HTTPException(status_code=400, detail="السلة فارغة")
     product_ids = list(dict.fromkeys(str(item.get("product_id") or "") for item in cart["items"]))
     product_id_batches = [product_ids[index:index + 10] for index in range(0, len(product_ids), 10)]
-    published_batches = await asyncio.gather(*[
+    orderable_batches = await asyncio.gather(*[
         db.products.find(
             {
                 "id": {"$in": batch},
                 "deleted_at": None,
                 "is_published": True,
+                "coming_soon": {"$ne": True},
             },
             {"_id": 0, "id": 1},
         ).to_list(len(batch))
         for batch in product_id_batches
     ])
-    published_ids = {product["id"] for batch in published_batches for product in batch}
-    if any(product_id not in published_ids for product_id in product_ids):
+    orderable_ids = {product["id"] for batch in orderable_batches for product in batch}
+    if any(product_id not in orderable_ids for product_id in product_ids):
         raise HTTPException(
             status_code=409,
-            detail="أحد المنتجات في السلة لم يعد متاحاً؛ حدّث السلة قبل إكمال الطلب",
+            detail="يوجد منتج يتوفر قريباً أو لم يعد متاحاً؛ حدّث السلة قبل إكمال الطلب",
         )
     saved_address = None
     order_name = body.name.strip()
@@ -2637,6 +2642,9 @@ async def reorder_order(oid: str, user=Depends(require_user)):
         name = (product or {}).get("name") or item.get("name") or "منتج"
         if not product:
             unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
+            continue
+        if product.get("coming_soon"):
+            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
             continue
         try:
             _, unit_label, _, _ = product_sale_unit(product, sale_unit)
