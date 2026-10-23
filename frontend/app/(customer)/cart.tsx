@@ -7,7 +7,7 @@ import { Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
-import { T, PageHeading } from "@/src/components/ui";
+import { T, Button, PageHeading } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
