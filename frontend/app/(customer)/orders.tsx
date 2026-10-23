@@ -166,8 +166,7 @@ export default function Orders() {
                     <Feather name={(STATUS_ICON[status] || "clock") as any} size={19} color={statusColor} />
                   </View>
                   <View style={styles.statusCopy}>
-                    <T weight="bold" color={statusColor} numberOfLines={2}>{statusDescription}</T>
-                    <T size={type.sm} color={colors.onSurfaceTertiary}>اضغط لمتابعة التفاصيل</T>
+                    <T weight="bold" color={statusColor} size={type.sm} numberOfLines={1}>{statusDescription}</T>
                   </View>
                   <Feather name="chevron-left" size={18} color={statusColor} />
                 </View>
@@ -200,25 +199,31 @@ export default function Orders() {
 
                 <View style={styles.cardBottom}>
                   <View>
-                    <T color={colors.muted} size={type.sm}>الإجمالي</T>
+                    <T color={colors.muted} size={type.xs}>الإجمالي</T>
                     <T weight="displayBold" color={colors.brandPrimary} size={type.lg}>{formatPrice(item?.amount_due ?? item?.total ?? 0)}</T>
                   </View>
-                  <View style={styles.trackRow}>
-                    <T color={colors.brandPrimary} weight="bold" size={type.sm}>عرض التفاصيل</T>
-                    <Feather name="arrow-left" size={16} color={colors.brandPrimary} />
+                  <View style={styles.cardActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={"عرض تفاصيل الطلب رقم " + orderNumber}
+                      onPress={(event) => { event.stopPropagation(); if (item?.id) router.push("/order/" + item.id); }}
+                      style={({ pressed }) => [styles.trackRow, pressed && styles.actionPressed]}
+                    >
+                      <T color={colors.brandPrimary} weight="bold" size={type.sm}>التفاصيل</T>
+                      <Feather name="arrow-left" size={15} color={colors.brandPrimary} />
+                    </Pressable>
+                    <Pressable
+                      testID={"reorder-" + String(item?.id ?? "")}
+                      accessibilityRole="button"
+                      onPress={(event) => { event.stopPropagation(); if (item?.id) void reorder(item.id); }}
+                      disabled={reorderingId !== null}
+                      style={({ pressed }) => [styles.reorderButton, pressed && styles.reorderButtonPressed, reorderingId !== null && reorderingId !== item?.id && styles.reorderButtonDisabled]}
+                    >
+                      {reorderingId === item?.id ? <ActivityIndicator size="small" color={colors.brandPrimary} /> : <Feather name="refresh-cw" size={15} color={colors.brandPrimary} />}
+                      <T color={colors.brandPrimary} weight="bold" size={type.sm} numberOfLines={1}>{reorderingId === item?.id ? "جارٍ التجهيز" : "إعادة الطلب"}</T>
+                    </Pressable>
                   </View>
                 </View>
-
-                <Pressable
-                  testID={"reorder-" + String(item?.id ?? "")}
-                  accessibilityRole="button"
-                  onPress={(event) => { event.stopPropagation(); if (item?.id) void reorder(item.id); }}
-                  disabled={reorderingId !== null}
-                  style={({ pressed }) => [styles.reorderButton, pressed && styles.reorderButtonPressed, reorderingId !== null && reorderingId !== item?.id && styles.reorderButtonDisabled]}
-                >
-                  {reorderingId === item?.id ? <ActivityIndicator size="small" color={colors.brandPrimary} /> : <Feather name="refresh-cw" size={16} color={colors.brandPrimary} />}
-                  <T color={colors.brandPrimary} weight="bold" size={type.sm}>{reorderingId === item?.id ? "جارٍ تجهيز السلة..." : "إعادة الطلب"}</T>
-                </Pressable>
               </Pressable>
             );
           }}
@@ -235,20 +240,22 @@ const styles = StyleSheet.create({
   headerSubtitle: { marginTop: 1 },
   countBadge: { minWidth: 34, height: 34, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
-  listContent: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing["3xl"] },
-  card: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.md },
+  listContent: { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing["3xl"] },
+  card: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, gap: spacing.sm },
   cardPressed: { opacity: 0.96, borderColor: colors.borderStrong },
   cardTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
   orderMeta: { flex: 1, gap: 3 },
-  statusHero: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1 },
-  statusIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  statusCopy: { flex: 1, gap: 2 },
+  statusHero: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth },
+  statusIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  statusCopy: { flex: 1 },
   agentRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
   statsRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
   statItem: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, flexShrink: 1 },
-  cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
-  trackRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  reorderButton: { minHeight: 44, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingHorizontal: spacing.md },
+  cardBottom: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider },
+  cardActions: { flexDirection: "row-reverse", alignItems: "center", gap: 2, flexShrink: 1 },
+  trackRow: { minHeight: 40, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.xs },
+  actionPressed: { opacity: 0.68 },
+  reorderButton: { minHeight: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingHorizontal: spacing.sm },
   reorderButtonPressed: { opacity: 0.72 },
   reorderButtonDisabled: { opacity: 0.45 },
   emptyError: { width: "100%", alignItems: "center", gap: spacing.md, padding: spacing.xl, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg },
