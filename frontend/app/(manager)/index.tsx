@@ -6,6 +6,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
+import { ConfirmLogoutModal } from "@/src/components/ConfirmLogoutModal";
 import { StatusPill } from "../(customer)/orders";
 import { api, formatPrice } from "@/src/lib/api";
 import { useAuth } from "@/src/context/AuthContext";
@@ -23,6 +24,7 @@ export default function ManagerDashboard() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { show } = useToast();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
@@ -30,6 +32,12 @@ export default function ManagerDashboard() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const doLogout = async () => {
+    setConfirmLogout(false);
+    await logout();
+    router.replace("/login");
+  };
 
   const load = useCallback(async () => {
     try {
@@ -169,8 +177,8 @@ export default function ManagerDashboard() {
             <T weight="displayBold" size={type["2xl"]} color="#fff">مدير المتجر</T>
             <T color="rgba(255,255,255,0.75)" size={11}>إدارة متجرك بكل سهولة</T>
           </View>
-          <Pressable testID="mgr-logout" onPress={async () => { await logout(); router.replace("/login"); }} style={styles.profileBtn}>
-            <Feather name="user" size={22} color="#fff" />
+          <Pressable testID="mgr-logout" accessibilityRole="button" accessibilityLabel="تسجيل الخروج" onPress={() => setConfirmLogout(true)} style={styles.profileBtn}>
+            <Feather name="log-out" size={20} color="#fff" />
           </Pressable>
         </View>
       </View>
@@ -394,6 +402,12 @@ export default function ManagerDashboard() {
           <View style={styles.tip}><Feather name="info" size={17} color={colors.gold} /><T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1 }}>تأكد من توفر المندوبين قبل إضافة الطلبات الجديدة للتوصيل.</T></View>
         </ScrollView>
       )}
+      <ConfirmLogoutModal
+        visible={confirmLogout}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={doLogout}
+        testIDPrefix="manager"
+      />
     </View>
   );
 }

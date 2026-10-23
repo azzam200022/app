@@ -5,10 +5,12 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, EmptyState } from "@/src/components/ui";
+import { ConfirmLogoutModal } from "@/src/components/ConfirmLogoutModal";
 import { StatusPill } from "../(customer)/orders";
 import { CategoryChips } from "@/src/components/CategoryChips";
 import { api, formatPrice, STATUS_LABEL } from "@/src/lib/api";
 import { useToast } from "@/src/context/ToastContext";
+import { useAuth } from "@/src/context/AuthContext";
 import { canOpenRawBT, printOrder, selectPrinter, type ReceiptWidth } from "@/src/lib/receipt";
 import { ReceiptRasterizer, type ReceiptRasterizerRef } from "@/src/components/ReceiptRasterizer";
 import { storage } from "@/src/utils/storage";
@@ -53,7 +55,9 @@ function normalizeOrdersResponse(result: any) {
 export default function ManagerOrders({ receiver = false }: { receiver?: boolean }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { logout } = useAuth();
   const { show } = useToast();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const filterOptions = receiver ? RECEIVER_FILTERS : FILTERS;
   const [filter, setFilter] = useState("all");
   const [searchDraft, setSearchDraft] = useState("");
@@ -76,6 +80,12 @@ export default function ManagerOrders({ receiver = false }: { receiver?: boolean
   const rasterizerRef = useRef<ReceiptRasterizerRef>(null);
   const autoPrintStorageKey = receiver ? "receiver_autoprint_on" : "autoprint_on";
   const printQueueStorageKey = receiver ? "receiver_receipt_print_queue" : "receipt_print_queue";
+
+  const doLogout = async () => {
+    setConfirmLogout(false);
+    await logout();
+    router.replace("/login");
+  };
 
   useEffect(() => {
     (async () => {
@@ -557,7 +567,21 @@ export default function ManagerOrders({ receiver = false }: { receiver?: boolean
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <T weight="displayBold" size={type.xl} style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>{receiver ? "استلام الطلبات" : "إدارة الطلبات"}</T>
+        <View style={styles.headerTitleRow}>
+          <T weight="displayBold" size={type.xl}>{receiver ? "استلام الطلبات" : "إدارة الطلبات"}</T>
+          {receiver ? (
+            <Pressable
+              testID="receiver-logout"
+              accessibilityRole="button"
+              accessibilityLabel="تسجيل الخروج"
+              onPress={() => setConfirmLogout(true)}
+              style={styles.logoutButton}
+            >
+              <Feather name="log-out" size={16} color={colors.error} />
+              <T size={type.sm} weight="bold" color={colors.error}>تسجيل الخروج</T>
+            </Pressable>
+          ) : null}
+        </View>
         <View style={styles.autoRow}>
           <View style={styles.autoLeft}>
             <View style={styles.printIcon}><Feather name="printer" size={18} color={colors.brandPrimary} /></View>
@@ -708,6 +732,14 @@ export default function ManagerOrders({ receiver = false }: { receiver?: boolean
           </Pressable>
         </Pressable>
       </Modal>
+      {receiver ? (
+        <ConfirmLogoutModal
+          visible={confirmLogout}
+          onCancel={() => setConfirmLogout(false)}
+          onConfirm={doLogout}
+          testIDPrefix="receiver"
+        />
+      ) : null}
       {Platform.OS === "android" ? <ReceiptRasterizer ref={rasterizerRef} /> : null}
     </View>
   );
@@ -716,6 +748,8 @@ export default function ManagerOrders({ receiver = false }: { receiver?: boolean
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { backgroundColor: "#fff", paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTitleRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  logoutButton: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.xs, minHeight: 40, paddingHorizontal: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.error, backgroundColor: colors.errorSoft },
   searchRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
     searchInput: { flex: 1, minHeight: 44, color: colors.onSurface, fontFamily: "Tajawal-Regular" },
     resultsSummary: { textAlign: "right", marginBottom: spacing.xs },
