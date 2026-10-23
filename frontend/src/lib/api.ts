@@ -36,6 +36,16 @@ function invalidateCachedValue(key: string) {
   inflightRequests.delete(key);
 }
 
+function invalidateProductCaches() {
+  const keys = new Set([...responseCache.keys(), ...inflightRequests.keys()]);
+  for (const key of keys) {
+    if (key.startsWith("products:") || key.startsWith("product:")) {
+      invalidateCachedValue(key);
+    }
+  }
+  productCache.clear();
+}
+
 function cachedRequest<T>(key: string, loader: () => Promise<T>, ttl: number, force = false): Promise<T> {
   const inFlight = inflightRequests.get(key);
   if (inFlight && !force) return inFlight.then(cloneValue) as Promise<T>;
@@ -362,6 +372,7 @@ export async function uploadInventoryPdf(uri: string, name: string, platformWeb:
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) throw new Error(data?.detail || "تعذر معالجة ملف PDF");
+  invalidateProductCaches();
   return data;
 }
 
