@@ -29,10 +29,12 @@ export const ProductCard = React.memo(function ProductCard({
   const router = useRouter();
   const [fav, setFav] = React.useState(!!product.is_favorite);
   const [imageFailed, setImageFailed] = React.useState(false);
-  const unavailable = product.available === false;
+  const canPurchase = product.purchasable === true || (product.purchasable == null && product.available !== false);
+  const unavailable = !canPurchase;
   const outLabel = product.stock_status === "coming_soon" ? "يتوفر قريباً" : "نفدت الكمية";
   const stockValue = Number(product.stock);
-  const lowStock = !unavailable && Number.isFinite(stockValue) && stockValue > 0 && stockValue <= 5;
+  const comingSoon = product.stock_status === "coming_soon";
+  const lowStock = !unavailable && !comingSoon && Number.isFinite(stockValue) && stockValue > 0 && stockValue <= 5;
   const discount = product.old_price && product.old_price > product.price
     ? Math.round((1 - product.price / product.old_price) * 100)
     : 0;
@@ -76,8 +78,9 @@ export const ProductCard = React.memo(function ProductCard({
             <View style={styles.outPill}><T weight="bold" size={type.sm} color="#fff">{outLabel}</T></View>
           </View>
         )}
-        {(discount > 0 || lowStock || product.wholesale_enabled) && !unavailable && (
+        {(discount > 0 || lowStock || comingSoon || product.wholesale_enabled) && !unavailable && (
           <View style={styles.badgeStack}>
+            {comingSoon && <Badge text="يتوفر قريباً" color={colors.warningSoft} textColor={colors.warning} />}
             {product.wholesale_enabled && <Badge text="جملة" color={colors.brandTertiary} textColor={colors.brandPrimary} />}
             {discount > 0 && <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />}
             {lowStock && (

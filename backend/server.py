@@ -1404,6 +1404,8 @@ def clean_product(p, favorites=None, availability_alerted=None):
     p["coming_soon"] = coming
     p["stock"] = stock
     p["available"] = (stock > 0) and (not coming) and published
+    # Keep purchasing independent from the stock status synchronized by PDF.
+    p["purchasable"] = published
     p["stock_status"] = "coming_soon" if coming else ("out" if stock <= 0 else "in")
     if favorites is not None:
         p["is_favorite"] = p["id"] in favorites
@@ -2241,24 +2243,11 @@ async def add_to_cart(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if prod.get("is_published") is not True:
         raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
-    if prod.get("coming_soon"):
-        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="يجب أن تكون الكمية أكبر من صفر")
-    available_stock = max(int(prod.get("stock", 0) or 0), 0)
-    if available_stock <= 0:
-        raise HTTPException(status_code=400, detail="نفدت الكمية")
     sale_unit = body.sale_unit or "piece"
-    units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
+    product_sale_unit(prod, sale_unit)
     items = list((cart or {}).get("items", []))
-    used_stock = 0
-    for item in items:
-        if str(item.get("product_id")) == body.product_id:
-            factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
-            used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
-    if used_stock + body.quantity * units_per_unit > available_stock:
-        capacity = max((available_stock - used_stock) // units_per_unit, 0)
-        raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
     line = next((item for item in items if cart_line_key(item) == (body.product_id, sale_unit)), None)
     if line:
         line["quantity"] = max(int(line.get("quantity", 0) or 0), 0) + body.quantity
@@ -2282,28 +2271,15 @@ async def set_cart_item(body: CartItemIn, user=Depends(require_user)):
         raise HTTPException(status_code=404, detail="المنتج غير موجود")
     if body.quantity > 0 and prod.get("is_published") is not True:
         raise HTTPException(status_code=400, detail="هذا المنتج غير متاح حالياً")
-    if prod.get("coming_soon") and body.quantity > 0:
-        raise HTTPException(status_code=400, detail="هذا المنتج يتوفر قريباً")
     sale_unit = body.sale_unit or "piece"
     if sale_unit not in {"piece", "wholesale"}:
         raise HTTPException(status_code=400, detail="وحدة البيع غير صحيحة")
     if body.quantity > 0:
-        units_per_unit, unit_label, _, _ = product_sale_unit(prod, sale_unit)
-    else:
-        units_per_unit, unit_label = 1, "قطعة"
+        product_sale_unit(prod, sale_unit)
     items = list((cart or {}).get("items", []))
     target_key = (body.product_id, sale_unit)
     remaining = [item for item in items if cart_line_key(item) != target_key]
     if body.quantity > 0:
-        used_stock = 0
-        for item in remaining:
-            if str(item.get("product_id")) == body.product_id:
-                factor, _, _, _ = product_sale_unit(prod, item.get("sale_unit") or "piece")
-                used_stock += max(int(item.get("quantity", 0) or 0), 0) * factor
-        stock = max(int(prod.get("stock", 0) or 0), 0)
-        if body.quantity * units_per_unit + used_stock > stock:
-            capacity = max((stock - used_stock) // units_per_unit, 0)
-            raise HTTPException(status_code=400, detail=f"الكمية المتاحة من {unit_label}: {capacity}")
         remaining.append({"product_id": body.product_id, "sale_unit": sale_unit, "quantity": body.quantity})
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": remaining}}, upsert=True)
     products = await load_cart_products(remaining, {prod["id"]: prod})
@@ -2326,31 +2302,6 @@ async def remove_cart_item(pid: str, sale_unit: Optional[str] = None, user=Depen
 
 
 # ---------------- Orders ----------------
-async def reserve_order_stock(items):
-    """Atomically reserve the base-piece quantity for every order line."""
-    reserved = []
-    try:
-        for item in items:
-            stock_quantity = order_item_stock_quantity(item)
-            if stock_quantity <= 0:
-                continue
-            product_id = item["product_id"]
-            updated = await db.products.find_one_and_update(
-                {"id": product_id, "deleted_at": None, "stock": {"$gte": stock_quantity}},
-                {"$inc": {"stock": -stock_quantity}},
-            )
-            if not updated:
-                raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
-            reserved.append({"product_id": product_id, "stock_quantity": stock_quantity})
-    except Exception:
-        try:
-            await release_order_stock(reserved)
-        except Exception as rollback_error:
-            logger.error("stock reservation rollback failed: %s", rollback_error)
-        raise
-    return reserved
-
-
 async def release_order_stock(items):
     for item in items:
         stock_quantity = order_item_stock_quantity(item)
@@ -2563,10 +2514,6 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
             status_code=409,
             detail="أحد المنتجات في السلة لم يعد متاحاً؛ حدّث السلة قبل إكمال الطلب",
         )
-    for item in cart["items"]:
-        available_stock = max(int(item.get("stock", 0) or 0), 0)
-        if order_item_stock_quantity(item) > available_stock:
-            raise HTTPException(status_code=409, detail=f"المخزون غير كافٍ للمنتج: {item.get('name', '')}")
     saved_address = None
     order_name = body.name.strip()
     order_phone = body.phone.strip()
@@ -2636,13 +2583,12 @@ async def create_order(body: OrderIn, user=Depends(require_user)):
         "timeline": [{"status": "pending", "at": now_utc().isoformat()}],
         "created_at": now_utc().isoformat(),
     }
-    reserved_stock = await reserve_order_stock(doc["items"])
-    doc["stock_reserved"] = bool(reserved_stock)
+    # PDF-synced quantities are informative and must not be reserved or decremented by orders.
+    doc["stock_reserved"] = False
     doc["stock_released"] = False
     try:
         await db.orders.insert_one(doc)
     except Exception:
-        await release_order_stock(reserved_stock)
         raise HTTPException(status_code=503, detail="تعذر إنشاء الطلب؛ حاول مرة أخرى")
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}})
     doc.pop("_id", None)
@@ -2692,22 +2638,12 @@ async def reorder_order(oid: str, user=Depends(require_user)):
         if not product:
             unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "المنتج غير متاح حالياً"})
             continue
-        if product.get("coming_soon"):
-            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": "يتوفر قريباً"})
-            continue
         try:
-            units_per_unit, unit_label, _, _ = product_sale_unit(product, sale_unit)
+            _, unit_label, _, _ = product_sale_unit(product, sale_unit)
         except HTTPException as exc:
             unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": 0, "reason": str(exc.detail)})
             continue
-        stock = max(int(product.get("stock", 0) or 0), 0)
-        used_stock = 0
-        for current_item in merged_items:
-            if str(current_item.get("product_id")) == product_id:
-                factor, _, _, _ = product_sale_unit(product, current_item.get("sale_unit") or "piece")
-                used_stock += max(int(current_item.get("quantity", 0) or 0), 0) * factor
-        capacity = max((stock - used_stock) // units_per_unit, 0)
-        added_quantity = min(requested, capacity)
+        added_quantity = requested
         if added_quantity > 0:
             if line_key in positions:
                 merged_items[positions[line_key]]["quantity"] += added_quantity
@@ -2715,10 +2651,6 @@ async def reorder_order(oid: str, user=Depends(require_user)):
                 positions[line_key] = len(merged_items)
                 merged_items.append({"product_id": product_id, "sale_unit": sale_unit, "quantity": added_quantity})
             added_items.append({"product_id": product_id, "sale_unit": sale_unit, "unit_label": unit_label, "name": name, "quantity": added_quantity})
-        if added_quantity < requested:
-            remaining_capacity = max((stock - used_stock) // units_per_unit, 0)
-            reason = "نفدت الكمية" if stock <= 0 else f"المتاح حالياً من {unit_label}: {remaining_capacity}"
-            unavailable_items.append({"product_id": product_id, "sale_unit": sale_unit, "name": name, "requested_quantity": requested, "added_quantity": added_quantity, "reason": reason})
 
     merged_items = [item for item in merged_items if item["quantity"] > 0]
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": merged_items}}, upsert=True)
@@ -2892,7 +2824,7 @@ async def create_delivery_return(oid: str, body: ReturnIn, user=Depends(require_
         raise HTTPException(status_code=409, detail="لا يمكن تسجيل المرتجع بعد تأكيد التسليم")
     if should_restore_stock:
         await release_order_stock(return_items)
-    doc["stock_released"] = True
+    doc["stock_released"] = bool(should_restore_stock)
     await db.returns.insert_one(doc)
     try:
         await send_push(await manager_ids(), {"title": "مرتجع جديد ↩️", "message": f"تم تسجيل مرتجع للطلب {oid} بواسطة {doc['agent_name']}", "action_url": f"/returns/{return_id}"})
