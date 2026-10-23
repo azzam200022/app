@@ -22,24 +22,29 @@ export default function OrderDetail() {
   const cachedOrder = getCachedOrders()?.find((item: any) => item.id === id);
   const [order, setOrder] = useState<any>(cachedOrder || null);
   const [loading, setLoading] = useState(!cachedOrder);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const canPrint = user?.role === "manager";
+  const orderListRoute = user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders";
 
   const goBack = () => {
     if (router.canGoBack()) { router.back(); return; }
-    router.replace(user?.role === "manager" ? "/(manager)/orders" : user?.role === "delivery" ? "/(delivery)" : "/(customer)/orders");
+    router.replace(orderListRoute);
   };
 
   const load = async (force = false) => {
     try {
       const result = await api.order(id!, force);
-      if (!result) throw new Error("تعذر العثور على الطلب");
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        if (!order) setLoadError("لم نعثر على هذا الطلب.");
+        return;
+      }
       setOrder(result);
-      setLoadError(false);
+      setLoadError(null);
     } catch (e: any) {
-      setLoadError(true);
-      if (order) show(e?.message || "تعذر تحديث الطلب", "error");
+      const message = e?.message || "تعذّر تحميل تفاصيل الطلب. تحقق من الاتصال وحاول مجدداً.";
+      if (order) show(message, "error");
+      else setLoadError(message);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(true); }, [id]); // eslint-disable-line
@@ -60,6 +65,7 @@ export default function OrderDetail() {
   if (loading && !order) return <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>;
 
   if (!order) {
+    const missingOrder = Boolean(loadError?.includes("غير موجود") || loadError?.includes("نعثر") || loadError?.includes("العثور على الطلب"));
     return (
       <View style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -68,10 +74,11 @@ export default function OrderDetail() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorState}>
-          <View style={styles.errorIcon}><Feather name={loadError ? "alert-circle" : "package"} size={26} color={colors.error} /></View>
-          <T weight="displayBold" size={type.lg}>تعذّر تحميل تفاصيل الطلب</T>
-          <T color={colors.muted} style={styles.errorCopy}>تحقق من اتصالك بالإنترنت ثم أعد المحاولة.</T>
+          <View style={styles.errorIcon}><Feather name={missingOrder ? "package" : "alert-circle"} size={26} color={colors.error} /></View>
+          <T weight="displayBold" size={type.lg}>{missingOrder ? "الطلب غير موجود" : "تعذّر تحميل الطلب"}</T>
+          <T color={colors.muted} style={styles.errorCopy}>{loadError || "تحقق من اتصالك بالإنترنت ثم أعد المحاولة."}</T>
           <Button title="إعادة المحاولة" icon="refresh-cw" onPress={() => { setLoading(true); void load(true); }} style={styles.retryButton} />
+          <Button title="العودة إلى الطلبات" variant="outline" onPress={() => router.replace(orderListRoute)} style={styles.retryButton} />
         </View>
       </View>
     );
@@ -166,7 +173,9 @@ export default function OrderDetail() {
         {/* Items */}
         <T weight="displayBold" size={type.lg} style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>المنتجات</T>
         <View style={styles.itemsCard}>
-          {orderItems.map((it: any, idx: number) => (
+          {orderItems.length === 0 ? (
+            <T color={colors.muted} size={type.sm} style={{ padding: spacing.lg, textAlign: "center" }}>تفاصيل المنتجات غير متاحة</T>
+          ) : orderItems.map((it: any, idx: number) => (
             <View key={`${it.product_id}:${it.sale_unit || "piece"}`} style={[styles.item, idx < orderItems.length - 1 && styles.itemBorder]}>
               <Image source={{ uri: resolveImage(it.image_url) }} style={styles.itemImg} contentFit="cover" cachePolicy="memory-disk" />
               <View style={{ flex: 1 }}>
