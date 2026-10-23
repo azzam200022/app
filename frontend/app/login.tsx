@@ -165,7 +165,7 @@ function NativeGoogleLoginButton() {
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     responseType: ResponseType.IdToken,
-    scopes: ["profile", "email"],
+    scopes: ["openid", "profile", "email"],
   });
 
   useEffect(() => {
