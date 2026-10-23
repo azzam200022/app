@@ -133,7 +133,7 @@ export const ProductCard = React.memo(function ProductCard({
           ) : (
             <Pressable
               testID={`add-cart-${product.id}`}
-              accessibilityLabel={unavailable ? "المنتج غير متوفر" : `إضافة ${product.name} إلى السلة`}
+              accessibilityLabel={unavailable ? outLabel : `إضافة ${product.name} إلى السلة`}
               disabled={unavailable}
               onPress={(event) => {
                 event.stopPropagation();
