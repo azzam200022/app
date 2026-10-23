@@ -378,8 +378,10 @@ class FirestoreCollection:
             if not client:
                 return None
             document_ref = self.reference.document(str(document_id))
-            for attempt in range(3):
-                transaction = client.transaction()
+            from google.cloud import firestore
+
+            @firestore.transactional
+            def update_claim(transaction):
                 snapshot = document_ref.get(transaction=transaction)
                 if not snapshot.exists:
                     return None
@@ -388,13 +390,9 @@ class FirestoreCollection:
                     return None
                 updated = self._update_document(current, update)
                 transaction.set(document_ref, updated)
-                try:
-                    transaction.commit()
-                    return updated
-                except Exception:
-                    if attempt == 2:
-                        raise
-            return None
+                return updated
+
+            return update_claim(client.transaction(max_attempts=3))
 
         return await asyncio.to_thread(commit_claim)
 
