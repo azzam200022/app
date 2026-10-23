@@ -201,24 +201,36 @@ class TestCartFavorites:
         assert r3.status_code == 200
         assert all(i["product_id"] != pid for i in r3.json()["items"])
 
-    def test_rejects_cart_quantity_above_stock(self, s, customer_token):
-        product = s.get(f"{API}/products", timeout=15).json()[0]
-        pid = product["id"]
-        stock = int(product.get("stock", 0) or 0)
-        if stock <= 0:
-            pytest.skip("test product has no stock")
-        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
-        too_many = stock + 1
-        added = s.post(f"{API}/cart/items", headers=H(customer_token),
-                       json={"product_id": pid, "quantity": too_many}, timeout=15)
-        assert added.status_code == 400
-        updated = s.put(f"{API}/cart/items", headers=H(customer_token),
-                        json={"product_id": pid, "quantity": too_many}, timeout=15)
-        assert updated.status_code == 400
-        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+    def test_cart_quantity_is_not_limited_by_pdf_stock(self, s, manager_token, customer_token):
+        barcode = str(uuid.uuid4().int % 10**13).zfill(13)
+        created = s.post(
+            f"{API}/products", headers=H(manager_token),
+            json={"barcode": barcode, "name": f"TEST low stock {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
+            timeout=15,
+        )
+        assert created.status_code == 200, created.text
+        assert created.json().get("available") is True
+        assert created.json().get("purchasable") is True
+        pid = created.json()["id"]
+        try:
+            added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                           json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert added.status_code == 200, added.text
+            added_item = next(i for i in added.json()["items"] if i["product_id"] == pid)
+            assert added_item["quantity"] == 1
+            updated = s.put(f"{API}/cart/items", headers=H(customer_token),
+                            json={"product_id": pid, "quantity": 25}, timeout=15)
+            assert updated.status_code == 200, updated.text
+            updated_item = next(i for i in updated.json()["items"] if i["product_id"] == pid)
+            assert updated_item["quantity"] == 25
+        finally:
+            s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
 
 
-    def test_wholesale_cart_prices_and_piece_stock(self, s, manager_token, customer_token):
+    def test_wholesale_cart_quantities_are_not_limited_by_pdf_stock(self, s, manager_token, customer_token):
         barcode = str(uuid.uuid4().int % 10**13).zfill(13)
         payload = {
             "barcode": barcode,
@@ -262,12 +274,16 @@ class TestCartFavorites:
                 f"{API}/cart/items", headers=H(customer_token),
                 json={"product_id": pid, "sale_unit": "wholesale", "quantity": 1}, timeout=15,
             )
-            assert over_package.status_code == 400
+            assert over_package.status_code == 200, over_package.text
+            wholesale_item = next(i for i in over_package.json()["items"] if i["product_id"] == pid and i["sale_unit"] == "wholesale")
+            assert wholesale_item["quantity"] == 3
             over_mixed_stock = s.post(
                 f"{API}/cart/items", headers=H(customer_token),
                 json={"product_id": pid, "sale_unit": "piece", "quantity": 2}, timeout=15,
             )
-            assert over_mixed_stock.status_code == 400
+            assert over_mixed_stock.status_code == 200, over_mixed_stock.text
+            piece_item = next(i for i in over_mixed_stock.json()["items"] if i["product_id"] == pid and i["sale_unit"] == "piece")
+            assert piece_item["quantity"] == 2
 
             removed = s.delete(f"{API}/cart/items/{pid}?sale_unit=wholesale", headers=H(customer_token), timeout=15)
             assert removed.status_code == 200
@@ -336,35 +352,91 @@ class TestOrders:
         assert r.status_code == 200
         assert any(x["id"] == placed_order["order"]["id"] for x in r.json())
 
-    def test_order_reserves_and_cancel_releases_stock_once(self, s, customer_token):
-        product = s.get(f"{API}/products", timeout=15).json()[0]
-        pid = product["id"]
-        stock_before = int(product.get("stock", 0) or 0)
-        if stock_before <= 0:
-            pytest.skip("test product has no stock")
-        s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
-        added = s.post(f"{API}/cart/items", headers=H(customer_token),
-                       json={"product_id": pid, "quantity": 1}, timeout=15)
-        assert added.status_code == 200
+    def test_order_and_cancel_do_not_reserve_or_decrement_pdf_stock(self, s, manager_token, customer_token):
+        barcode = str(uuid.uuid4().int % 10**13).zfill(13)
+        created_product = s.post(
+            f"{API}/products", headers=H(manager_token),
+            json={"barcode": barcode, "name": f"TEST order low stock {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
+            timeout=15,
+        )
+        assert created_product.status_code == 200, created_product.text
+        pid = created_product.json()["id"]
+        oid = None
+        try:
+            added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                           json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert added.status_code == 200, added.text
+            updated_cart = s.put(f"{API}/cart/items", headers=H(customer_token),
+                                 json={"product_id": pid, "quantity": 25}, timeout=15)
+            assert updated_cart.status_code == 200, updated_cart.text
+            created = s.post(
+                f"{API}/orders",
+                headers=H(customer_token),
+                json={"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
+                      "lat": 33.3152, "lng": 44.3661, "notes": "TEST PDF stock is informational"},
+                timeout=15,
+            )
+            assert created.status_code == 200, created.text
+            oid = created.json()["id"]
+            assert created.json().get("stock_reserved") is False
+            after_create = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+            assert int(after_create.get("stock", 0)) == 3
+            cancelled = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+            assert cancelled.status_code == 200, cancelled.text
+            after_cancel = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+            assert int(after_cancel.get("stock", 0)) == 3
+            repeated = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+            assert repeated.status_code == 400
+        finally:
+            if oid:
+                s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
+
+
+    def test_coming_soon_products_cannot_be_added_or_checked_out(self, s, manager_token, customer_token):
+        barcode = str(uuid.uuid4().int % 10**13).zfill(13)
         created = s.post(
-            f"{API}/orders",
-            headers=H(customer_token),
-            json={"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
-                  "lat": 33.3152, "lng": 44.3661, "notes": "TEST stock reservation"},
+            f"{API}/products", headers=H(manager_token),
+            json={"barcode": barcode, "name": f"TEST coming soon {uuid.uuid4().hex[:6]}",
+                  "category": "أخرى", "price": 1000, "stock": 3,
+                  "is_published": True, "coming_soon": False},
             timeout=15,
         )
         assert created.status_code == 200, created.text
-        oid = created.json()["id"]
-        after_create = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
-        assert int(after_create.get("stock", 0)) == stock_before - 1
-        cancelled = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
-        assert cancelled.status_code == 200, cancelled.text
-        after_cancel = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
-        assert int(after_cancel.get("stock", 0)) == stock_before
-        repeated = s.post(f"{API}/orders/{oid}/cancel", headers=H(customer_token), timeout=15)
-        assert repeated.status_code == 400
-        after_repeat = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
-        assert int(after_repeat.get("stock", 0)) == stock_before
+        pid = created.json()["id"]
+        try:
+            added = s.post(f"{API}/cart/items", headers=H(customer_token),
+                           json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert added.status_code == 200, added.text
+
+            marked_soon = s.put(
+                f"{API}/products/{pid}", headers=H(manager_token),
+                json={"stock": 0, "coming_soon": True}, timeout=15,
+            )
+            assert marked_soon.status_code == 200, marked_soon.text
+            current = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == pid)
+            assert current.get("purchasable") is False
+
+            add_again = s.post(f"{API}/cart/items", headers=H(customer_token),
+                               json={"product_id": pid, "quantity": 1}, timeout=15)
+            assert add_again.status_code == 400
+            set_quantity = s.put(f"{API}/cart/items", headers=H(customer_token),
+                                 json={"product_id": pid, "quantity": 2}, timeout=15)
+            assert set_quantity.status_code == 400
+            checkout = s.post(
+                f"{API}/orders", headers=H(customer_token),
+                json={"name": "TEST زبون", "phone": "07701234567", "address": "بغداد - الكرادة",
+                      "lat": 33.3152, "lng": 44.3661, "notes": "TEST coming soon checkout guard"},
+                timeout=15,
+            )
+            assert checkout.status_code == 409, checkout.text
+            assert "يتوفر قريباً" in checkout.json().get("detail", "")
+        finally:
+            s.delete(f"{API}/cart/items/{pid}", headers=H(customer_token), timeout=15)
+            s.delete(f"{API}/products/{pid}", headers=H(manager_token), timeout=15)
 
 
     def test_get_order_by_id(self, placed_order):
@@ -462,13 +534,12 @@ class TestLifecycle:
         assert missing_reason.status_code == 400
 
         product_id = placed_order["order"]["items"][0]["product_id"]
-        quantity = int(placed_order["order"]["items"][0]["quantity"])
         stock_before_failure = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
         failed = s.post(f"{API}/delivery/orders/{oid}/status", headers=H(delivery_token),
                         json={"status": "delivery_failed", "reason": "customer_unavailable"}, timeout=15)
         assert failed.status_code == 200, failed.text
         stock_after_failure = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
-        assert stock_after_failure == stock_before_failure + quantity
+        assert stock_after_failure == stock_before_failure
 
         final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
         assert final["status"] == "delivery_failed"
@@ -518,7 +589,7 @@ class TestLifecycle:
         partial_doc = partial.json()
         assert partial_doc["return_type"] == "partial"
         stock_after_partial = next(p for p in s.get(f"{API}/products", timeout=15).json() if p["id"] == product_id)["stock"]
-        assert stock_after_partial == stock_before_partial + 1
+        assert stock_after_partial == stock_before_partial
         expected_due = round(float(order["total"]) - float(partial_doc["total"]), 2)
 
         customer_order = s.get(f"{API}/orders/{oid}", headers=H(placed_order["ctok"]), timeout=15).json()
@@ -543,7 +614,7 @@ class TestLifecycle:
         final = s.get(f"{API}/orders/{oid}", headers=H(manager_token), timeout=15).json()
         assert final["status"] == "returned"
         assert final["return_status"] == "full"
-        assert final["stock_released"] is True
+        assert final["stock_released"] is False
         assert final["amount_due"] == 0
         assert any(t["status"] == "returned" for t in final["timeline"])
         closed = next(o for o in s.get(f"{API}/delivery/orders", headers=H(delivery_token), timeout=15).json() if o["id"] == oid)

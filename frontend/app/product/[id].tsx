@@ -128,10 +128,10 @@ export default function ProductDetail() {
   }
 
   const hasWholesale = !!(product.wholesale_enabled && product.wholesale_unit_name && Number(product.wholesale_quantity) >= 2 && Number(product.wholesale_price) > 0);
-  const unitsPerSaleUnit = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_quantity) : 1;
   const activePrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_price) : Number(product.price);
   const activeOldPrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_old_price || 0) : Number(product.old_price || 0);
-  const maxSaleQuantity = Math.max(1, Math.floor(Number(product.stock || 0) / unitsPerSaleUnit));
+  const canPurchase = product.purchasable === true || (product.purchasable == null && product.available !== false);
+  const maxSaleQuantity = 1000;
   const discount = activeOldPrice > activePrice ? Math.round((1 - activePrice / activeOldPrice) * 100) : 0;
 
   return (
@@ -162,7 +162,7 @@ export default function ProductDetail() {
               <Pressable testID="pd-unit-piece" onPress={() => setSaleUnit("piece")} style={[styles.saleUnitButton, saleUnit === "piece" && styles.saleUnitButtonActive]}>
                 <T size={type.sm} weight="semi" color={saleUnit === "piece" ? colors.brandPrimary : colors.onSurfaceSecondary}>قطعة</T>
               </Pressable>
-              <Pressable testID="pd-unit-wholesale" disabled={Number(product.stock || 0) < Number(product.wholesale_quantity)} onPress={() => setSaleUnit("wholesale")} style={[styles.saleUnitButton, saleUnit === "wholesale" && styles.saleUnitButtonActive, Number(product.stock || 0) < Number(product.wholesale_quantity) && styles.saleUnitButtonDisabled]}>
+              <Pressable testID="pd-unit-wholesale" onPress={() => setSaleUnit("wholesale")} style={[styles.saleUnitButton, saleUnit === "wholesale" && styles.saleUnitButtonActive]}>
                 <T size={type.sm} weight="semi" color={saleUnit === "wholesale" ? colors.brandPrimary : colors.onSurfaceSecondary}>{product.wholesale_unit_name} • {product.wholesale_quantity} قطع</T>
               </Pressable>
             </View>
@@ -174,7 +174,7 @@ export default function ProductDetail() {
             {activeOldPrice > activePrice ? <T size={type.lg} color={colors.muted} style={{ textDecorationLine: "line-through" }}>{formatPrice(activeOldPrice)}</T> : null}
           </View>
 
-          {product.available === false ? (
+          {!canPurchase ? (
             <View style={styles.unavailableBox}>
               <View style={styles.unavailableStatus}>
                 <Feather name={product.stock_status === "coming_soon" ? "clock" : "x-circle"} size={17} color={colors.error} />
@@ -192,8 +192,10 @@ export default function ProductDetail() {
             </View>
           ) : (
             <View style={styles.stockRow}>
-              <Feather name="check-circle" size={16} color={colors.success} />
-              <T color={colors.success} weight="semi" size={type.sm}>متوفر في المخزون</T>
+              <Feather name={product.stock_status === "coming_soon" ? "clock" : "check-circle"} size={16} color={product.stock_status === "coming_soon" ? colors.warning : colors.success} />
+              <T color={product.stock_status === "coming_soon" ? colors.warning : colors.success} weight="semi" size={type.sm}>
+                {product.stock_status === "coming_soon" ? "يتوفر قريباً — الطلب متاح" : product.stock_status === "out" ? "لا توجد كمية مسجلة — الطلب متاح" : "متاح للطلب"}
+              </T>
             </View>
           )}
 
@@ -202,7 +204,7 @@ export default function ProductDetail() {
         </View>
       </ScrollView>
 
-      {product.available !== false && (
+      {canPurchase && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.stepper}>
             <Pressable testID="pd-inc" onPress={() => setQty((q) => Math.min(maxSaleQuantity, q + 1))} style={styles.stepBtn}><Feather name="plus" size={18} color={colors.onSurface} /></Pressable>
