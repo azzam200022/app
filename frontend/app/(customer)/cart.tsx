@@ -7,7 +7,7 @@ import { Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
-import { T, Button, EmptyState, PageHeading } from "@/src/components/ui";
+import { T, PageHeading } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
 import { useToast } from "@/src/context/ToastContext";
@@ -37,8 +37,24 @@ export default function CartScreen() {
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
       ) : cart.items.length === 0 ? (
         <View style={styles.center}>
-          <EmptyState icon="shopping-cart" title="سلتك فارغة" subtitle="أضف بعض المنتجات الفاخرة لتبدأ التسوق" />
-          <Button title="تصفّح المتجر" onPress={() => router.replace("/(customer)")} style={{ marginTop: spacing.lg, paddingHorizontal: spacing["2xl"] }} />
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Feather name="shopping-bag" size={30} color={colors.brandSecondary} />
+            </View>
+            <T weight="displayBold" size={type.xl} style={styles.emptyTitle}>سلتك فارغة</T>
+            <T color={colors.muted} style={styles.emptyCopy}>أضف منتجاتك المفضلة، وستجدها هنا جاهزة لإتمام طلبك.</T>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="تصفح المنتجات"
+              onPress={() => router.replace("/(customer)")}
+              style={({ pressed }) => [styles.browseButton, pressed && styles.browsePressed]}
+            >
+              <View style={styles.browseIcon}>
+                <Feather name="arrow-left" size={16} color={colors.brandPrimary} />
+              </View>
+              <T weight="bold" color={colors.brandPrimary}>تصفّح المنتجات</T>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <>
@@ -88,6 +104,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: "row-reverse", alignItems: "flex-end", justifyContent: "space-between" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  emptyState: { width: "100%", maxWidth: 360, alignItems: "center", paddingHorizontal: spacing.xl },
+  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  emptyTitle: { marginTop: spacing.md },
+  emptyCopy: { marginTop: spacing.xs, maxWidth: 280, textAlign: "center", lineHeight: 22 },
+  browseButton: { marginTop: spacing.lg, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.pill },
+  browseIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  browsePressed: { opacity: 0.72 },
   item: { flexDirection: "row-reverse", gap: spacing.md, backgroundColor: "#fff", borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   itemImg: { width: 84, height: 84, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   qtyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
