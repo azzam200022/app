@@ -807,6 +807,17 @@ class SyncIn(BaseModel):
     items: List[SyncItem]
 
 
+INVENTORY_COMING_SOON_THRESHOLD = 2
+
+
+def inventory_stock_fields(quantity):
+    stock = max(0, int(quantity))
+    return {
+        "stock": stock,
+        "coming_soon": stock <= INVENTORY_COMING_SOON_THRESHOLD,
+    }
+
+
 @api.post("/inventory/sync")
 async def inventory_sync(body: SyncIn, x_sync_key: Optional[str] = Header(None)):
     if x_sync_key != os.environ.get("SYNC_KEY"):
@@ -818,8 +829,7 @@ async def inventory_sync(body: SyncIn, x_sync_key: Optional[str] = Header(None))
         setd = {}
         if it.quantity is not None:
             quantity = max(0, int(it.quantity))
-            setd["stock"] = quantity
-            setd["coming_soon"] = quantity == 1
+            setd.update(inventory_stock_fields(quantity))
         if it.price is not None and it.price > 0:
             setd["price"] = float(it.price)
         if not setd:
@@ -852,6 +862,13 @@ def parse_inventory_pdf(content: bytes):
     rows = []
     invalid_rows = []
     barcode_pattern = re.compile(r"(?<!\d)(\d{8,14})(?!\d)")
+    product_id_pattern = re.compile(
+        r"(?:(?<!\w)(?:product\s*(?:id|code)|item\s*(?:id|code)|sku|id|code)(?!\w)"
+        r"|معرف(?:\s+المنتج)?|رقم\s+(?:المنتج|الصنف|المادة)|"
+        r"كود\s+(?:المنتج|الصنف|المادة)|رمز\s+(?:المنتج|الصنف))"
+        r"(?:\s*[:：#=]\s*|\s+)([A-Za-z0-9][A-Za-z0-9_-]{1,63})",
+        re.I,
+    )
     number_pattern = re.compile(r"(?<!\d)\d+(?:[.,]\d+)?(?!\d)")
     price_pattern = re.compile(r"(?:السعر|سعر|price)\s*[:：-]?\s*([\d٠-٩][\d٠-٩,٬]*(?:[.٫][\d٠-٩]+)?)", re.I)
     quantity_pattern = re.compile(r"(?:الكمية|كمية|quantity|qty|المخزون|stock)\s*[:：-]?\s*([\d٠-٩]+)", re.I)
@@ -860,11 +877,29 @@ def parse_inventory_pdf(content: bytes):
         text = page.extract_text() or ""
         for line_number, raw_line in enumerate(text.splitlines(), 1):
             line = raw_line.translate(ARABIC_DIGITS).replace("٬", ",").replace("٫", ".").strip()
-            barcode_match = barcode_pattern.search(line)
-            if not barcode_match:
+            product_id_match = product_id_pattern.search(line)
+            product_id = product_id_match.group(1).strip() if product_id_match else None
+            barcode_match = next(
+                (
+                    match
+                    for match in barcode_pattern.finditer(line)
+                    if not product_id_match
+                    or match.end() <= product_id_match.start()
+                    or match.start() >= product_id_match.end()
+                ),
+                None,
+            )
+            barcode = normalize_barcode(barcode_match.group(1)) if barcode_match else None
+            if not barcode and not product_id:
                 continue
-            barcode = normalize_barcode(barcode_match.group(1))
-            remainder = line[:barcode_match.start()] + " " + line[barcode_match.end():]
+            spans = [
+                match.span()
+                for match in (barcode_match, product_id_match)
+                if match is not None
+            ]
+            remainder = line
+            for start, end in sorted(spans, reverse=True):
+                remainder = remainder[:start] + " " + remainder[end:]
             price_match = price_pattern.search(remainder)
             quantity_match = quantity_pattern.search(remainder)
             numbers = [parse_pdf_number(token) for token in number_pattern.findall(remainder)]
@@ -877,19 +912,49 @@ def parse_inventory_pdf(content: bytes):
                 if quantity is None and integers:
                     quantity = min(integers)
             if price is None or price <= 0 or quantity is None or quantity < 0:
-                invalid_rows.append({"page": page_number, "line": line_number, "barcode": barcode})
+                invalid_rows.append({
+                    "page": page_number,
+                    "line": line_number,
+                    "identifier": barcode or product_id,
+                    "barcode": barcode,
+                    "product_id": product_id,
+                })
                 continue
-            rows.append({"barcode": barcode, "price": round(price, 2), "quantity": quantity, "page": page_number, "line": line_number})
+            rows.append({
+                "identifier": barcode or product_id,
+                "barcode": barcode,
+                "product_id": product_id,
+                "price": round(price, 2),
+                "quantity": quantity,
+                "page": page_number,
+                "line": line_number,
+            })
 
-    by_barcode = {}
-    duplicate_barcodes = set()
+    seen_identifiers = set()
+    duplicate_identifiers = set()
     for row in rows:
-        if row["barcode"] in by_barcode:
-            duplicate_barcodes.add(row["barcode"])
-        else:
-            by_barcode[row["barcode"]] = row
-    unique_rows = [row for barcode, row in by_barcode.items() if barcode not in duplicate_barcodes]
-    return unique_rows, sorted(duplicate_barcodes), invalid_rows
+        identifiers = []
+        if row.get("barcode"):
+            identifiers.append(("barcode", row["barcode"]))
+        if row.get("product_id"):
+            identifiers.append(("id", row["product_id"]))
+        for identifier in identifiers:
+            if identifier in seen_identifiers:
+                duplicate_identifiers.add(identifier)
+            seen_identifiers.add(identifier)
+    unique_rows = [
+        row
+        for row in rows
+        if not any(
+            identifier in duplicate_identifiers
+            for identifier in (
+                ([("barcode", row["barcode"])] if row.get("barcode") else [])
+                + ([("id", row["product_id"])] if row.get("product_id") else [])
+            )
+        )
+    ]
+    duplicates = sorted({value for _, value in duplicate_identifiers})
+    return unique_rows, duplicates, invalid_rows
 
 
 async def _cleanup_inventory_sync_logs():
@@ -923,12 +988,26 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
     price_changes = []
     became_unavailable = []
     for row in rows:
-        products = await db.products.find({"barcode": row["barcode"], "deleted_at": None}, {"_id": 0}).to_list(2)
+        matched_products = {}
+        if row.get("barcode"):
+            barcode_products = await db.products.find(
+                {"barcode": row["barcode"], "deleted_at": None},
+                {"_id": 0},
+            ).to_list(2)
+            matched_products.update({product["id"]: product for product in barcode_products})
+        if row.get("product_id"):
+            id_products = await db.products.find(
+                {"id": row["product_id"], "deleted_at": None},
+                {"_id": 0},
+            ).to_list(2)
+            matched_products.update({product["id"]: product for product in id_products})
+        products = list(matched_products.values())
+        identifier = row.get("barcode") or row.get("product_id") or row["identifier"]
         if not products:
-            not_found.append(row["barcode"])
+            not_found.append(identifier)
             continue
         if len(products) > 1:
-            duplicate_products.append(row["barcode"])
+            duplicate_products.append(identifier)
             continue
 
         product = products[0]
@@ -943,13 +1022,19 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
             old_stock = 0
         new_price = float(row["price"])
         new_stock = row["quantity"]
-        new_coming_soon = new_stock == 1
-        was_available = old_stock > 0 and not bool(product.get("coming_soon"))
-        will_be_available = new_stock > 0 and not new_coming_soon
+        new_stock_fields = inventory_stock_fields(new_stock)
+        new_coming_soon = new_stock_fields["coming_soon"]
+        was_available = (
+            old_stock > INVENTORY_COMING_SOON_THRESHOLD
+            and not bool(product.get("coming_soon"))
+            and product.get("is_published") is True
+        )
+        will_be_available = new_stock > INVENTORY_COMING_SOON_THRESHOLD and not new_coming_soon
 
         if old_price != new_price:
             price_changes.append({
-                "barcode": row["barcode"],
+                "barcode": row.get("barcode") or identifier,
+                "identifier": identifier,
                 "product_id": product["id"],
                 "name": product.get("name", ""),
                 "old_price": old_price_raw,
@@ -957,16 +1042,18 @@ async def inventory_pdf(file: UploadFile = File(...), user=Depends(require_manag
             })
         if was_available and not will_be_available:
             became_unavailable.append({
-                "barcode": row["barcode"],
+                "barcode": row.get("barcode") or identifier,
+                "identifier": identifier,
                 "product_id": product["id"],
                 "name": product.get("name", ""),
                 "stock": new_stock,
-                "reason": "نفد المخزون" if new_stock <= 0 else "قيد الوصول",
+                "reason": "نفدت الكمية" if new_stock <= 0 else "يتوفر قريباً",
             })
 
-        setd = {"price": new_price, "stock": new_stock, "coming_soon": new_coming_soon}
+        setd = {"price": new_price, **new_stock_fields}
         await db.products.update_one({"id": product["id"], "deleted_at": None}, {"$set": setd})
-        await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": new_price}})
+        if row.get("barcode"):
+            await db.catalog.update_many({"barcode": row["barcode"]}, {"$set": {"price": new_price}})
         updated += 1
 
     if updated > 0:

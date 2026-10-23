@@ -71,7 +71,7 @@ export default function SyncSettings() {
         <Pressable testID="sync-back" onPress={() => router.back()} hitSlop={10} style={styles.back}>
           <Feather name="arrow-right" size={22} color="#fff" />
         </Pressable>
-        <T weight="displayBold" size={type.xl} color="#fff">ربط نقطة البيع (الكاشير)</T>
+        <T weight="displayBold" size={type.xl} color="#fff">تحديث الأسعار والتوفر</T>
         <View style={{ width: 40 }} />
       </View>
 
@@ -82,7 +82,7 @@ export default function SyncSettings() {
           <View style={styles.intro}>
             <Feather name="link" size={18} color={colors.brandPrimary} />
             <T color={colors.onSurfaceSecondary} style={{ flex: 1, lineHeight: 22 }}>
-              اربط نظام الكاشير الخاص بك لمزامنة الكميات والأسعار تلقائياً مع التطبيق. زوّد نظامك بالمعلومات التالية.
+              ارفع ملف PDF يومياً لتحديث الأسعار والكميات تلقائياً حسب الملف. ويمكنك أيضاً ربط نظام الكاشير عبر بيانات المزامنة أدناه.
             </T>
           </View>
 
@@ -90,8 +90,8 @@ export default function SyncSettings() {
             <View style={styles.uploadHeader}>
               <View style={styles.uploadIcon}><Feather name="file-text" size={20} color={colors.brandPrimary} /></View>
               <View style={{ flex: 1 }}>
-                <T weight="displayBold" size={type.lg}>تحديث الأسعار والمخزون من PDF</T>
-                <T color={colors.onSurfaceSecondary} size={type.sm} style={{ marginTop: 4, lineHeight: 20 }}>ارفع ملفاً يحتوي على الباركود والسعر والكمية لتحديث المنتجات المطابقة تلقائياً.</T>
+                <T weight="displayBold" size={type.lg}>تحديث الأسعار والتوفر من PDF</T>
+                <T color={colors.onSurfaceSecondary} size={type.sm} style={{ marginTop: 4, lineHeight: 20 }}>ارفع ملفاً يحتوي على الباركود أو معرّف المنتج (ID) والسعر والكمية لتحديث المنتجات المطابقة تلقائياً.</T>
               </View>
             </View>
             <Pressable testID="upload-inventory-pdf" onPress={chooseInventoryPdf} disabled={uploading} style={[styles.uploadBtn, uploading && { opacity: 0.6 }]}>
@@ -185,7 +185,7 @@ export default function SyncSettings() {
           <View style={styles.noteBox}>
             <Feather name="info" size={16} color={colors.gold} />
             <T size={type.sm} color={colors.onSurfaceTertiary} style={{ flex: 1, lineHeight: 20 }}>
-              يتم المطابقة عبر الباركود. أرسل الكمية (quantity) لتحديث المخزون، والسعر (price) اختياري لتحديث السعر. المنتجات غير الموجودة تُرجَع ضمن قائمة «not_found».
+              تتم المطابقة بالباركود أو معرّف المنتج (ID). تُقرأ الكمية والسعر من ملف PDF؛ عند كمية 0–2 يظهر «يتوفر قريباً» ويتعطل زر الإضافة إلى السلة.
             </T>
           </View>
         </ScrollView>

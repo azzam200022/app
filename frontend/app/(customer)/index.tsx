@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Platform, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
@@ -92,7 +92,7 @@ export default function Home() {
     setInitialSectionsLoaded(true);
   }, [selected, show]);
 
-  useEffect(() => { loadAll(); }, []); // eslint-disable-line
+  useFocusEffect(useCallback(() => { void loadAll(true); }, [loadAll]));
 
   const onSelect = useCallback((c: string) => {
     if (c !== "الكل") {
