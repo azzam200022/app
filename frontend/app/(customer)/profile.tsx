@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, Pressable, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -6,12 +6,20 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
+import { ConfirmLogoutModal } from "@/src/components/ConfirmLogoutModal";
 import { useAuth } from "@/src/context/AuthContext";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const doLogout = async () => {
+    setConfirmLogout(false);
+    await logout();
+    router.replace("/login");
+  };
 
   const rows = [
     { icon: "heart", label: "المفضلة", onPress: () => router.push("/favorites") },
@@ -48,9 +56,15 @@ export default function Profile() {
           ))}
         </View>
 
-        <Button title="تسجيل الخروج" variant="outline" icon="log-out" onPress={async () => { await logout(); router.replace("/login"); }} testID="logout-btn" style={{ marginTop: spacing.xl }} />
+        <Button title="تسجيل الخروج" variant="outline" icon="log-out" onPress={() => setConfirmLogout(true)} testID="logout-btn" style={{ marginTop: spacing.xl }} />
         <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.lg }}>بن سليم سوبرماركت • الإصدار 1.0</T>
       </ScrollView>
+      <ConfirmLogoutModal
+        visible={confirmLogout}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={doLogout}
+        testIDPrefix="customer"
+      />
     </View>
   );
 }
