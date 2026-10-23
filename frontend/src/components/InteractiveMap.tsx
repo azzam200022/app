@@ -75,6 +75,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
   const viewportPayload = useMemo(() => JSON.stringify({ lat: center.lat, lng: center.lng, zoom }), [center.lat, center.lng, zoom]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => createMapHtml(center, zoom, { destination: destination || null, agent: agent || null, followAgent }), []);
+  const source = useMemo(() => ({ html }), [html]);
   const [mapWarning, setMapWarning] = React.useState(false);
   const syncMap = useCallback(() => {
     webRef.current?.injectJavaScript("(function(){if(window.updateMapViewport)window.updateMapViewport(" + viewportPayload + ");if(window.updateMapMarkers)window.updateMapMarkers(" + markerPayload + ");})(); true;");
@@ -82,7 +83,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
   useEffect(() => { const timer = setTimeout(syncMap, 0); return () => clearTimeout(timer); }, [syncMap]);
   return (
     <View style={[styles.root, style]}>
-      <WebView ref={webRef} source={{ html }} originWhitelist={["*"]} javaScriptEnabled domStorageEnabled onLoadEnd={syncMap} onError={() => setMapWarning(true)} onMessage={(event) => {
+      <WebView ref={webRef} source={source} originWhitelist={["*"]} javaScriptEnabled domStorageEnabled onLoadEnd={syncMap} onError={() => setMapWarning(true)} onMessage={(event) => {
         try {
           const data = JSON.parse(event.nativeEvent.data);
           if (data?.type === "map-error") setMapWarning(true);
