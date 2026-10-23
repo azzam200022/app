@@ -20,6 +20,7 @@ export default function Checkout() {
   const router = useRouter();
   const { cart, reload } = useCart();
   const { user } = useAuth();
+  const isCustomer = user?.role === "customer";
   const { show } = useToast();
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState("");
@@ -134,6 +135,11 @@ export default function Checkout() {
 
   useEffect(() => {
     let active = true;
+    if (!isCustomer) {
+      setSavedAddresses([]);
+      setAddressesLoading(false);
+      return () => { active = false; };
+    }
     setAddressesLoading(true);
     api.addresses().then((items) => {
       if (!active) return;
@@ -143,7 +149,7 @@ export default function Checkout() {
       if (preferred && !addressFormEdited.current) void selectSavedAddress(preferred, true);
     }).catch((e: any) => { if (active) show(e.message, "error"); }).finally(() => { if (active) setAddressesLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [isCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const detectLocation = async () => {
     setLocating(true);
@@ -192,6 +198,7 @@ export default function Checkout() {
 
   const submit = async () => {
     setSubmitError(null);
+    if (!isCustomer) { setSubmitError("سجّل الدخول قبل إتمام الشراء"); return; }
     if (!name.trim() || !phone.trim() || !address.trim()) { setSubmitError("يرجى تعبئة الاسم والهاتف والعنوان"); return; }
     if (!coords) { setSubmitError("حدد موقع التوصيل عبر GPS أو من الخريطة أولاً"); return; }
     if (quoteLoading) { setSubmitError("انتظر حتى يتم حساب رسوم التوصيل"); return; }
@@ -205,6 +212,25 @@ export default function Checkout() {
     } catch (e: any) { setSubmitError(e?.message || "تعذر تنفيذ الطلب. راجع بياناتك وحاول مرة أخرى."); }
     finally { setLoading(false); }
   };
+
+  const openLogin = () => router.push({ pathname: "/login", params: { returnTo: "checkout" } });
+  const openRegister = () => router.push({ pathname: "/register", params: { returnTo: "checkout" } });
+
+  if (!isCustomer) {
+    return (
+      <View style={styles.root} testID="checkout-auth-gate">
+        <PageHeading title="إتمام الطلب" style={{ paddingTop: insets.top + spacing.md }} />
+        <View style={styles.authGate}>
+          <View style={styles.authGateIcon}><Feather name="lock" size={28} color={colors.brandPrimary} /></View>
+          <T weight="displayBold" size={type.xl} style={{ textAlign: "center" }}>تسجيل الدخول مطلوب للشراء</T>
+          <T color={colors.muted} style={styles.authGateCopy}>يمكنك تصفّح المتجر كزائر، لكن يلزم تسجيل الدخول أو إنشاء حساب لإتمام الطلب.</T>
+          <Button title="تسجيل الدخول" onPress={openLogin} testID="co-login-required" />
+          <Button title="إنشاء حساب" variant="outline" onPress={openRegister} testID="co-register-required" style={{ marginTop: spacing.sm }} />
+          <Button title="العودة إلى المتجر" variant="secondary" onPress={() => router.replace("/(customer)")} style={{ marginTop: spacing.sm }} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -433,6 +459,9 @@ function Input({ icon, testID, multiline, keyboardType = "default", ...rest }: a
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
+  authGate: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
+  authGateIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", marginBottom: spacing.lg },
+  authGateCopy: { textAlign: "center", marginTop: spacing.sm, marginBottom: spacing.lg },
   checkoutContent: { padding: spacing.lg, paddingTop: spacing.md },
   header: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, zIndex: 2 },
   back: { width: 40, height: 40, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },

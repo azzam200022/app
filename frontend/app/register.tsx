@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, type } from "@/src/lib/theme";
 import { T, Button } from "@/src/components/ui";
@@ -12,6 +12,8 @@ import { useToast } from "@/src/context/ToastContext";
 export default function Register() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  const postRegisterRoute = returnTo === "checkout" ? "/checkout" : "/";
   const { registerEmail } = useAuth();
   const { show } = useToast();
   const [name, setName] = useState("");
@@ -25,7 +27,7 @@ export default function Register() {
     setLoading(true);
     try {
       await registerEmail(name.trim(), email.trim(), password);
-      router.replace("/");
+      router.replace(postRegisterRoute);
     } catch (e: any) {
       show(e.message, "error");
     } finally {
@@ -49,7 +51,7 @@ export default function Register() {
           <Field icon="mail" placeholder="البريد الإلكتروني" value={email} onChangeText={setEmail} keyboardType="email-address" testID="reg-email" />
           <Field icon="lock" placeholder="كلمة المرور" value={password} onChangeText={setPassword} secure testID="reg-password" />
           <Button title="إنشاء الحساب" onPress={submit} loading={loading} testID="reg-submit" style={{ marginTop: spacing.md }} />
-          <Pressable testID="go-login" onPress={() => router.replace("/login")} style={styles.link}>
+          <Pressable testID="go-login" onPress={() => router.replace(returnTo === "checkout" ? { pathname: "/login", params: { returnTo: "checkout" } } : "/login")} style={styles.link}>
             <T color={colors.muted}>لديك حساب بالفعل؟ <T color={colors.brandPrimary} weight="bold">سجّل الدخول</T></T>
           </Pressable>
         </ScrollView>

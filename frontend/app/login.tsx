@@ -3,7 +3,7 @@ import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform,
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { ResponseType } from "expo-auth-session";
@@ -18,6 +18,8 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Login() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  const postLoginRoute = returnTo === "checkout" ? "/checkout" : "/";
   const { loginEmail, loginPreview, loginGoogle } = useAuth();
   const { show } = useToast();
   const [email, setEmail] = useState("");
@@ -38,7 +40,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginEmail(email.trim(), password);
-      router.replace("/");
+      router.replace(postLoginRoute);
     } catch (e: any) {
       show(e.message, "error");
     } finally {
@@ -50,7 +52,7 @@ export default function Login() {
     setGLoading(true);
     try {
       await loginGoogle();
-      router.replace("/");
+      router.replace(postLoginRoute);
     } catch (e: any) {
       show(e.message || "تعذر تسجيل الدخول عبر Google", "error");
     } finally {
@@ -62,7 +64,7 @@ export default function Login() {
     setPreviewLoading(role);
     try {
       await loginPreview(role);
-      router.replace("/");
+      router.replace(role === "customer" ? postLoginRoute : "/");
     } catch (e: any) {
       show(e.message || "تعذر دخول المعاينة", "error");
     } finally {
@@ -137,7 +139,7 @@ export default function Login() {
               )}
             </Pressable>
           ) : nativeGoogleClientId ? (
-            <NativeGoogleLoginButton />
+            <NativeGoogleLoginButton returnToCheckout={postLoginRoute === "/checkout"} />
           ) : (
             <View style={styles.googleBtn}>
               <T color={colors.muted} size={type.sm}>
@@ -146,16 +148,19 @@ export default function Login() {
             </View>
           )}
 
-          <Pressable testID="go-register" onPress={() => router.push("/register")} style={styles.registerLink}>
+          <Pressable testID="go-register" onPress={() => router.push(postLoginRoute === "/checkout" ? { pathname: "/register", params: { returnTo: "checkout" } } : "/register")} style={styles.registerLink}>
             <T color={colors.muted}>ليس لديك حساب؟ <T color={colors.brandPrimary} weight="bold">أنشئ حساباً</T></T>
           </Pressable>
+
+          <Button title="تصفّح كزائر" variant="outline" icon="eye" onPress={() => router.replace("/(customer)")} testID="continue-as-guest" style={{ marginTop: spacing.md }} />
+          <T color={colors.muted} size={type.xs} style={{ textAlign: "center", marginTop: spacing.xs }}>يمكنك التصفح كزائر، ويلزم تسجيل الدخول لإضافة المنتجات وإتمام الطلب</T>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-function NativeGoogleLoginButton() {
+function NativeGoogleLoginButton({ returnToCheckout }: { returnToCheckout: boolean }) {
   const router = useRouter();
   const { loginGoogleWithIdToken } = useAuth();
   const { show } = useToast();
@@ -182,7 +187,7 @@ function NativeGoogleLoginButton() {
     }
     setLoading(true);
     loginGoogleWithIdToken(idToken)
-      .then(() => router.replace("/"))
+      .then(() => router.replace(returnToCheckout ? "/checkout" : "/"))
       .catch((error: any) => show(error.message, "error"))
       .finally(() => setLoading(false));
   }, [response, loginGoogleWithIdToken, router, show]);

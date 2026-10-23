@@ -17,12 +17,14 @@ import {
   resolveImage,
 } from "@/src/lib/api";
 import { useCart } from "@/src/context/CartContext";
+import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { cart, add, setQty, remove } = useCart();
+  const { user } = useAuth();
   const { show } = useToast();
   const [cats, setCats] = useState<any[]>(() => getCachedCategories() || []);
   const [selected, setSelected] = useState("الكل");
@@ -110,11 +112,16 @@ export default function Home() {
   };
 
   const onAdd = useCallback(async (p: any) => {
+    if (user?.role !== "customer") {
+      show("سجّل الدخول أو أنشئ حساباً لإضافة المنتجات إلى السلة", "error");
+      router.push("/login");
+      return;
+    }
     try {
       await add(p.id, 1);
       show("تمت الإضافة إلى السلة");
     } catch (e: any) { show(e.message, "error"); }
-  }, [add, show]);
+  }, [add, router, show, user?.role]);
 
   const quantities = useMemo(() => {
     const result: Record<string, number> = {};
@@ -123,12 +130,17 @@ export default function Home() {
   }, [cart.items]);
 
   const onIncrease = useCallback(async (p: any) => {
+    if (user?.role !== "customer") {
+      show("سجّل الدخول أو أنشئ حساباً لإضافة المنتجات إلى السلة", "error");
+      router.push("/login");
+      return;
+    }
     try {
       await add(p.id, 1);
     } catch (e: any) {
       show(e.message, "error");
     }
-  }, [add, show]);
+  }, [add, router, show, user?.role]);
 
   const onDecrease = useCallback(async (p: any) => {
     const quantity = cart.items.find((item) => item.product_id === p.id && (!item.sale_unit || item.sale_unit === "piece"))?.quantity || 0;
@@ -172,7 +184,7 @@ export default function Home() {
               </View>
             )}
           </Pressable>
-          <Pressable testID="fav-nav" onPress={() => router.push("/favorites")} style={styles.iconBtn}>
+          <Pressable testID="fav-nav" onPress={() => user?.role === "customer" ? router.push("/favorites") : router.push("/login")} style={styles.iconBtn}>
             <Feather name="heart" size={19} color={colors.onSurface} />
           </Pressable>
         </View>
