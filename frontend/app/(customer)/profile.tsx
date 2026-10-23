@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
-import { T, Button } from "@/src/components/ui";
+import { T } from "@/src/components/ui";
 import { ConfirmLogoutModal } from "@/src/components/ConfirmLogoutModal";
 import { useAuth } from "@/src/context/AuthContext";
 
@@ -22,11 +22,11 @@ export default function Profile() {
   };
 
   const rows = [
-    { icon: "heart", label: "المفضلة", onPress: () => router.push("/favorites") },
-    { icon: "package", label: "طلباتي", onPress: () => router.push("/(customer)/orders") },
-    { icon: "tag", label: "العروض والخصومات", onPress: () => router.push("/offers") },
-    { icon: "map-pin", label: "عناويني", onPress: () => router.push("/addresses") },
-    { icon: "help-circle", label: "المساعدة والدعم", onPress: () => router.push("/(customer)/help") },
+    { icon: "heart", label: "المفضلة", requiresAuth: true, onPress: () => router.push("/favorites") },
+    { icon: "package", label: "طلباتي", requiresAuth: true, onPress: () => router.push("/(customer)/orders") },
+    { icon: "tag", label: "العروض والخصومات", requiresAuth: false, onPress: () => router.push("/offers") },
+    { icon: "map-pin", label: "عناويني", requiresAuth: true, onPress: () => router.push("/addresses") },
+    { icon: "help-circle", label: "المساعدة والدعم", requiresAuth: false, onPress: () => router.push("/(customer)/help") },
   ];
 
   return (
@@ -39,14 +39,14 @@ export default function Profile() {
             <Feather name="user" size={30} color="#fff" />
           )}
         </View>
-        <T weight="displayBold" size={type.xl} color="#fff" style={{ marginTop: spacing.md }}>{user?.name}</T>
-        <T color="rgba(255,255,255,0.75)">{user?.email}</T>
+        <T weight="displayBold" size={type.xl} color="#fff" style={{ marginTop: spacing.md }}>{user?.name || "زائر"}</T>
+        <T color="rgba(255,255,255,0.75)">{user?.email || "تصفّح المتجر كزائر"}</T>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}>
         <View style={styles.card}>
           {rows.map((r, i) => (
-            <Pressable key={r.label} testID={`profile-${r.icon}`} onPress={r.onPress} style={[styles.row, i < rows.length - 1 && styles.rowBorder]}>
+            <Pressable key={r.label} testID={`profile-${r.icon}`} onPress={() => { if (r.requiresAuth && !user) { router.push("/login"); return; } r.onPress(); }} style={[styles.row, i < rows.length - 1 && styles.rowBorder]}>
               <View style={styles.rowStart}>
                 <View style={styles.rowIcon}><Feather name={r.icon as any} size={18} color={colors.brandPrimary} /></View>
                 <T weight="semi">{r.label}</T>
@@ -56,7 +56,12 @@ export default function Profile() {
           ))}
         </View>
 
-        <Button title="تسجيل الخروج" variant="outline" icon="log-out" onPress={() => setConfirmLogout(true)} testID="logout-btn" style={{ marginTop: spacing.xl }} />
+        <Pressable accessibilityRole="button" accessibilityLabel={user ? "تسجيل الخروج" : "تسجيل الدخول"} onPress={user ? () => setConfirmLogout(true) : () => router.push("/login")} testID={user ? "logout-btn" : "guest-profile-login"} style={styles.accountAction}>
+          <View style={styles.accountActionContent}>
+            <Feather name={user ? "log-out" : "log-in"} size={18} color={colors.brandPrimary} />
+            <T weight="bold" color={colors.brandPrimary} numberOfLines={1} style={styles.accountActionText}>{user ? "تسجيل الخروج" : "تسجيل الدخول"}</T>
+          </View>
+        </Pressable>
         <T color={colors.muted} size={type.sm} style={{ textAlign: "center", marginTop: spacing.lg }}>بن سليم سوبرماركت • الإصدار 1.0</T>
       </ScrollView>
       <ConfirmLogoutModal
@@ -74,6 +79,9 @@ const styles = StyleSheet.create({
   header: { backgroundColor: colors.brandPrimary, alignItems: "center", paddingBottom: spacing.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 2, borderColor: colors.gold },
   card: { backgroundColor: "#fff", borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  accountAction: { minHeight: 54, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.brandPrimary, borderRadius: radius.md, marginTop: spacing.xl, paddingHorizontal: spacing.lg },
+  accountActionContent: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  accountActionText: { flexShrink: 0, writingDirection: "rtl", textAlign: "center" },
   row: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", padding: spacing.lg },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   rowStart: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md },

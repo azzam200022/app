@@ -87,21 +87,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const add = useCallback((id: string, qty = 1, saleUnit: SaleUnit = "piece") => {
+    if (user?.role !== "customer") return Promise.reject(new Error("سجّل الدخول أو أنشئ حساباً لإضافة المنتجات إلى السلة"));
     const product = getCachedProduct(id);
     const currentQuantity = cartRef.current.items.find((item) => item.product_id === id && (item.sale_unit || "piece") === saleUnit)?.quantity || 0;
     const next = optimisticCart(cartRef.current, id, saleUnit, currentQuantity + qty, product);
     return commit(next, () => api.addToCart(id, qty, saleUnit));
-  }, [commit]);
+  }, [commit, user]);
 
   const setQty = useCallback((id: string, qty: number, saleUnit: SaleUnit = "piece") => {
+    if (user?.role !== "customer") return Promise.reject(new Error("سجّل الدخول لإدارة سلة المشتريات"));
     const next = optimisticCart(cartRef.current, id, saleUnit, qty, getCachedProduct(id));
     return commit(next, () => api.setCartItem(id, qty, saleUnit));
-  }, [commit]);
+  }, [commit, user]);
 
   const remove = useCallback((id: string, saleUnit: SaleUnit = "piece") => {
+    if (user?.role !== "customer") return Promise.reject(new Error("سجّل الدخول لإدارة سلة المشتريات"));
     const next = optimisticCart(cartRef.current, id, saleUnit, 0, getCachedProduct(id));
     return commit(next, () => api.removeCartItem(id, saleUnit));
-  }, [commit]);
+  }, [commit, user]);
 
   return <Ctx.Provider value={{ cart, loading, reload, add, setQty, remove }}>{children}</Ctx.Provider>;
 }

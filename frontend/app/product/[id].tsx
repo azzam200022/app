@@ -60,6 +60,11 @@ export default function ProductDetail() {
   }, [id, saleUnit, cartQuantity]);
 
   const toggleFav = async () => {
+    if (user?.role !== "customer") {
+      show("سجّل الدخول لحفظ المنتجات في المفضلة");
+      router.push("/login");
+      return;
+    }
     if (Platform.OS !== "web") Haptics.selectionAsync();
     setFav((f) => !f);
     try { const r = await api.toggleFav(id!); setFav(r.is_favorite); } catch { setFav((f) => !f); }
@@ -91,6 +96,11 @@ export default function ProductDetail() {
   };
 
   const addToCart = async () => {
+    if (user?.role !== "customer") {
+      show("سجّل الدخول أو أنشئ حساباً لإضافة المنتجات إلى السلة", "error");
+      router.push("/login");
+      return;
+    }
     setAdding(true);
     try {
       if (cartQuantity > 0) {

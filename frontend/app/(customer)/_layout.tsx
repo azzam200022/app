@@ -5,6 +5,7 @@ import * as NavigationBar from "expo-navigation-bar";
 import { Feather } from "@expo/vector-icons";
 import { colors, font, radius } from "@/src/lib/theme";
 import { useCart } from "@/src/context/CartContext";
+import { useAuth } from "@/src/context/AuthContext";
 
 function CustomerTabIcon({ icon, color, size, focused }: { icon: "home" | "shopping-cart" | "package" | "user"; color: string; size: number; focused: boolean }) {
   return (
@@ -16,6 +17,7 @@ function CustomerTabIcon({ icon, color, size, focused }: { icon: "home" | "shopp
 
 export default function CustomerLayout() {
   const { cart } = useCart();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -68,7 +70,7 @@ export default function CustomerLayout() {
       />
       <Tabs.Screen
         name="orders"
-        options={{ title: "طلباتي", tabBarIcon: ({ color, size, focused }) => <CustomerTabIcon icon="package" color={color} size={size} focused={focused} /> }}
+        options={user?.role === "customer" ? { title: "طلباتي", tabBarIcon: ({ color, size, focused }) => <CustomerTabIcon icon="package" color={color} size={size} focused={focused} /> } : { href: null }}
       />
       <Tabs.Screen name="help" options={{ href: null }} />
       <Tabs.Screen name="support" options={{ href: null }} />
