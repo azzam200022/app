@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BotanicalPattern } from "@/src/components/BotanicalPattern";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ProductCard, ProductCardSkeleton } from "@/src/components/ProductCard";
@@ -294,6 +295,7 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
+      <BotanicalPattern />
       {isCompactHeader && (
         <View style={styles.compactSearch}>
           <Pressable testID="compact-search-btn" onPress={() => router.push("/search")} style={styles.compactSearchBtn} accessibilityLabel="البحث">

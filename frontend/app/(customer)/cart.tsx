@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BotanicalPattern } from "@/src/components/BotanicalPattern";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, Button, PageHeading } from "@/src/components/ui";
 import { resolveImage, formatPrice } from "@/src/lib/api";
@@ -31,6 +32,7 @@ export default function CartScreen() {
 
   return (
     <View style={styles.root}>
+      <BotanicalPattern />
       <PageHeading title="سلة المشتريات" subtitle={cart.count > 0 ? `${cart.count} منتج في سلتك` : undefined} style={{ paddingTop: insets.top + spacing.md }} />
 
       {loading && cart.items.length === 0 ? (

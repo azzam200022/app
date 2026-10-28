@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshContro
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BotanicalPattern } from "@/src/components/BotanicalPattern";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T, EmptyState, PageHeading } from "@/src/components/ui";
 import { api, formatPrice, getCachedOrders, STATUS_LABEL } from "@/src/lib/api";
@@ -107,6 +108,7 @@ export default function Orders() {
 
   return (
     <View style={styles.root}>
+      <BotanicalPattern />
       <PageHeading
         title="طلباتي"
         subtitle="تابع حالة طلبك وتفاصيل التوصيل"
