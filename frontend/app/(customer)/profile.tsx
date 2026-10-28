@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BotanicalPattern } from "@/src/components/BotanicalPattern";
 import { colors, radius, spacing, type } from "@/src/lib/theme";
 import { T } from "@/src/components/ui";
 import { ConfirmLogoutModal } from "@/src/components/ConfirmLogoutModal";
@@ -31,6 +32,7 @@ export default function Profile() {
 
   return (
     <View style={styles.root}>
+      <BotanicalPattern />
       <View style={[styles.header, { paddingTop: insets.top + spacing.xl }]}>
         <View style={styles.avatar}>
           {user?.picture ? (
