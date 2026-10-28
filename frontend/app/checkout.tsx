@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, ActivityIndicator, Modal, Keyboard } from "react-native";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -17,6 +17,8 @@ const DEFAULT_MAP_CENTER = { lat: 33.3152, lng: 44.3661 };
 
 export default function Checkout() {
   const insets = useSafeAreaInsets();
+  const checkoutHeadingStyle = useMemo(() => ({ paddingTop: insets.top + spacing.md }), [insets.top]);
+  const checkoutScrollStyle = useMemo(() => [styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }], [insets.bottom]);
   const router = useRouter();
   const { cart, reload } = useCart();
   const { user } = useAuth();
@@ -65,7 +67,7 @@ export default function Checkout() {
     if (routeQuoteTimer.current) clearTimeout(routeQuoteTimer.current);
   }, []);
 
-  const setLocationAndQuote = async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual" | "saved") => {
+  const setLocationAndQuote = useCallback(async (nextCoords: { lat: number; lng: number }, source: "gps" | "address" | "manual" | "saved") => {
     setSubmitError(null);
     setCoords(nextCoords);
     setLocationSource(source);
@@ -84,7 +86,39 @@ export default function Checkout() {
       setDeliveryQuote(null);
       show(e.message, "error");
     } finally { setQuoteLoading(false); }
-  };
+  }, [appliedCoupon, show]);
+
+  const handleNameChange = useCallback((value: string) => {
+    addressFormEdited.current = true;
+    setName(value);
+    setSelectedAddressId(null);
+    setSubmitError(null);
+  }, []);
+
+  const handlePhoneChange = useCallback((value: string) => {
+    addressFormEdited.current = true;
+    setPhone(value);
+    setSelectedAddressId(null);
+    setSubmitError(null);
+  }, []);
+
+  const handleAddressChange = useCallback((value: string) => {
+    addressFormEdited.current = true;
+    setAddress(value);
+    setSelectedAddressId(null);
+    setSubmitError(null);
+  }, []);
+
+  const handleAddressLabelChange = useCallback((value: string) => {
+    addressFormEdited.current = true;
+    setAddressLabel(value);
+    setSelectedAddressId(null);
+  }, []);
+
+  const handleCouponCodeChange = useCallback((value: string) => {
+    setCouponCode(value);
+    setAppliedCoupon(null);
+  }, []);
 
 
   const selectSavedAddress = async (saved: any, initialLoad = false) => {
@@ -151,7 +185,7 @@ export default function Checkout() {
     return () => { active = false; };
   }, [isCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const detectLocation = async () => {
+  const detectLocation = useCallback(async () => {
     setLocating(true);
     try {
       let perm = await Location.getForegroundPermissionsAsync();
@@ -168,7 +202,7 @@ export default function Checkout() {
     } catch {
       show("تعذّر تحديد الموقع، حاول مجدداً", "error");
     } finally { setLocating(false); }
-  };
+  }, [setLocationAndQuote, show]);
 
   const openManualMap = () => {
     Keyboard.dismiss();
@@ -180,6 +214,26 @@ export default function Checkout() {
     await setLocationAndQuote(manualMapCenter, "manual");
     setManualMapOpen(false);
   };
+
+  const handleDeliveryMapRegionChange = useCallback((region: { lat: number; lng: number; zoom: number }) => {
+    setDeliveryMapZoom(region.zoom);
+    if (!coords || quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
+    const nextCoords = { lat: region.lat, lng: region.lng };
+    setCoords(nextCoords);
+    setLocationSource("manual");
+    setDeliveryQuote(null);
+    if (appliedCoupon) setAppliedCoupon(null);
+    if (routeQuoteTimer.current) clearTimeout(routeQuoteTimer.current);
+    routeQuoteTimer.current = setTimeout(() => {
+      routeQuoteTimer.current = null;
+      void setLocationAndQuote(nextCoords, "manual");
+    }, 600);
+  }, [appliedCoupon, coords, quoteLoading, setLocationAndQuote]);
+
+  const handleManualMapRegionChange = useCallback((region: { lat: number; lng: number; zoom: number }) => {
+    setManualMapCenter({ lat: region.lat, lng: region.lng });
+    setManualMapZoom(region.zoom);
+  }, []);
 
   const applyCoupon = async () => {
     const code = couponCode.trim();
@@ -219,7 +273,7 @@ export default function Checkout() {
   if (!isCustomer) {
     return (
       <View style={styles.root} testID="checkout-auth-gate">
-        <PageHeading title="إتمام الطلب" style={{ paddingTop: insets.top + spacing.md }} />
+        <PageHeading title="إتمام الطلب" style={checkoutHeadingStyle} />
         <View style={styles.authGate}>
           <View style={styles.authGateIcon}><Feather name="lock" size={28} color={colors.brandPrimary} /></View>
           <T weight="displayBold" size={type.xl} style={{ textAlign: "center" }}>تسجيل الدخول مطلوب للشراء</T>
@@ -234,9 +288,9 @@ export default function Checkout() {
 
   return (
     <View style={styles.root}>
-      <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={{ paddingTop: insets.top + spacing.md }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.checkoutContent, { paddingBottom: insets.bottom + spacing["3xl"] }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}>
+      <PageHeading title="إتمام الطلب" leading={<Pressable testID="co-back" onPress={() => router.back()} hitSlop={10} style={styles.back}><Feather name="arrow-right" size={22} color={colors.onSurface} /></Pressable>} trailing={<View style={{ width: 40 }} />} style={checkoutHeadingStyle} />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.fill}>
+        <ScrollView contentContainerStyle={checkoutScrollStyle} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}>
           <View style={styles.savedSection}>
             <View style={styles.sectionTitleRow}>
               <View style={styles.sectionHeadingText}>
@@ -268,23 +322,18 @@ export default function Checkout() {
               <View style={styles.deliveryForm}>
                 <View style={styles.sectionCaption}><Feather name="user" size={16} color={colors.brandPrimary} /><T weight="bold" size={type.sm}>بيانات المستلم</T></View>
                 <View style={styles.contactRow}>
-                  <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={(value: string) => { addressFormEdited.current = true; setName(value); setSelectedAddressId(null); setSubmitError(null); }} testID="co-name" /></View>
-                  <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={(value: string) => { addressFormEdited.current = true; setPhone(value); setSelectedAddressId(null); setSubmitError(null); }} keyboardType="phone-pad" testID="co-phone" /></View>
+                  <View style={styles.contactField}><Input icon="user" placeholder="اسم المستلم" value={name} onChangeText={handleNameChange} testID="co-name" /></View>
+                  <View style={styles.contactField}><Input icon="phone" placeholder="رقم الهاتف" value={phone} onChangeText={handlePhoneChange} keyboardType="phone-pad" testID="co-phone" /></View>
                 </View>
                 <Input
                   icon="map-pin"
                   placeholder="العنوان بالتفصيل"
                   value={address}
-                  onChangeText={(value: string) => {
-                    addressFormEdited.current = true;
-                    setAddress(value);
-                    setSelectedAddressId(null);
-                    setSubmitError(null);
-                  }}
+                  onChangeText={handleAddressChange}
                   multiline
                   testID="co-address"
                 />
-                <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={(value: string) => { addressFormEdited.current = true; setAddressLabel(value); setSelectedAddressId(null); }} testID="co-address-label" />
+                <Input icon="bookmark" placeholder="اسم العنوان (البيت، العمل...)" value={addressLabel} onChangeText={handleAddressLabelChange} testID="co-address-label" />
                 {!selectedAddressId && coords ? <Pressable testID="co-save-address" onPress={saveCurrentAddress} disabled={savingAddress} style={styles.saveAddressBtn}>{savingAddress ? <ActivityIndicator color={colors.brandPrimary} /> : <Feather name="bookmark" size={17} color={colors.brandPrimary} />}<T weight="bold" color={colors.brandPrimary}>{savingAddress ? "جارٍ حفظ العنوان..." : "حفظ العنوان في عناويني"}</T></Pressable> : null}
               </View>
             )}
@@ -306,20 +355,7 @@ export default function Checkout() {
                 zoom={deliveryMapZoom}
                 destination={coords}
                 followAgent
-                onRegionChange={(region) => {
-                  setDeliveryMapZoom(region.zoom);
-                  if (quoteLoading || (Math.abs(region.lat - coords.lat) < 0.00001 && Math.abs(region.lng - coords.lng) < 0.00001)) return;
-                  const nextCoords = { lat: region.lat, lng: region.lng };
-                  setCoords(nextCoords);
-                  setLocationSource("manual");
-                  setDeliveryQuote(null);
-                  if (appliedCoupon) setAppliedCoupon(null);
-                  if (routeQuoteTimer.current) clearTimeout(routeQuoteTimer.current);
-                  routeQuoteTimer.current = setTimeout(() => {
-                    routeQuoteTimer.current = null;
-                    void setLocationAndQuote(nextCoords, "manual");
-                  }, 600);
-                }}
+                onRegionChange={handleDeliveryMapRegionChange}
                 style={styles.mapImg}
               />
               <T color={colors.muted} size={type.xs} style={styles.mapHint}>اسحب الخريطة الحقيقية لوضع دبوس التوصيل الأحمر في المكان الصحيح</T>
@@ -369,7 +405,7 @@ export default function Checkout() {
               <Input icon="edit-3" placeholder="ملاحظات للمندوب (اختياري)" value={notes} onChangeText={setNotes} multiline testID="co-notes" />
               <View style={styles.couponRow}>
                 <View style={{ flex: 1 }}>
-                  <Input icon="tag" placeholder="كود الخصم" value={couponCode} onChangeText={(value: string) => { setCouponCode(value); setAppliedCoupon(null); }} autoCapitalize="characters" testID="co-coupon" />
+                  <Input icon="tag" placeholder="كود الخصم" value={couponCode} onChangeText={handleCouponCodeChange} autoCapitalize="characters" testID="co-coupon" />
                 </View>
                 <Pressable testID="co-apply-coupon" onPress={applyCoupon} disabled={couponLoading} style={styles.couponBtn}>
                   {couponLoading ? <ActivityIndicator color="#fff" /> : <T weight="bold" color="#fff">تطبيق</T>}
@@ -409,7 +445,7 @@ export default function Checkout() {
             </Pressable>
           </View>
           <View style={styles.manualPickerMap} accessibilityLabel="خريطة حقيقية لاختيار موقع التوصيل">
-            <InteractiveMap center={manualMapCenter} zoom={manualMapZoom} onLocate={detectLocation} onRegionChange={(region) => { setManualMapCenter({ lat: region.lat, lng: region.lng }); setManualMapZoom(region.zoom); }} />
+            <InteractiveMap center={manualMapCenter} zoom={manualMapZoom} onLocate={detectLocation} onRegionChange={handleManualMapRegionChange} />
             <View pointerEvents="none" style={styles.manualPickerPin}>
               <View style={styles.manualPickerPinDot} />
               <Feather name="map-pin" size={42} color={colors.error} />
@@ -432,7 +468,7 @@ export default function Checkout() {
   );
 }
 
-function Input({ icon, testID, multiline, keyboardType = "default", ...rest }: any) {
+const Input = React.memo(function Input({ icon, testID, multiline, keyboardType = "default", ...rest }: any) {
   const [focused, setFocused] = useState(false);
   const { onFocus, onBlur, style: inputStyle, ...inputProps } = rest;
 
@@ -455,10 +491,11 @@ function Input({ icon, testID, multiline, keyboardType = "default", ...rest }: a
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
+  fill: { flex: 1 },
   authGate: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   authGateIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", marginBottom: spacing.lg },
   authGateCopy: { textAlign: "center", marginTop: spacing.sm, marginBottom: spacing.lg },
