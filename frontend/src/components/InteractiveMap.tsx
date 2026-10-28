@@ -67,7 +67,7 @@ function createMapHtml(center: { lat: number; lng: number }, zoom: number, initi
   ].join("\n");
 }
 
-export default function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style, onLocate }: Props) {
+function InteractiveMap({ center, zoom = 16, destination, agent, followAgent = false, onRegionChange, style, onLocate }: Props) {
   const webRef = useRef<WebView>(null);
   // Keep the embedded document stable; viewport and markers are synchronized without reloading it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,5 +96,7 @@ export default function InteractiveMap({ center, zoom = 16, destination, agent, 
     </View>
   );
 }
+
+export default React.memo(InteractiveMap);
 
 const styles = StyleSheet.create({ root: { flex: 1, overflow: "hidden", position: "relative" }, webview: { flex: 1, backgroundColor: "transparent" }, locateButton: { position: "absolute", top: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, elevation: 4 }, locateButtonRtl: { left: 12 }, locateButtonLtr: { right: 12 }, warning: { position: "absolute", left: 12, right: 12, bottom: 12, padding: 8, borderRadius: 8, backgroundColor: "rgba(255,248,230,0.96)" }, warningText: { color: "#6b4f00", textAlign: "center", fontSize: 12 } });
