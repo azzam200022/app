@@ -306,7 +306,7 @@ export default function Checkout() {
               <Pressable key={saved.id} testID={"co-address-" + saved.id} onPress={() => void selectSavedAddress(saved)} style={[styles.savedCard, selectedAddressId === saved.id && styles.savedCardActive]}>
                 <View style={styles.savedCardIcon}><Feather name={saved.is_default ? "star" : "map-pin"} size={17} color={saved.is_default ? colors.gold : colors.brandPrimary} /></View>
                 <View style={styles.savedAddressInfo}>
-                  <View style={styles.savedCardTitle}><T weight="bold">{saved.label || "عنوان"}</T>{saved.is_default ? <View style={styles.defaultBadge}><T color={colors.gold} size={type.xs} weight="semi">افتراضي</T></View> : null}</View>
+                  <View style={styles.savedCardTitle}><T weight="bold">{saved.label || "عنوان"}</T>{saved.is_default ? <View style={styles.defaultBadge}><T color={colors.goldStrong} size={type.xs} weight="semi">افتراضي</T></View> : null}</View>
                   <T size={type.sm} color={colors.onSurfaceSecondary}>{saved.recipient_name} • {saved.phone}</T>
                   <T color={colors.muted} size={type.xs} numberOfLines={1} style={styles.savedAddressLine}>{saved.address}</T>
                 </View>

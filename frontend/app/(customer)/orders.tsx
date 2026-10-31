@@ -13,7 +13,7 @@ export const STATUS_COLOR: Record<string, string> = {
   pending: colors.warning,
   confirmed: colors.brandSecondary,
   preparing: colors.info,
-  ready_for_delivery: colors.gold,
+  ready_for_delivery: colors.goldStrong,
   out_for_delivery: colors.success,
   delivered: colors.brandPrimary,
   delivery_failed: colors.error,

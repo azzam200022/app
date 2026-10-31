@@ -179,7 +179,7 @@ export default function ProductDetail() {
           )}
           <View style={styles.priceRow}>
             <View style={styles.priceHighlight}>
-              <T weight="displayBold" size={type["3xl"]} color={colors.onBrandPrimary}>{formatPrice(activePrice)}</T>
+              <T weight="displayBold" size={type["3xl"]} color={colors.brandPrimary}>{formatPrice(activePrice)}</T>
             </View>
             {activeOldPrice > activePrice ? <T size={type.lg} color={colors.muted} style={{ textDecorationLine: "line-through" }}>{formatPrice(activeOldPrice)}</T> : null}
           </View>
@@ -232,24 +232,24 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   loadingHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
-  loadingImage: { width: "100%", height: 360, backgroundColor: colors.surfaceSecondary },
+  loadingImage: { width: "100%", height: 388, backgroundColor: colors.surfaceSecondary },
   loadingBody: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-  imgWrap: { width: "100%", height: 360, backgroundColor: colors.surfaceSecondary },
+  imgWrap: { width: "100%", height: 388, backgroundColor: colors.surfaceSecondary },
   topScrim: { position: "absolute", top: 0, left: 0, right: 0, height: 120 },
   topBar: { position: "absolute", left: spacing.lg, right: spacing.lg, flexDirection: "row-reverse", justifyContent: "space-between" },
   circleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.92)", alignItems: "center", justifyContent: "center" },
-  body: { padding: spacing.lg, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -24 },
+  body: { padding: spacing.xl, backgroundColor: "#FFFFFF", borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -28 },
   badgeRow: { flexDirection: "row-reverse", gap: spacing.sm },
   saleUnitRow: { flexDirection: "row-reverse", gap: spacing.sm, marginTop: spacing.md },
   saleUnitButton: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.sm, backgroundColor: "#fff" },
   saleUnitButtonActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
   saleUnitButtonDisabled: { opacity: 0.4 },
   priceRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
-  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderColor: colors.brandSecondary, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: "transparent", paddingVertical: 2 },
   stockRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
   unavailableBox: { marginTop: spacing.md, backgroundColor: colors.warningSoft, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.warning },
   unavailableStatus: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  footer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
-  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: 6 },
-  stepBtn: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  footer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, backgroundColor: "#fff", padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.divider },
+  stepper: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.pill, padding: 6 },
+  stepBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
 });

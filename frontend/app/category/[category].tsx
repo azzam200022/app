@@ -96,7 +96,7 @@ export default function CategoryDetail() {
         {!!categoryImage && <Image source={{ uri: resolveImage(categoryImage) }} style={StyleSheet.absoluteFill} contentFit="cover" />}
         <View style={styles.heroScrim} />
         <View style={styles.heroContent}>
-          <T color={colors.gold} size={type.sm} weight="bold">استكشف القسم</T>
+          <T color={colors.goldStrong} size={type.sm} weight="bold">استكشف القسم</T>
           <T color="#fff" weight="displayBold" size={type["2xl"]} style={styles.heroTitle}>{category}</T>
           <T color="rgba(255,255,255,0.82)" size={type.sm}>اختر العلامة التي تفضلها للوصول إلى منتجاتها</T>
         </View>
