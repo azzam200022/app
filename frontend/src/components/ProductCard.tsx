@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Animated, Pressable, View, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -28,6 +28,7 @@ export const ProductCard = React.memo(function ProductCard({
 }) {
   const router = useRouter();
   const [fav, setFav] = React.useState(!!product.is_favorite);
+  const heartScale = React.useRef(new Animated.Value(1)).current;
   const [imageFailed, setImageFailed] = React.useState(false);
   const canPurchase = product.purchasable === true || (product.purchasable == null && product.available !== false);
   const unavailable = !canPurchase;
@@ -44,6 +45,12 @@ export const ProductCard = React.memo(function ProductCard({
   }, [product.is_favorite]);
 
   const toggleFav = async () => {
+    if (Platform.OS !== "web") {
+      Animated.sequence([
+        Animated.spring(heartScale, { toValue: 1.2, speed: 24, bounciness: 7, useNativeDriver: true }),
+        Animated.spring(heartScale, { toValue: 1, speed: 20, bounciness: 5, useNativeDriver: true }),
+      ]).start();
+    }
     if (Platform.OS !== "web") Haptics.selectionAsync();
     const next = !fav;
     setFav(next);
@@ -85,8 +92,8 @@ export const ProductCard = React.memo(function ProductCard({
             {discount > 0 && <Badge text={`خصم ${discount}%`} color={colors.error} textColor="#fff" />}
             {lowStock && (
               <View style={styles.lowStockBadge}>
-                <Feather name="alert-circle" size={11} color={colors.gold} />
-                <T weight="bold" size={10} color={colors.gold}>باقي {stockValue}</T>
+                <Feather name="alert-circle" size={11} color={colors.warning} />
+                <T weight="bold" size={10} color={colors.warning}>باقي {stockValue}</T>
               </View>
             )}
           </View>
@@ -100,7 +107,9 @@ export const ProductCard = React.memo(function ProductCard({
           style={[styles.favBtn, fav && styles.favBtnActive]}
           hitSlop={8}
         >
-          <Feather name="heart" size={18} color={fav ? colors.onError : colors.onSurfaceTertiary} fill={fav ? colors.onError : "transparent"} />
+          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+            <Feather name="heart" size={18} color={fav ? colors.onError : colors.onSurfaceTertiary} fill={fav ? colors.onError : "transparent"} />
+          </Animated.View>
         </Pressable>
         <View style={styles.cartAction}>
           {quantity > 0 && !unavailable ? (
@@ -156,7 +165,7 @@ export const ProductCard = React.memo(function ProductCard({
         <View style={styles.priceRow}>
           <View style={styles.priceBlock}>
              <View style={styles.priceHighlight}>
-               <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.onBrandPrimary}>{formatPrice(product.price)}</T>
+               <T numberOfLines={1} weight="displayBold" size={type.lg} color={colors.brandPrimary}>{formatPrice(product.price)}</T>
             </View>
             {product.old_price ? (
               <T numberOfLines={1} size={type.sm} color={colors.muted} style={styles.old}>{formatPrice(product.old_price)}</T>
@@ -185,26 +194,26 @@ export function ProductCardSkeleton({ width }: { width?: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "#FFFFFF", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  card: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
   cardPressed: { opacity: 0.96, transform: [{ scale: 0.99 }] },
-  imgWrap: { width: "100%", aspectRatio: 0.96, backgroundColor: colors.surfaceSecondary },
+  imgWrap: { width: "100%", aspectRatio: 0.92, backgroundColor: colors.surfaceSecondary },
   img: { width: "100%", height: "100%" },
   imageFallback: { alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: colors.surfaceSecondary },
   badgeStack: { position: "absolute", top: spacing.xs, insetInlineStart: spacing.xs, alignItems: "flex-start", gap: 3 },
   lowStockBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 3, backgroundColor: "#FFF3D6", borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", zIndex: 2 },
+  favBtn: { position: "absolute", top: spacing.sm, insetInlineEnd: spacing.sm, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", zIndex: 2 },
   favBtnActive: { backgroundColor: colors.error, borderColor: colors.error },
   cartAction: { position: "absolute", bottom: spacing.sm, insetInlineEnd: spacing.sm, zIndex: 2 },
-  body: { padding: spacing.md, minHeight: 112 },
+  body: { padding: spacing.md, minHeight: 108 },
   name: { minHeight: 40, lineHeight: 20, color: colors.onSurface },
   priceRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: spacing.xs, gap: spacing.xs, minHeight: 38 },
   priceBlock: { flex: 1, minWidth: 0 },
-  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: colors.brandPrimary, borderColor: colors.brandSecondary, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
-  old: { textDecorationLine: "line-through" },
-  addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
-  addBtnDisabled: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  quantityControls: { width: 82, height: 36, flexShrink: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
-  quantityBtn: { width: 26, height: 28, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  priceHighlight: { alignSelf: "flex-start", maxWidth: "100%", backgroundColor: "transparent", paddingVertical: 2 },
+  old: { textDecorationLine: "line-through", marginTop: 2 },
+  addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  addBtnDisabled: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  quantityControls: { width: 88, height: 40, flexShrink: 0, borderRadius: radius.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
+  quantityBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   quantityText: { minWidth: 18, textAlign: "center", color: colors.onSurface },
   skeletonCard: { overflow: "hidden" },
   skeletonBlock: { backgroundColor: colors.surfaceSecondary },

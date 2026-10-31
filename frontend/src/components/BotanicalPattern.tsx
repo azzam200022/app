@@ -27,7 +27,7 @@ export function BotanicalPattern() {
 
 const styles = StyleSheet.create({
   pattern: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
-  sprig: { position: "absolute", width: 112, height: 132, opacity: 0.78 },
+  sprig: { position: "absolute", width: 112, height: 132, opacity: 0.52 },
   topStart: { top: 92, start: -24, transform: [{ rotate: "-10deg" }] },
   bottomEnd: { bottom: 132, end: -24, transform: [{ scaleX: -1 }, { rotate: "-12deg" }] },
   stem: { position: "absolute", top: 25, start: 55, width: 2, height: 88, borderRadius: 1, backgroundColor: colors.botanical, transform: [{ rotate: "-24deg" }] },

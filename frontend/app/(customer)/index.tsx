@@ -214,7 +214,7 @@ export default function Home() {
                   <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
                   <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>{item.title || "وفّر أكثر مع خصومات اليوم"}</T>
                   <T color="rgba(255,255,255,0.85)">{item.subtitle || "تسوّق أفخر المنتجات بأفضل الأسعار"}</T>
-                  <View style={styles.heroCta}><T weight="bold" color={colors.gold}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.gold} /></View>
+                  <View style={styles.heroCta}><T weight="bold" color={colors.brandPrimary}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.brandPrimary} /></View>
                 </View>
               </Pressable>
             )}
@@ -229,7 +229,7 @@ export default function Home() {
             <View style={styles.heroBadge}><T size={type.sm} weight="bold" color="#1A1A1A">عروض حصرية</T></View>
             <T weight="displayBold" size={type["2xl"]} color="#fff" style={{ marginTop: spacing.sm }}>وفّر أكثر مع خصومات اليوم</T>
             <T color="rgba(255,255,255,0.85)">تسوّق أفخر المنتجات بأفضل الأسعار</T>
-            <View style={styles.heroCta}><T weight="bold" color={colors.gold}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.gold} /></View>
+            <View style={styles.heroCta}><T weight="bold" color={colors.brandPrimary}>تسوّق العروض</T><Feather name="arrow-left" size={16} color={colors.brandPrimary} /></View>
           </View>
         </Pressable>
       )}
@@ -310,8 +310,8 @@ export default function Home() {
            keyExtractor={(i) => i.id}
            numColumns={2}
            ListHeaderComponent={header}
-           columnWrapperStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
-           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.md }}
+           columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
+           contentContainerStyle={{ paddingBottom: spacing["2xl"], gap: spacing.lg }}
            initialNumToRender={12}
            maxToRenderPerBatch={8}
            windowSize={5}
@@ -371,25 +371,25 @@ const styles = StyleSheet.create({
   brandEnglish: { textAlign: "left", writingDirection: "ltr", lineHeight: 16, letterSpacing: 0.25 },
   brandSubline: { textAlign: "left", writingDirection: "ltr", fontSize: 8, lineHeight: 11, letterSpacing: 1.8 },
   topActions: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
-  topSearchPrompt: { flex: 1, minWidth: 0, height: 40, marginHorizontal: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs },
+  topSearchPrompt: { flex: 1, minWidth: 0, height: 44, marginHorizontal: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   searchLabel: { flex: 1 },
-  iconBtn: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative" },
+  iconBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", position: "relative" },
   cartBadge: { position: "absolute", top: -3, end: -3, minWidth: 17, height: 17, paddingHorizontal: 3, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface },
   compactSearch: { position: "absolute", right: spacing.lg, bottom: spacing.lg + 56, width: 40, height: 40, zIndex: 20 },
   compactSearchBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   scrollTop: { position: "absolute", right: spacing.lg, bottom: spacing.lg, zIndex: 20 },
   scrollTopBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, borderWidth: 1, borderColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
-  hero: { height: 184, marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, borderWidth: 1, borderColor: colors.border },
-  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 184 },
+  hero: { height: 204, marginHorizontal: spacing.lg, marginTop: spacing.lg, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, borderWidth: 1, borderColor: colors.border },
+  heroSlide: { width: Dimensions.get("window").width - spacing.lg * 2, height: 204 },
   dots: { position: "absolute", bottom: spacing.sm, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.gold },
-  heroContent: { flex: 1, padding: spacing.lg, paddingBottom: spacing.xl, justifyContent: "flex-end", alignItems: "flex-start" },
+  heroContent: { flex: 1, padding: spacing.xl, paddingBottom: spacing.xl, justifyContent: "flex-end", alignItems: "flex-start" },
   heroBadge: { backgroundColor: colors.gold, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
-  heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md },
-  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm },
+  heroCta: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.xs, marginTop: spacing.md, backgroundColor: "#FFFFFF", borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  sectionHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
   sectionTitle: { lineHeight: 30 },
-  sectionRule: { width: 28, height: 2, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: 0, borderRadius: 1 },
-  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
+  sectionRule: { width: 22, height: 3, backgroundColor: colors.gold, marginStart: spacing.sm, marginTop: 0, borderRadius: radius.pill },
+  loadingGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
