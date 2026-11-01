@@ -1,9 +1,8 @@
 import React from "react";
-import { Animated, Pressable, View, StyleSheet } from "react-native";
+import { Animated, Pressable, View, StyleSheet, Platform } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { colors, font, radius, spacing, type } from "@/src/lib/theme";
 import { resolveImage, formatPrice, api } from "@/src/lib/api";
@@ -30,11 +29,11 @@ export const ProductCard = React.memo(function ProductCard({
   const [fav, setFav] = React.useState(!!product.is_favorite);
   const heartScale = React.useRef(new Animated.Value(1)).current;
   const [imageFailed, setImageFailed] = React.useState(false);
-  const canPurchase = product.purchasable === true || (product.purchasable == null && product.available !== false);
+  const comingSoon = product.stock_status === "coming_soon" || product.coming_soon === true;
+  const canPurchase = !comingSoon && (product.purchasable === true || (product.purchasable == null && product.available !== false));
   const unavailable = !canPurchase;
-  const outLabel = product.stock_status === "coming_soon" ? "يتوفر قريباً" : "نفدت الكمية";
+  const outLabel = comingSoon ? "يتوفر قريباً — غير متاح للشراء" : "نفدت الكمية";
   const stockValue = Number(product.stock);
-  const comingSoon = product.stock_status === "coming_soon";
   const lowStock = !unavailable && !comingSoon && Number.isFinite(stockValue) && stockValue > 0 && stockValue <= 5;
   const discount = product.old_price && product.old_price > product.price
     ? Math.round((1 - product.price / product.old_price) * 100)

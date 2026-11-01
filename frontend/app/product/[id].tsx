@@ -140,7 +140,9 @@ export default function ProductDetail() {
   const hasWholesale = !!(product.wholesale_enabled && product.wholesale_unit_name && Number(product.wholesale_quantity) >= 2 && Number(product.wholesale_price) > 0);
   const activePrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_price) : Number(product.price);
   const activeOldPrice = saleUnit === "wholesale" && hasWholesale ? Number(product.wholesale_old_price || 0) : Number(product.old_price || 0);
-  const canPurchase = product.purchasable === true || (product.purchasable == null && product.available !== false);
+  const comingSoon = product.stock_status === "coming_soon" || product.coming_soon === true;
+  const canPurchase = !comingSoon && (product.purchasable === true || (product.purchasable == null && product.available !== false));
+  const unavailableColor = comingSoon ? colors.warning : colors.error;
   const maxSaleQuantity = 1000;
   const discount = activeOldPrice > activePrice ? Math.round((1 - activePrice / activeOldPrice) * 100) : 0;
 
@@ -187,8 +189,8 @@ export default function ProductDetail() {
           {!canPurchase ? (
             <View style={styles.unavailableBox}>
               <View style={styles.unavailableStatus}>
-                <Feather name={product.stock_status === "coming_soon" ? "clock" : "x-circle"} size={17} color={colors.error} />
-                <T color={colors.error} weight="semi" size={type.sm}>{product.stock_status === "coming_soon" ? "يتوفر قريباً" : "نفدت الكمية"}</T>
+                <Feather name={comingSoon ? "clock" : "x-circle"} size={17} color={unavailableColor} />
+                <T color={unavailableColor} weight="semi" size={type.sm}>{comingSoon ? "يتوفر قريباً — غير متاح للشراء حالياً" : "نفدت الكمية"}</T>
               </View>
               <Button
                 title={availabilityAlerted ? "تم تفعيل التنبيه — إلغاء" : "أبلغني عند التوفر"}
@@ -202,9 +204,9 @@ export default function ProductDetail() {
             </View>
           ) : (
             <View style={styles.stockRow}>
-              <Feather name={product.stock_status === "coming_soon" ? "clock" : "check-circle"} size={16} color={product.stock_status === "coming_soon" ? colors.warning : colors.success} />
-              <T color={product.stock_status === "coming_soon" ? colors.warning : colors.success} weight="semi" size={type.sm}>
-                {product.stock_status === "coming_soon" ? "يتوفر قريباً — الطلب متاح" : product.stock_status === "out" ? "لا توجد كمية مسجلة — الطلب متاح" : "متاح للطلب"}
+              <Feather name={comingSoon ? "clock" : "check-circle"} size={16} color={comingSoon ? colors.warning : colors.success} />
+              <T color={comingSoon ? colors.warning : colors.success} weight="semi" size={type.sm}>
+                {comingSoon ? "يتوفر قريباً — غير متاح للشراء حالياً" : product.stock_status === "out" ? "لا توجد كمية مسجلة — الطلب متاح" : "متاح للطلب"}
               </T>
             </View>
           )}
